@@ -1,0 +1,16 @@
+<section class="hero hero--centered">
+  <div class="container">
+    {% if title %}
+    <h1 class="hero__title">{{ title }}</h1>
+    {% endif %}
+    {% if subtitle %}
+    <p class="hero__subtitle">{{ subtitle }}</p>
+    {% endif %}
+    {% if image %}
+    <img src="{{ image.url }}" alt="{{ image.alt or '' }}" class="hero__image">
+    {% endif %}
+    {% if ctaText and ctaLink %}
+    <a href="{{ ctaLink.href }}" class="hero__cta">{{ ctaText }}</a>
+    {% endif %}
+  </div>
+</section>

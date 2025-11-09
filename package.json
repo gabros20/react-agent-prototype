@@ -5,10 +5,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"pnpm:dev:server\" \"pnpm:dev:web\"",
+    "dev": "concurrently \"pnpm:dev:server\" \"pnpm:dev:preview\" \"pnpm:dev:web\"",
     "dev:server": "tsx watch server/index.ts",
+    "dev:preview": "tsx watch server/preview.ts",
     "dev:web": "next dev -p 3000",
-    "dev:preview": "open http://localhost:4000/pages/home?locale=en",
+    "preview": "open http://localhost:4000/pages/home?locale=en",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",

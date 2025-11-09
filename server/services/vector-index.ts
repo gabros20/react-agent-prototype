@@ -119,9 +119,14 @@ export class VectorIndexService {
     const queryEmbedding = await this.embed(query);
 
     // Vector similarity search
-    let results = await this.table!.vectorSearch(queryEmbedding)
+    let results = await this.table
+      ?.vectorSearch(queryEmbedding)
       .limit(limit * 2)
       .toArray();
+
+    if (!results) {
+      return [];
+    }
 
     // Filter by type if specified
     if (type) {
@@ -143,8 +148,8 @@ export class VectorIndexService {
 
     try {
       // Simple filter query to check existence
-      const results = await this.table!.query().where(`id = '${id}'`).limit(1).toArray();
-      return results.length > 0;
+      const results = await this.table?.query().where(`id = '${id}'`).limit(1).toArray();
+      return results ? results.length > 0 : false;
     } catch {
       // If query fails, assume doesn't exist
       return false;
@@ -154,7 +159,7 @@ export class VectorIndexService {
   async delete(id: string) {
     if (!this.table) await this.initialize();
 
-    await this.table!.delete(`id = '${id}'`);
+    await this.table?.delete(`id = '${id}'`);
   }
 
   async close() {

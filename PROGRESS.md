@@ -8,7 +8,7 @@
 - [x] Sprint 1: Database Layer & Schemas (✅ Completed)
 - [x] Sprint 2: Backend API Foundation (✅ Completed)
 - [x] Sprint 3: Vector Index & Search (✅ Completed)
-- [ ] Sprint 4: Template System & Preview Server
+- [x] Sprint 4: Template System & Preview Server (✅ Completed)
 - [ ] Sprint 5: Frontend Foundation
 - [ ] Sprint 6: Agent Core & Tool Registry
 - [ ] Sprint 7: Prompt Architecture
@@ -149,11 +149,40 @@ Tasks:
 
 **Note**: Requires OPENROUTER_API_KEY to be configured in .env for embeddings to work. See README.md for setup instructions.
 
-### Sprint 4: Template System & Preview Server
-**Status**: Not Started
+### Sprint 4: Template System & Preview Server ✅
+**Status**: Completed
+**Started**: 2025-11-09
+**Completed**: 2025-11-09
 
 Tasks:
-- [ ] Create Nunjucks template files (layout, hero, feature, cta)
-- [ ] Create RendererService
-- [ ] Create preview server on port 4000
-- [ ] Test page rendering
+- [x] Create Nunjucks template files (layout, hero, feature, cta)
+- [x] Create RendererService
+- [x] Create preview server on port 4000
+- [x] Test page rendering
+
+**Template Files Created**:
+- Layout: page.njk (HTML shell with meta tags)
+- Sections: hero/default.njk, hero/centered.njk, feature/default.njk, cta/default.njk
+- Fallback: _default.njk (for unknown sections)
+- Styles: assets/styles.css (production-like CSS)
+
+**RendererService Features**:
+- Dynamic template registry building (scans sections/ directory)
+- Nunjucks environment with custom filters (markdown, truncate, asset)
+- Template resolution with variant support
+- Automatic fallback to default variant or _default.njk
+- Integration with PageService for data fetching
+
+**Preview Server Features**:
+- Standalone Express server on port 4000
+- GET /pages/:slug?locale=en → Renders full HTML page
+- GET /pages/:slug/raw?locale=en → Returns JSON debug data
+- GET /assets/* → Static asset serving (CSS, images)
+- GET /health → Health check with template registry info
+
+**Deliverables**:
+- Working preview server: `pnpm dev:preview`
+- Template system with modular section templates
+- RendererService with automatic template discovery
+- Successfully renders homepage with hero section
+- Preview server script added to package.json dev command

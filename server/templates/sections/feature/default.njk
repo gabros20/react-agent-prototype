@@ -1,0 +1,23 @@
+<section class="feature">
+  <div class="container">
+    {% if heading %}
+    <h2 class="feature__heading">{{ heading }}</h2>
+    {% endif %}
+    {% if description %}
+    <div class="feature__description">{{ description | markdown | safe }}</div>
+    {% endif %}
+    {% if items and items.length > 0 %}
+    <ul class="feature__list">
+      {% for item in items %}
+      <li class="feature__item">
+        {% if item.icon %}
+        <img src="{{ item.icon.url }}" alt="" class="feature__icon">
+        {% endif %}
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.description }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</section>

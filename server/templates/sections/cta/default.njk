@@ -1,0 +1,13 @@
+<section class="cta">
+  <div class="container">
+    {% if heading %}
+    <h2 class="cta__heading">{{ heading }}</h2>
+    {% endif %}
+    {% if description %}
+    <p class="cta__description">{{ description }}</p>
+    {% endif %}
+    {% if buttonText and buttonLink %}
+    <a href="{{ buttonLink.href }}" class="cta__button">{{ buttonText }}</a>
+    {% endif %}
+  </div>
+</section>

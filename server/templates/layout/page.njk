@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ page.meta.title or page.name }}</title>
+  {% if page.meta.description %}
+  <meta name="description" content="{{ page.meta.description }}">
+  {% endif %}
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  {{ content | safe }}
+</body>
+</html>

@@ -210,7 +210,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   // =========================================================================
 
   // GET /v1/teams/:team/sites/:site/environments/:env/sections
-  router.get("/sections", async (req, res, next) => {
+  router.get("/sections", async (_req, res, next) => {
     try {
       const sections = await services.sectionService.listSectionDefs();
       res.json({ data: sections, statusCode: 200 });
@@ -278,7 +278,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   // =========================================================================
 
   // GET /v1/teams/:team/sites/:site/environments/:env/collections
-  router.get("/collections", async (req, res, next) => {
+  router.get("/collections", async (_req, res, next) => {
     try {
       const collections = await services.entryService.listCollectionDefs();
       res.json({ data: collections, statusCode: 200 });

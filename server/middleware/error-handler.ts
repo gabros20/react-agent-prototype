@@ -1,7 +1,7 @@
 import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
 
-export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   console.error("Error:", err);
 
   // Zod validation errors
@@ -17,7 +17,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   }
 
   // SQLite constraint errors
-  if (err.message && err.message.includes("UNIQUE constraint failed")) {
+  if (err.message?.includes("UNIQUE constraint failed")) {
     return res.status(409).json({
       error: {
         code: "CONFLICT",
@@ -29,7 +29,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   }
 
   // Not found errors
-  if (err.message && err.message.toLowerCase().includes("not found")) {
+  if (err.message?.toLowerCase().includes("not found")) {
     return res.status(404).json({
       error: {
         code: "NOT_FOUND",
@@ -40,7 +40,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
   }
 
   // Invalid format errors
-  if (err.message && err.message.toLowerCase().includes("invalid")) {
+  if (err.message?.toLowerCase().includes("invalid")) {
     return res.status(400).json({
       error: {
         code: "INVALID_INPUT",

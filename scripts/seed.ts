@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 import { db } from "../server/db/client";
 import * as schema from "../server/db/schema";
 

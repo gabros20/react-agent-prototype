@@ -25,7 +25,7 @@ async function startServer() {
     app.use("/v1/teams/:team/sites/:site/environments/:env", createCMSRoutes(services));
 
     // Health check
-    app.get("/health", (req, res) => {
+    app.get("/health", (_req, res) => {
       res.json({
         status: "ok",
         timestamp: new Date().toISOString(),
