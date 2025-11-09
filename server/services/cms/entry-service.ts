@@ -1,0 +1,241 @@
+import { DrizzleDB } from "../../db/client";
+import * as schema from "../../db/schema";
+import { eq } from "drizzle-orm";
+import { randomUUID } from "crypto";
+
+export interface CreateCollectionDefInput {
+  slug: string;
+  name: string;
+  description?: string;
+  status?: "published" | "unpublished";
+  elementsStructure: any;
+}
+
+export interface UpdateCollectionDefInput {
+  slug?: string;
+  name?: string;
+  description?: string;
+  status?: "published" | "unpublished";
+}
+
+export interface UpsertEntryInput {
+  collectionId: string;
+  slug: string;
+  title: string;
+  localeCode: string;
+  content: Record<string, any>;
+}
+
+export class EntryService {
+  constructor(private db: DrizzleDB) {}
+
+  async createCollectionDef(input: CreateCollectionDefInput) {
+    // Validate slug format
+    this.validateSlug(input.slug);
+
+    // Check if slug already exists
+    const existing = await this.db.query.collectionDefinitions.findFirst({
+      where: eq(schema.collectionDefinitions.slug, input.slug),
+    });
+
+    if (existing) {
+      throw new Error(`Collection with slug '${input.slug}' already exists`);
+    }
+
+    const collectionDef = {
+      id: randomUUID(),
+      slug: input.slug,
+      name: input.name,
+      description: input.description ?? null,
+      status: input.status ?? "published",
+      elementsStructure: JSON.stringify(input.elementsStructure),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await this.db.insert(schema.collectionDefinitions).values(collectionDef);
+
+    return collectionDef;
+  }
+
+  async updateCollectionDef(id: string, input: UpdateCollectionDefInput) {
+    if (input.slug) {
+      this.validateSlug(input.slug);
+
+      // Check slug uniqueness (excluding current)
+      const existing = await this.db.query.collectionDefinitions.findFirst({
+        where: eq(schema.collectionDefinitions.slug, input.slug),
+      });
+
+      if (existing && existing.id !== id) {
+        throw new Error(`Collection with slug '${input.slug}' already exists`);
+      }
+    }
+
+    const updated = {
+      ...input,
+      updatedAt: new Date(),
+    };
+
+    await this.db
+      .update(schema.collectionDefinitions)
+      .set(updated)
+      .where(eq(schema.collectionDefinitions.id, id));
+
+    return this.getCollectionDefById(id);
+  }
+
+  async getCollectionDefById(id: string) {
+    return await this.db.query.collectionDefinitions.findFirst({
+      where: eq(schema.collectionDefinitions.id, id),
+    });
+  }
+
+  async getCollectionDefBySlug(slug: string) {
+    return await this.db.query.collectionDefinitions.findFirst({
+      where: eq(schema.collectionDefinitions.slug, slug),
+    });
+  }
+
+  async listCollectionDefs() {
+    return await this.db.query.collectionDefinitions.findMany();
+  }
+
+  async deleteCollectionDef(id: string) {
+    await this.db
+      .delete(schema.collectionDefinitions)
+      .where(eq(schema.collectionDefinitions.id, id));
+  }
+
+  async upsertEntry(input: UpsertEntryInput) {
+    this.validateSlug(input.slug);
+
+    // Verify collection exists
+    const collection = await this.db.query.collectionDefinitions.findFirst({
+      where: eq(schema.collectionDefinitions.id, input.collectionId),
+    });
+
+    if (!collection) {
+      throw new Error(`Collection with id '${input.collectionId}' not found`);
+    }
+
+    // Verify locale exists
+    const locale = await this.db.query.locales.findFirst({
+      where: eq(schema.locales.code, input.localeCode),
+    });
+
+    if (!locale) {
+      throw new Error(`Locale with code '${input.localeCode}' not found`);
+    }
+
+    // Check if entry already exists
+    let entry = await this.db.query.collectionEntries.findFirst({
+      where: eq(schema.collectionEntries.slug, input.slug),
+    });
+
+    if (!entry) {
+      // Create new entry
+      const newEntry = {
+        id: randomUUID(),
+        collectionId: input.collectionId,
+        slug: input.slug,
+        title: input.title,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await this.db.insert(schema.collectionEntries).values(newEntry);
+      entry = newEntry;
+    } else {
+      // Update existing entry
+      await this.db
+        .update(schema.collectionEntries)
+        .set({
+          title: input.title,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.collectionEntries.id, entry.id));
+    }
+
+    // Upsert entry content
+    const existingContent = await this.db.query.entryContents.findFirst({
+      where: (ec, { and, eq }) =>
+        and(eq(ec.entryId, entry.id), eq(ec.localeCode, input.localeCode)),
+    });
+
+    if (existingContent) {
+      // Update existing content
+      await this.db
+        .update(schema.entryContents)
+        .set({
+          content: JSON.stringify(input.content),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.entryContents.id, existingContent.id));
+    } else {
+      // Create new content
+      await this.db.insert(schema.entryContents).values({
+        id: randomUUID(),
+        entryId: entry.id,
+        localeCode: input.localeCode,
+        content: JSON.stringify(input.content),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    return entry;
+  }
+
+  async listEntries(collectionId: string, localeCode?: string) {
+    if (localeCode) {
+      return await this.db.query.collectionEntries.findMany({
+        where: eq(schema.collectionEntries.collectionId, collectionId),
+        with: {
+          contents: {
+            where: eq(schema.entryContents.localeCode, localeCode),
+          },
+        },
+      });
+    }
+
+    return await this.db.query.collectionEntries.findMany({
+      where: eq(schema.collectionEntries.collectionId, collectionId),
+      with: {
+        contents: true,
+      },
+    });
+  }
+
+  async getEntryById(id: string, localeCode?: string) {
+    if (localeCode) {
+      return await this.db.query.collectionEntries.findFirst({
+        where: eq(schema.collectionEntries.id, id),
+        with: {
+          contents: {
+            where: eq(schema.entryContents.localeCode, localeCode),
+          },
+        },
+      });
+    }
+
+    return await this.db.query.collectionEntries.findFirst({
+      where: eq(schema.collectionEntries.id, id),
+      with: {
+        contents: true,
+      },
+    });
+  }
+
+  async deleteEntry(id: string) {
+    await this.db.delete(schema.collectionEntries).where(eq(schema.collectionEntries.id, id));
+  }
+
+  private validateSlug(slug: string): void {
+    if (!/^[a-z0-9-]{2,64}$/.test(slug)) {
+      throw new Error(
+        "Invalid slug format: must be lowercase, alphanumeric with hyphens, 2-64 chars",
+      );
+    }
+  }
+}

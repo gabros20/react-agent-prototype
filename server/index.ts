@@ -1,8 +1,47 @@
-// Express API server placeholder
-// This will be implemented in Sprint 2
+import express from "express";
+import { db } from "./db/client";
+import { ServiceContainer } from "./services/service-container";
+import { createCMSRoutes } from "./routes/cms";
+import { corsMiddleware } from "./middleware/cors";
+import { errorHandler } from "./middleware/error-handler";
 
-console.log("Express API server - Coming soon in Sprint 2");
-console.log("This is a placeholder to allow dev:server script to run");
+const app = express();
+const PORT = process.env.EXPRESS_PORT || 8787;
 
-// Keep process alive
-process.stdin.resume();
+// Middleware
+app.use(corsMiddleware);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Initialize services
+const services = ServiceContainer.initialize(db);
+console.log("✓ Services initialized");
+
+// Routes
+app.use("/v1/teams/:team/sites/:site/environments/:env", createCMSRoutes(services));
+
+// Health check
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    services: {
+      database: "connected",
+      pages: "ready",
+      sections: "ready",
+      entries: "ready",
+    },
+  });
+});
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ Express API server running on http://localhost:${PORT}`);
+  console.log(`   Health check: http://localhost:${PORT}/health`);
+  console.log(
+    `   API base: http://localhost:${PORT}/v1/teams/dev-team/sites/local-site/environments/main`,
+  );
+});

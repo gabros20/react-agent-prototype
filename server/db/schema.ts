@@ -202,7 +202,7 @@ export const navigationItems = sqliteTable("navigation_items", {
   navigationId: text("navigation_id")
     .notNull()
     .references(() => navigations.id, { onDelete: "cascade" }),
-  parentId: text("parent_id").references(() => navigationItems.id, { onDelete: "cascade" }),
+  parentId: text("parent_id"),
   value: text("value").notNull(),
   targetType: text("target_type", {
     enum: ["page", "medium", "entry", "url", "placeholder"],

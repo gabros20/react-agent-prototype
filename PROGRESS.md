@@ -6,7 +6,7 @@
 
 - [x] Sprint 0: Dev Environment & Tooling Setup (✅ Completed)
 - [x] Sprint 1: Database Layer & Schemas (✅ Completed)
-- [ ] Sprint 2: Backend API Foundation
+- [x] Sprint 2: Backend API Foundation (✅ Completed)
 - [ ] Sprint 3: Vector Index & Search
 - [ ] Sprint 4: Template System & Preview Server
 - [ ] Sprint 5: Frontend Foundation
@@ -84,14 +84,42 @@ Tasks:
 - Zod validation schemas exported for all tables
 - Comprehensive seed data for testing
 
-### Sprint 2: Backend API Foundation
+### Sprint 2: Backend API Foundation ✅
+**Status**: Completed
+**Started**: 2025-11-09
+**Completed**: 2025-11-09
+
+Tasks:
+- [x] Create service layer architecture (PageService, SectionService, EntryService)
+- [x] Create ServiceContainer for lightweight DI
+- [x] Build CRUD routes for pages (GET, POST, PUT, DELETE)
+- [x] Build CRUD routes for sections (GET, POST, PUT, DELETE)
+- [x] Build CRUD routes for collections/entries (GET, POST, PUT, DELETE)
+- [x] Add Zod validation for all request payloads
+- [x] Add error handling middleware with proper error envelopes
+- [x] Add CORS middleware
+- [x] Create Express server with health check
+- [x] Test API endpoints with curl
+
+**API Routes Created**:
+- Pages: GET/POST/PUT/DELETE /pages, GET /pages/:page, POST /pages/:page/section
+- Sections: GET/POST/PUT/DELETE /sections, GET /sections/:section
+- Collections: GET/POST/PUT/DELETE /collections, GET /collections/:collection
+- Entries: GET/POST/DELETE /collections/:collection/entries, GET /entries/:entry
+
+**Deliverables**:
+- Working Express API on port 8787
+- Production-like URL structure: `/v1/teams/:team/sites/:site/environments/:env/...`
+- Service layer with business logic separation
+- Comprehensive validation with Zod schemas
+- Error handling with status codes and error envelopes
+- Successfully tested: create page, list pages, get page with sections
+
+### Sprint 3: Vector Index & Search
 **Status**: Not Started
 
 Tasks:
-- [ ] Create service layer architecture
-- [ ] Build CRUD routes for pages
-- [ ] Build CRUD routes for sections
-- [ ] Build CRUD routes for collections/entries
-- [ ] Add validation middleware
-- [ ] Add error handling
-- [ ] Test API endpoints
+- [ ] Create VectorIndexService with LanceDB
+- [ ] Implement auto-sync on CRUD operations
+- [ ] Create fuzzy search endpoint
+- [ ] Test vector search with sample queries
