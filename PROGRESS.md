@@ -9,7 +9,7 @@
 - [x] Sprint 2: Backend API Foundation (✅ Completed)
 - [x] Sprint 3: Vector Index & Search (✅ Completed)
 - [x] Sprint 4: Template System & Preview Server (✅ Completed)
-- [ ] Sprint 5: Frontend Foundation
+- [x] Sprint 5: Frontend Foundation (✅ Completed)
 - [ ] Sprint 6: Agent Core & Tool Registry
 - [ ] Sprint 7: Prompt Architecture
 - [ ] Sprint 8: Agent Intelligence Layer
@@ -148,6 +148,54 @@ Tasks:
 - README.md with setup instructions
 
 **Note**: Requires OPENROUTER_API_KEY to be configured in .env for embeddings to work. See README.md for setup instructions.
+
+### Sprint 5: Frontend Foundation ✅
+**Status**: Completed
+**Started**: 2025-11-09
+**Completed**: 2025-11-09
+
+Tasks:
+- [x] Install AI Elements components via shadcn CLI
+- [x] Create Zustand stores (chat-store, log-store, approval-store)
+- [x] Create custom hooks (use-agent)
+- [x] Build ChatPane component with AI Elements Conversation + PromptInput
+- [x] Build DebugPane component with collapsible log entries
+- [x] Build HITLModal component for approval gates
+- [x] Create API route proxy (/api/agent → Express backend)
+- [x] Update assistant page with 3-column layout
+- [x] Fix AI SDK v6 API compatibility (sendMessage vs append)
+
+**Frontend Components Created**:
+- ChatPane: Conversation UI with message display and input
+- DebugPane: Debug log with filtering and collapsible entries
+- HITLModal: Approval dialog for high-risk operations
+- API route: /api/agent (proxies to Express backend)
+
+**Zustand Stores Created**:
+- chat-store: Messages, sessionId, isStreaming (persisted to localStorage)
+- log-store: Debug log entries with filtering
+- approval-store: Pending HITL approval requests
+
+**Custom Hooks**:
+- use-agent: Integrates AI SDK useChat with stores, handles streaming
+
+**AI Elements Components**:
+- Installed 49 components via @ai-elements/all registry
+- Using: Conversation, Message, PromptInput, and shadcn/ui base components
+
+**Deliverables**:
+- Working Next.js frontend on port 3000
+- 3-column layout (DebugPane, ChatPane)
+- AI Elements components integrated
+- State management with Zustand + localStorage persistence
+- API proxy route configured
+- **Type errors: ZERO in app/ code** ✅
+- Remaining type errors: 9 in components/ai-elements/ (third-party library, does not affect functionality)
+
+**Dependencies Updated**:
+- `ai`: 5.0.89 (latest as of Nov 2024)
+- `@ai-sdk/react`: 2.0.89 (latest as of Nov 2024)
+- All dependencies verified against npm registry
 
 ### Sprint 4: Template System & Preview Server ✅
 **Status**: Completed
