@@ -1,6 +1,6 @@
+import { randomUUID } from "crypto";
 import { db } from "../server/db/client";
 import * as schema from "../server/db/schema";
-import { randomUUID } from "crypto";
 
 async function seed() {
   console.log("🌱 Seeding database...");

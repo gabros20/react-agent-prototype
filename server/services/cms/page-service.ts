@@ -1,7 +1,8 @@
-import { DrizzleDB } from "../../db/client";
-import * as schema from "../../db/schema";
-import { eq, like } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { eq, like } from "drizzle-orm";
+import type { DrizzleDB } from "../../db/client";
+import * as schema from "../../db/schema";
+import type { VectorIndexService } from "../vector-index";
 
 export interface CreatePageInput {
   name: string;
@@ -20,7 +21,10 @@ export interface UpdatePageInput {
 }
 
 export class PageService {
-  constructor(public db: DrizzleDB) {}
+  constructor(
+    public db: DrizzleDB,
+    private vectorIndex: VectorIndexService,
+  ) {}
 
   async createPage(input: CreatePageInput) {
     // Validation
@@ -50,10 +54,25 @@ export class PageService {
 
     await this.db.insert(schema.pages).values(page);
 
+    // Index in vector DB
+    await this.vectorIndex.add({
+      id: page.id,
+      type: "page",
+      name: page.name,
+      slug: page.slug,
+      searchableText: `${page.name} ${page.slug}`,
+      metadata: { siteId: page.siteId },
+    });
+
     return page;
   }
 
   async updatePage(id: string, input: UpdatePageInput) {
+    const original = await this.getPageById(id);
+    if (!original) {
+      throw new Error("Page not found");
+    }
+
     if (input.slug) {
       this.validateSlug(input.slug);
 
@@ -74,6 +93,17 @@ export class PageService {
     };
 
     await this.db.update(schema.pages).set(updated).where(eq(schema.pages.id, id));
+
+    // Re-index if name/slug changed
+    if (input.name !== original.name || input.slug !== original.slug) {
+      await this.vectorIndex.update(id, {
+        type: "page",
+        name: input.name || original.name,
+        slug: input.slug || original.slug,
+        searchableText: `${input.name || original.name} ${input.slug || original.slug}`,
+        metadata: { siteId: original.siteId },
+      });
+    }
 
     return this.getPageById(id);
   }
@@ -110,6 +140,9 @@ export class PageService {
 
   async deletePage(id: string) {
     await this.db.delete(schema.pages).where(eq(schema.pages.id, id));
+
+    // Remove from vector index
+    await this.vectorIndex.delete(id);
   }
 
   private validateSlug(slug: string): void {

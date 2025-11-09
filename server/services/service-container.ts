@@ -1,25 +1,31 @@
-import { DrizzleDB } from "../db/client";
+import type { DrizzleDB } from "../db/client";
+import { EntryService } from "./cms/entry-service";
 import { PageService } from "./cms/page-service";
 import { SectionService } from "./cms/section-service";
-import { EntryService } from "./cms/entry-service";
+import { VectorIndexService } from "./vector-index";
 
 export class ServiceContainer {
   private static instance: ServiceContainer;
 
+  readonly vectorIndex: VectorIndexService;
   readonly pageService: PageService;
   readonly sectionService: SectionService;
   readonly entryService: EntryService;
 
   private constructor(db: DrizzleDB) {
-    // Initialize services
-    this.pageService = new PageService(db);
-    this.sectionService = new SectionService(db);
-    this.entryService = new EntryService(db);
+    // Initialize vector index first
+    this.vectorIndex = new VectorIndexService(process.env.LANCEDB_DIR || "data/lancedb");
+
+    // Initialize services with vector index
+    this.pageService = new PageService(db, this.vectorIndex);
+    this.sectionService = new SectionService(db, this.vectorIndex);
+    this.entryService = new EntryService(db, this.vectorIndex);
   }
 
-  static initialize(db: DrizzleDB): ServiceContainer {
+  static async initialize(db: DrizzleDB): Promise<ServiceContainer> {
     if (!ServiceContainer.instance) {
       ServiceContainer.instance = new ServiceContainer(db);
+      await ServiceContainer.instance.vectorIndex.initialize();
     }
     return ServiceContainer.instance;
   }
@@ -29,5 +35,9 @@ export class ServiceContainer {
       throw new Error("ServiceContainer not initialized. Call initialize() first.");
     }
     return ServiceContainer.instance;
+  }
+
+  async dispose(): Promise<void> {
+    await this.vectorIndex.close();
   }
 }

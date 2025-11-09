@@ -1,5 +1,5 @@
-import { DrizzleDB } from "../db/client";
-import { eq, and } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import type { DrizzleDB } from "../db/client";
 
 export async function getSiteAndEnv(db: DrizzleDB, siteName: string, envName: string) {
   // Look up site by name

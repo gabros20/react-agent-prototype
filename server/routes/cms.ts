@@ -1,6 +1,6 @@
 import express from "express";
-import { ServiceContainer } from "../services/service-container";
 import { z } from "zod";
+import type { ServiceContainer } from "../services/service-container";
 import { getSiteAndEnv } from "../utils/get-context";
 
 const createPageSchema = z.object({
@@ -53,6 +53,29 @@ const upsertEntrySchema = z.object({
 
 export function createCMSRoutes(services: ServiceContainer) {
   const router = express.Router();
+
+  // =========================================================================
+  // RESOURCE SEARCH (Vector-based fuzzy search)
+  // =========================================================================
+
+  // POST /v1/teams/:team/sites/:site/environments/:env/search/resources
+  router.post("/search/resources", async (req, res, next) => {
+    try {
+      const schema = z.object({
+        query: z.string().min(1),
+        type: z.enum(["page", "section_def", "collection", "entry"]).optional(),
+        limit: z.number().int().min(1).max(10).optional().default(3),
+      });
+
+      const { query, type, limit } = schema.parse(req.body);
+
+      const results = await services.vectorIndex.search(query, type, limit);
+
+      res.json({ data: results, statusCode: 200 });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   // =========================================================================
   // PAGES

@@ -1,7 +1,8 @@
-import { DrizzleDB } from "../../db/client";
-import * as schema from "../../db/schema";
-import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { eq } from "drizzle-orm";
+import type { DrizzleDB } from "../../db/client";
+import * as schema from "../../db/schema";
+import type { VectorIndexService } from "../vector-index";
 
 export interface CreateSectionDefInput {
   key: string;
@@ -38,7 +39,10 @@ export interface SyncPageContentsInput {
 }
 
 export class SectionService {
-  constructor(private db: DrizzleDB) {}
+  constructor(
+    private db: DrizzleDB,
+    private vectorIndex: VectorIndexService,
+  ) {}
 
   async createSectionDef(input: CreateSectionDefInput) {
     // Validate key format
@@ -69,10 +73,25 @@ export class SectionService {
 
     await this.db.insert(schema.sectionDefinitions).values(sectionDef);
 
+    // Index in vector DB
+    await this.vectorIndex.add({
+      id: sectionDef.id,
+      type: "section_def",
+      name: sectionDef.name,
+      slug: sectionDef.key,
+      searchableText: `${sectionDef.name} ${sectionDef.key} ${sectionDef.description || ""}`,
+      metadata: { templateKey: sectionDef.templateKey },
+    });
+
     return sectionDef;
   }
 
   async updateSectionDef(id: string, input: UpdateSectionDefInput) {
+    const original = await this.getSectionDefById(id);
+    if (!original) {
+      throw new Error("Section definition not found");
+    }
+
     if (input.key) {
       this.validateKey(input.key);
 
@@ -96,6 +115,17 @@ export class SectionService {
       .set(updated)
       .where(eq(schema.sectionDefinitions.id, id));
 
+    // Re-index if name/key changed
+    if (input.name !== original.name || input.key !== original.key) {
+      await this.vectorIndex.update(id, {
+        type: "section_def",
+        name: input.name || original.name,
+        slug: input.key || original.key,
+        searchableText: `${input.name || original.name} ${input.key || original.key} ${input.description || original.description || ""}`,
+        metadata: { templateKey: input.templateKey || original.templateKey },
+      });
+    }
+
     return this.getSectionDefById(id);
   }
 
@@ -117,6 +147,9 @@ export class SectionService {
 
   async deleteSectionDef(id: string) {
     await this.db.delete(schema.sectionDefinitions).where(eq(schema.sectionDefinitions.id, id));
+
+    // Remove from vector index
+    await this.vectorIndex.delete(id);
   }
 
   async addSectionToPage(input: AddSectionToPageInput) {

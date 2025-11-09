@@ -7,7 +7,7 @@
 - [x] Sprint 0: Dev Environment & Tooling Setup (✅ Completed)
 - [x] Sprint 1: Database Layer & Schemas (✅ Completed)
 - [x] Sprint 2: Backend API Foundation (✅ Completed)
-- [ ] Sprint 3: Vector Index & Search
+- [x] Sprint 3: Vector Index & Search (✅ Completed)
 - [ ] Sprint 4: Template System & Preview Server
 - [ ] Sprint 5: Frontend Foundation
 - [ ] Sprint 6: Agent Core & Tool Registry
@@ -115,11 +115,45 @@ Tasks:
 - Error handling with status codes and error envelopes
 - Successfully tested: create page, list pages, get page with sections
 
-### Sprint 3: Vector Index & Search
+### Sprint 3: Vector Index & Search ✅
+**Status**: Completed
+**Started**: 2025-11-09
+**Completed**: 2025-11-09
+
+Tasks:
+- [x] Create VectorIndexService with LanceDB
+- [x] Implement OpenRouter embeddings API integration
+- [x] Integrate auto-sync in PageService (create, update, delete)
+- [x] Integrate auto-sync in SectionService (create, update, delete)
+- [x] Integrate auto-sync in EntryService (create, delete)
+- [x] Update ServiceContainer for async initialization
+- [x] Create fuzzy search endpoint (POST /search/resources)
+- [x] Create reindex script for populating existing data
+
+**Vector Search Features**:
+- Semantic search using OpenRouter embeddings (text-embedding-3-small)
+- Auto-sync on all CMS CRUD operations
+- Fuzzy matching with typo tolerance
+- Type-based filtering (page, section_def, collection, entry)
+- Similarity scores (0-1 range)
+- Configurable result limits (1-10)
+
+**Deliverables**:
+- VectorIndexService with LanceDB integration
+- Auto-indexing on create operations
+- Auto-reindexing on update operations (if name/slug changed)
+- Auto-deletion from index on delete operations
+- Search endpoint: POST /search/resources { query, type?, limit? }
+- Reindex script to populate existing data: `pnpm reindex`
+- README.md with setup instructions
+
+**Note**: Requires OPENROUTER_API_KEY to be configured in .env for embeddings to work. See README.md for setup instructions.
+
+### Sprint 4: Template System & Preview Server
 **Status**: Not Started
 
 Tasks:
-- [ ] Create VectorIndexService with LanceDB
-- [ ] Implement auto-sync on CRUD operations
-- [ ] Create fuzzy search endpoint
-- [ ] Test vector search with sample queries
+- [ ] Create Nunjucks template files (layout, hero, feature, cta)
+- [ ] Create RendererService
+- [ ] Create preview server on port 4000
+- [ ] Test page rendering

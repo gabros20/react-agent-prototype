@@ -1,7 +1,8 @@
-import { DrizzleDB } from "../../db/client";
-import * as schema from "../../db/schema";
-import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { eq } from "drizzle-orm";
+import type { DrizzleDB } from "../../db/client";
+import * as schema from "../../db/schema";
+import type { VectorIndexService } from "../vector-index";
 
 export interface CreateCollectionDefInput {
   slug: string;
@@ -27,7 +28,10 @@ export interface UpsertEntryInput {
 }
 
 export class EntryService {
-  constructor(private db: DrizzleDB) {}
+  constructor(
+    private db: DrizzleDB,
+    private vectorIndex: VectorIndexService,
+  ) {}
 
   async createCollectionDef(input: CreateCollectionDefInput) {
     // Validate slug format
@@ -54,6 +58,16 @@ export class EntryService {
     };
 
     await this.db.insert(schema.collectionDefinitions).values(collectionDef);
+
+    // Index in vector DB
+    await this.vectorIndex.add({
+      id: collectionDef.id,
+      type: "collection",
+      name: collectionDef.name,
+      slug: collectionDef.slug,
+      searchableText: `${collectionDef.name} ${collectionDef.slug} ${collectionDef.description || ""}`,
+      metadata: {},
+    });
 
     return collectionDef;
   }
@@ -133,6 +147,8 @@ export class EntryService {
       where: eq(schema.collectionEntries.slug, input.slug),
     });
 
+    const isNew = !entry;
+
     if (!entry) {
       // Create new entry
       const newEntry = {
@@ -184,6 +200,18 @@ export class EntryService {
       });
     }
 
+    // Index in vector DB (only on create)
+    if (isNew) {
+      await this.vectorIndex.add({
+        id: entry.id,
+        type: "entry",
+        name: entry.title,
+        slug: entry.slug,
+        searchableText: `${entry.title} ${entry.slug}`,
+        metadata: { collectionId: entry.collectionId },
+      });
+    }
+
     return entry;
   }
 
@@ -229,6 +257,9 @@ export class EntryService {
 
   async deleteEntry(id: string) {
     await this.db.delete(schema.collectionEntries).where(eq(schema.collectionEntries.id, id));
+
+    // Remove from vector index
+    await this.vectorIndex.delete(id);
   }
 
   private validateSlug(slug: string): void {
