@@ -23,12 +23,12 @@ Ctrl+C in terminal
 
 ## 🌐 URLs
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| **AI Assistant** | http://localhost:3000/assistant | Chat with AI agent |
-| **Preview Homepage** | http://localhost:4000/pages/home?locale=en | See rendered site |
-| **API Health** | http://localhost:8787/health | Check API status |
-| **Database Studio** | `pnpm db:studio` | Browse database |
+| Service              | URL                                        | Purpose            |
+| -------------------- | ------------------------------------------ | ------------------ |
+| **AI Assistant**     | http://localhost:3000/assistant            | Chat with AI agent |
+| **Preview Homepage** | http://localhost:4000/pages/home?locale=en | See rendered site  |
+| **API Health**       | http://localhost:8787/health               | Check API status   |
+| **Database Studio**  | `pnpm db:studio`                           | Browse database    |
 
 ---
 
@@ -79,6 +79,7 @@ curl -X POST http://localhost:8787/v1/cms/search/resources \
 ## 💬 AI Agent Test Prompts
 
 ### Easy (1-2 steps)
+
 ```
 What pages exist?
 Show me the homepage content
@@ -86,6 +87,7 @@ List all section definitions
 ```
 
 ### Medium (3-5 steps)
+
 ```
 Create a "Services" page
 Add a hero section to the contact page
@@ -93,6 +95,7 @@ Find pages about contact
 ```
 
 ### Hard (6+ steps)
+
 ```
 Create an About page with hero and feature sections
 Build a blog system with categories
@@ -100,6 +103,7 @@ Update all pages to use the new hero variant
 ```
 
 ### HITL Testing (requires approval)
+
 ```
 Delete the about page
 Change the homepage slug to "landing"
@@ -109,12 +113,12 @@ Change the homepage slug to "landing"
 
 ## 🎯 Agent Modes
 
-| Mode | Use Case | Max Steps | Tools |
-|------|----------|-----------|-------|
-| **Architect** | Planning | 6 | Read-only + validatePlan |
-| **CMS CRUD** | Execution | 10 | All tools |
-| **Debug** | Fix errors | 4 | Read + limited writes |
-| **Ask** | Questions | 6 | Read-only |
+| Mode          | Use Case   | Max Steps | Tools                    |
+| ------------- | ---------- | --------- | ------------------------ |
+| **Architect** | Planning   | 6         | Read-only + validatePlan |
+| **CMS CRUD**  | Execution  | 10        | All tools                |
+| **Debug**     | Fix errors | 4         | Read + limited writes    |
+| **Ask**       | Questions  | 6         | Read-only                |
 
 ---
 
@@ -144,14 +148,14 @@ pnpm typecheck  # Check real errors
 
 ## 📊 Debug Log Color Codes
 
-| Color | Type | Meaning |
-|-------|------|---------|
-| 🔵 Blue | tool-call | Agent calling tool |
-| 🟢 Green | tool-result | Tool returned success |
-| 🟣 Purple | step-complete | Step finished |
-| 🔴 Red | error | Something failed |
-| 🟡 Yellow | system | HITL approval needed |
-| ⚪ Gray | info | General information |
+| Color     | Type          | Meaning               |
+| --------- | ------------- | --------------------- |
+| 🔵 Blue   | tool-call     | Agent calling tool    |
+| 🟢 Green  | tool-result   | Tool returned success |
+| 🟣 Purple | step-complete | Step finished         |
+| 🔴 Red    | error         | Something failed      |
+| 🟡 Yellow | system        | HITL approval needed  |
+| ⚪ Gray   | info          | General information   |
 
 ---
 
@@ -194,28 +198,28 @@ data/
 
 ## 🐛 Common Issues
 
-| Problem | Solution |
-|---------|----------|
+| Problem                          | Solution                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------- |
 | "Can't resolve 'tw-animate-css'" | Remove `@import "tw-animate-css";` from `app/globals.css` (already fixed) |
-| "API key not found" | Check `.env` file has `OPENROUTER_API_KEY=...` |
-| "Port in use" | Kill process: `lsof -i :8787` then `kill -9 PID` |
-| "Database locked" | Stop all servers, delete `data/sqlite.db`, re-seed |
-| "No results in search" | Run `pnpm reindex` |
-| "Modal doesn't appear" | Check browser console (F12) for errors |
-| Agent not responding | Check API server logs, verify API key valid |
+| "API key not found"              | Check `.env` file has `OPENROUTER_API_KEY=...`                            |
+| "Port in use"                    | Kill process: `lsof -i :8787` then `kill -9 PID`                          |
+| "Database locked"                | Stop all servers, delete `data/sqlite.db`, re-seed                        |
+| "No results in search"           | Run `pnpm reindex`                                                        |
+| "Modal doesn't appear"           | Check browser console (F12) for errors                                    |
+| Agent not responding             | Check API server logs, verify API key valid                               |
 
 ---
 
 ## 📚 Documentation
 
-- [GETTING_STARTED.md](GETTING_STARTED.md) - Beginner guide with test cases
-- [README.md](README.md) - Architecture and features
-- [TAILWIND_ANALYSIS.md](TAILWIND_ANALYSIS.md) - Tailwind CSS v4 setup analysis
-- [TAILWIND_CONFIG_ANALYSIS.md](TAILWIND_CONFIG_ANALYSIS.md) - Do we need tailwind.config.ts?
-- [TAILWIND_FIX_SUMMARY.md](TAILWIND_FIX_SUMMARY.md) - How we fixed the styling issues
-- [PLAN.md](PLAN.md) - Technical specification
-- [PROGRESS.md](PROGRESS.md) - Implementation status
-- [PROMPT_ARCHITECTURE_BLUEPRINT.md](docs/PROMPT_ARCHITECTURE_BLUEPRINT.md) - Prompt system
+-   [GETTING_STARTED.md](GETTING_STARTED.md) - Beginner guide with test cases
+-   [README.md](README.md) - Architecture and features
+-   [TAILWIND_ANALYSIS.md](TAILWIND_ANALYSIS.md) - Tailwind CSS v4 setup analysis
+-   [TAILWIND_CONFIG_ANALYSIS.md](TAILWIND_CONFIG_ANALYSIS.md) - Do we need tailwind.config.ts?
+-   [TAILWIND_FIX_SUMMARY.md](TAILWIND_FIX_SUMMARY.md) - How we fixed the styling issues
+-   [PLAN.md](PLAN.md) - Technical specification
+-   [PROGRESS.md](PROGRESS.md) - Implementation status
+-   [PROMPT_ARCHITECTURE_BLUEPRINT.md](docs/PROMPT_ARCHITECTURE_BLUEPRINT.md) - Prompt system
 
 ---
 
@@ -235,14 +239,14 @@ data/
 
 Before reporting issues, verify:
 
-- [ ] All 3 servers running (`pnpm dev`)
-- [ ] API health check passes (http://localhost:8787/health)
-- [ ] Preview loads (http://localhost:4000/pages/home)
-- [ ] Assistant UI loads (http://localhost:3000/assistant)
-- [ ] `.env` file exists with valid API key
-- [ ] Database has data (`pnpm db:studio`)
-- [ ] TypeScript compiles (`pnpm typecheck`)
-- [ ] Browser console has no errors (F12)
+-   [ ] All 3 servers running (`pnpm dev`)
+-   [ ] API health check passes (http://localhost:8787/health)
+-   [ ] Preview loads (http://localhost:4000/pages/home)
+-   [ ] Assistant UI loads (http://localhost:3000/assistant)
+-   [ ] `.env` file exists with valid API key
+-   [ ] Database has data (`pnpm db:studio`)
+-   [ ] TypeScript compiles (`pnpm typecheck`)
+-   [ ] Browser console has no errors (F12)
 
 ---
 

@@ -85,34 +85,32 @@ function LogEntryItem({ log }: { log: LogEntry }) {
   };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg p-2 sm:p-3 bg-card/50 hover:bg-card transition-colors">
-      <div className="flex items-start gap-2">
-        <Badge className={`${LOG_TYPE_COLORS[log.type]} flex-shrink-0 text-[10px] sm:text-xs`} variant="secondary">
-          {log.type}
-        </Badge>
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-            {log.toolName && (
-              <span className="font-mono text-xs sm:text-sm truncate">{log.toolName}</span>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg bg-card/50 hover:bg-card transition-colors">
+      <CollapsibleTrigger asChild disabled={!(log.input || log.output)}>
+        <div className={`flex items-start gap-2 p-2 sm:p-3 ${(log.input || log.output) ? 'cursor-pointer' : ''}`}>
+          <Badge className={`${LOG_TYPE_COLORS[log.type]} flex-shrink-0 text-[10px] sm:text-xs`} variant="secondary">
+            {log.type}
+          </Badge>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+              {log.toolName && (
+                <span className="font-mono text-xs sm:text-sm truncate">{log.toolName}</span>
+              )}
+              <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
+                {new Date(log.timestamp).toLocaleTimeString()}
+              </span>
+            </div>
+            {log.message && (
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-words">{log.message}</p>
             )}
-            <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
-              {new Date(log.timestamp).toLocaleTimeString()}
-            </span>
           </div>
-          {log.message && (
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-words">{log.message}</p>
+          {(log.input || log.output) && (
+            <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
           )}
         </div>
-        {(log.input || log.output) ? (
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="flex-shrink-0 h-7 w-7 sm:h-8 sm:w-8 p-0">
-              <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-            </Button>
-          </CollapsibleTrigger>
-        ) : null}
-      </div>
+      </CollapsibleTrigger>
 
-      <CollapsibleContent className="mt-2">
+      <CollapsibleContent className="px-2 sm:px-3 pb-2 sm:pb-3">
         {log.input ? (
           <div className="mt-2">
             <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">Input:</p>
