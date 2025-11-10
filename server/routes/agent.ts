@@ -104,18 +104,27 @@ export function createAgentRoutes(services: ServiceContainer) {
       })
 
       try {
-        // Create agent
-        const agent = createAgent(input.mode as AgentMode, context)
+        // Create agent with intelligence layer
+        const { agent, memoryManager, checkpointManager, errorRecovery } = createAgent(
+          input.mode as AgentMode,
+          context
+        )
 
         // Execute agent
         const result = await agent.generate({
           prompt: input.prompt
         })
 
+        // Log intelligence layer stats
         logger.info('Agent execution completed', {
           traceId,
-          stepsCount: result.steps?.length || 0
+          stepsCount: result.steps?.length || 0,
+          memoryTokens: memoryManager.estimateTokens(),
+          circuitStatus: errorRecovery.getCircuitStatus()
         })
+
+        // Clear checkpoint on successful completion
+        await checkpointManager.clear(context.sessionId)
 
         // Send final result
         writeSSE('result', {
@@ -123,7 +132,12 @@ export function createAgentRoutes(services: ServiceContainer) {
           text: result.text,
           toolCalls: result.toolCalls,
           toolResults: result.toolResults,
-          steps: result.steps
+          steps: result.steps,
+          intelligence: {
+            memoryTokens: memoryManager.estimateTokens(),
+            subgoalsCompleted: memoryManager.getState().subgoalMemory.length,
+            circuitBreakers: errorRecovery.getCircuitStatus()
+          }
         })
 
         // Close connection
