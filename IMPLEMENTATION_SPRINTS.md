@@ -2882,11 +2882,397 @@ http://localhost:3000
 
 ---
 
-**Continue this format for remaining sprints...**
+## Sprint 11: Session Management & Chat History
 
-Due to length constraints, I'll create the document with the first 5 sprints detailed. The remaining sprints (6-11) will follow the same structure. Would you like me to:
+**Goal**: Implement ChatGPT-style session management with three core actions: Clear History (keep session), New Session (archive current), Delete Session (permanent removal). Enable users to manage multiple conversations, switch between sessions, and persist chat history to database.
 
-1. Complete all 11 sprints in this file?
-2. Or would you prefer I create a summary of sprints 6-11 and you can ask for details on specific ones?
+**Duration**: 6-10 hours
 
-Let me know and I'll continue!
+**Prerequisites**: Sprint 0-10 completed
+
+**Reference**: See `docs/SESSION_MANAGEMENT_DESIGN.md` for complete architecture design
+
+---
+
+### Overview
+
+This sprint implements full session management capabilities:
+- **Session CRUD**: Create, list, load, archive, delete sessions
+- **Message Persistence**: Save all messages to database (not just localStorage)
+- **Session Sidebar**: ChatGPT-style sidebar with session list
+- **Three Actions**: Clear History, New Session, Delete Session
+- **Recovery**: Load session history from database on switch/refresh
+
+---
+
+### Task 1: Backend Session Service Layer (1.5-2 hours)
+
+**Goal**: Create service layer for session management following existing service pattern
+
+**1.1 Create SessionService Class** (`server/services/session-service.ts`)
+
+Features:
+- Create new session
+- List all sessions with metadata (message count, last activity)
+- Get session by ID with all messages
+- Update session (for archiving or title changes)
+- Delete session (cascade deletes messages via FK)
+- Add message to session
+- Clear all messages from session
+- Clear checkpoint from session
+- Generate smart title from first user message
+
+Key Methods:
+```typescript
+class SessionService {
+  async createSession(input: CreateSessionInput)
+  async listSessions(): Promise<SessionWithMetadata[]>
+  async getSessionById(sessionId: string)
+  async updateSession(sessionId: string, input: UpdateSessionInput)
+  async deleteSession(sessionId: string)
+  async addMessage(sessionId: string, input: CreateMessageInput)
+  async clearMessages(sessionId: string)
+  async clearCheckpoint(sessionId: string)
+  generateSmartTitle(messages: any[]): string
+}
+```
+
+**1.2 Update ServiceContainer**
+
+Add SessionService to ServiceContainer:
+```typescript
+readonly sessionService: SessionService
+
+private constructor(db: DrizzleDB) {
+  // ... existing services ...
+  this.sessionService = new SessionService(db)
+}
+```
+
+**Deliverables**:
+- ✅ SessionService class with 8 methods
+- ✅ Integrated into ServiceContainer
+- ✅ Follows existing service pattern (PageService, SectionService)
+- ✅ TypeScript types exported
+
+---
+
+### Task 2: Backend Session Routes (2-3 hours)
+
+**Goal**: Create REST API endpoints for session management
+
+**2.1 Create Session Routes** (`server/routes/sessions.ts`)
+
+8 endpoints:
+1. `POST /v1/sessions` - Create new session
+2. `GET /v1/sessions` - List all sessions with metadata
+3. `GET /v1/sessions/:id` - Get single session with messages
+4. `PATCH /v1/sessions/:id` - Update session (archive, change title)
+5. `DELETE /v1/sessions/:id` - Delete session permanently
+6. `POST /v1/sessions/:id/messages` - Add message to session
+7. `DELETE /v1/sessions/:id/messages` - Clear all messages
+8. `DELETE /v1/sessions/:id/checkpoint` - Clear checkpoint
+
+All endpoints include:
+- Zod validation for request bodies
+- Error handling with proper status codes
+- JSON response envelopes: `{ data, statusCode }` or `{ error, statusCode }`
+
+**2.2 Register Routes in Express Server**
+
+Update `server/index.ts`:
+```typescript
+import { createSessionRoutes } from './routes/sessions'
+app.use('/v1/sessions', createSessionRoutes(services))
+```
+
+**2.3 Create Next.js API Proxy Routes**
+
+Create proxy routes to forward requests from Next.js to Express backend:
+- `app/api/sessions/route.ts` - GET (list), POST (create)
+- `app/api/sessions/[sessionId]/route.ts` - GET, PATCH, DELETE
+- `app/api/sessions/[sessionId]/messages/route.ts` - POST, DELETE
+
+**2.4 Test Endpoints with curl**
+
+Test all 8 endpoints:
+```bash
+# Create session
+curl -X POST http://localhost:8787/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Test Session"}'
+
+# List sessions
+curl http://localhost:8787/v1/sessions
+
+# Get session
+curl http://localhost:8787/v1/sessions/{sessionId}
+
+# Update session
+curl -X PATCH http://localhost:8787/v1/sessions/{sessionId} \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Title"}'
+
+# Add message
+curl -X POST http://localhost:8787/v1/sessions/{sessionId}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"role":"user","content":"Hello"}'
+
+# Clear messages
+curl -X DELETE http://localhost:8787/v1/sessions/{sessionId}/messages
+
+# Clear checkpoint
+curl -X DELETE http://localhost:8787/v1/sessions/{sessionId}/checkpoint
+
+# Delete session
+curl -X DELETE http://localhost:8787/v1/sessions/{sessionId}
+```
+
+**Deliverables**:
+- ✅ 8 REST endpoints implemented
+- ✅ Zod validation for all inputs
+- ✅ Next.js API proxy routes
+- ✅ All endpoints tested with curl
+- ✅ Error handling with proper status codes
+
+---
+
+### Task 3: Frontend Session Store (1-2 hours)
+
+**Goal**: Create Zustand store for session management
+
+**3.1 Create Session Store** (`app/assistant/_stores/session-store.ts`)
+
+Store structure:
+```typescript
+interface SessionState {
+  sessions: SessionMetadata[]
+  isLoading: boolean
+  error: string | null
+  
+  loadSessions: () => Promise<void>
+  loadSession: (sessionId: string) => Promise<any>
+  createSession: (title?: string) => Promise<string>
+  updateSession: (sessionId: string, title: string) => Promise<void>
+  deleteSession: (sessionId: string) => Promise<void>
+  clearHistory: (sessionId: string) => Promise<void>
+}
+```
+
+Features:
+- Load all sessions from backend
+- Load single session with messages
+- Create new session
+- Update session title
+- Delete session permanently
+- Clear history (keep session, delete messages + checkpoint)
+- Local state updates after API calls
+- Error handling
+
+**3.2 Update use-agent Hook**
+
+Add message persistence after sending/receiving:
+```typescript
+// After user message
+await fetch(`/api/sessions/${sessionId}/messages`, {
+  method: 'POST',
+  body: JSON.stringify({ role: 'user', content: prompt })
+})
+
+// After assistant response
+await fetch(`/api/sessions/${sessionId}/messages`, {
+  method: 'POST',
+  body: JSON.stringify({ role: 'assistant', content: assistantText })
+})
+```
+
+**Deliverables**:
+- ✅ Session store with all CRUD operations
+- ✅ Message persistence to database
+- ✅ Session loading from database
+- ✅ Error handling
+
+---
+
+### Task 4: Session Sidebar UI (2-3 hours)
+
+**Goal**: Build ChatGPT-style session sidebar
+
+**4.1 Create SessionSidebar Component** (`app/assistant/_components/session-sidebar.tsx`)
+
+Features:
+- Header with "New Session" button
+- Scrollable session list
+- Load sessions on mount
+- Switch to new session on create
+- Empty state when no sessions
+
+**4.2 Create SessionItem Component** (`app/assistant/_components/session-item.tsx`)
+
+Features:
+- Display session title, message count, last activity
+- Click to load session
+- Active state highlighting
+- Dropdown menu with:
+  - Clear History (with confirmation)
+  - Delete Session (with confirmation)
+- Confirmation dialogs using AlertDialog
+
+**4.3 Install Required Dependencies**
+
+```bash
+npx shadcn@latest add dropdown-menu alert-dialog
+pnpm add date-fns
+```
+
+**4.4 Update Assistant Page Layout**
+
+Update `app/assistant/page.tsx`:
+- Add SessionSidebar to layout
+- Change grid to 4 columns: Sidebar (1) | Debug (2) | Chat (1)
+- Hide sidebar on mobile (lg:block)
+
+**Deliverables**:
+- ✅ Session sidebar with session list
+- ✅ Session item with dropdown menu
+- ✅ Clear history action with confirmation
+- ✅ Delete session action with confirmation
+- ✅ Session switching functionality
+- ✅ Active session highlighting
+- ✅ Responsive layout (sidebar hidden on mobile)
+
+---
+
+### Task 5: Session Initialization & Migration (1 hour)
+
+**Goal**: Handle first-time users and existing localStorage data
+
+**5.1 Create Session Initialization Logic**
+
+Update `app/assistant/page.tsx`:
+- Load sessions from backend on mount
+- If no sessionId, create default session
+- Set sessionId in chat store
+
+**5.2 Create Migration Script** (Optional)
+
+Create `app/assistant/_utils/migrate-localStorage.ts`:
+- Check for localStorage data
+- Create session for migrated data
+- Save messages to database
+- Update current session
+- Clear old localStorage
+
+**Deliverables**:
+- ✅ Auto-create session on first load
+- ✅ Migration from localStorage (optional)
+- ✅ Session persistence across page reloads
+
+---
+
+### Task 6: Testing & Verification (1 hour)
+
+**Goal**: Comprehensive testing of all session management features
+
+**6.1 Manual Test Cases**
+
+- [ ] Create new session → appears in sidebar
+- [ ] Switch sessions → loads correct messages
+- [ ] Send message → saved to DB, visible after reload
+- [ ] Clear history → messages gone, session remains
+- [ ] Delete session → removed from sidebar, data gone from DB
+- [ ] Delete current session → frontend resets
+- [ ] Multiple sessions → all appear in sidebar
+- [ ] Page reload → current session restored
+- [ ] Empty state → shows "No sessions yet"
+
+**6.2 Database Verification**
+
+```bash
+# Check sessions table
+sqlite3 data/sqlite.db "SELECT id, title FROM sessions;"
+
+# Check messages table
+sqlite3 data/sqlite.db "SELECT COUNT(*) FROM messages WHERE sessionId = '{id}';"
+
+# Verify cascade delete
+sqlite3 data/sqlite.db "SELECT COUNT(*) FROM messages WHERE sessionId = '{deleted_id}';"
+# Should return 0
+```
+
+**6.3 TypeScript Verification**
+
+```bash
+pnpm typecheck
+# Should pass with ZERO errors
+```
+
+**Deliverables**:
+- ✅ All test cases passed
+- ✅ Database integrity verified
+- ✅ Zero TypeScript errors
+- ✅ No console errors in browser
+
+---
+
+### Deliverables Summary
+
+✅ **Backend**:
+- SessionService with 8 methods
+- 8 REST API endpoints
+- Next.js API proxy routes
+- All endpoints tested with curl
+
+✅ **Frontend**:
+- Session store with CRUD operations
+- Session sidebar component
+- Session item with dropdown menu
+- Confirmation dialogs for destructive actions
+- Message persistence to database
+- Session loading from database
+
+✅ **Features**:
+- Create new session
+- List all sessions
+- Switch between sessions
+- Clear history (keep session)
+- Delete session (permanent)
+- Auto-save messages to DB
+- Persist session across reloads
+
+✅ **Quality**:
+- Zero TypeScript errors
+- All test cases passed
+- Database integrity verified
+- Responsive layout
+- Error handling
+
+---
+
+### Acceptance Criteria
+
+- ✅ User can create unlimited sessions
+- ✅ User can switch between sessions instantly
+- ✅ User can clear chat history without losing session
+- ✅ User can delete sessions permanently
+- ✅ Messages persist across browser reloads
+- ✅ Session list shows title, message count, last activity
+- ✅ Active session highlighted in sidebar
+- ✅ Confirmation dialogs for destructive actions
+- ✅ Database cascade delete works correctly
+- ✅ Mobile-responsive sidebar (collapses on small screens)
+- ✅ Zero data loss (all messages saved to DB)
+
+---
+
+## Sprint 12: Polish & Production Readiness
+
+**Goal**: Error state UI polish, performance optimization, deployment preparation, comprehensive documentation.
+
+**Duration**: 4-6 hours
+
+**Prerequisites**: Sprint 0-11 completed
+
+### Tasks
+
+TBD (to be expanded after Sprint 11 completion)
