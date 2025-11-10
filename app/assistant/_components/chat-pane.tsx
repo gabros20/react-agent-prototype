@@ -27,37 +27,42 @@ export function ChatPane({ mode }: ChatPaneProps) {
   const { messages } = useChatStore();
 
   return (
-    <div className="flex flex-col h-full border rounded-lg bg-card">
-      <div className="p-4 border-b">
-        <h2 className="text-lg font-semibold">AI Assistant</h2>
-        <p className="text-sm text-muted-foreground">Chat with the CMS agent</p>
+    <div className="flex flex-col h-full border rounded-lg bg-card overflow-hidden">
+      {/* Header - Fixed */}
+      <div className="flex-none p-3 sm:p-4 border-b">
+        <h2 className="text-base sm:text-lg font-semibold">AI Assistant</h2>
+        <p className="text-xs sm:text-sm text-muted-foreground">Chat with the CMS agent</p>
       </div>
 
-      <Conversation className="flex-1">
-        <ConversationContent>
-          {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <div className="text-center">
-                <p className="text-lg font-medium mb-2">No messages yet</p>
-                <p className="text-sm">Start a conversation to manage your CMS</p>
+      {/* Messages - Flex-1 with overflow */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground p-4">
+                <div className="text-center">
+                  <p className="text-base sm:text-lg font-medium mb-2">No messages yet</p>
+                  <p className="text-xs sm:text-sm">Start a conversation to manage your CMS</p>
+                </div>
               </div>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <Message from={message.role} key={message.id}>
-                <MessageContent>
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                    {message.content}
-                  </div>
-                </MessageContent>
-              </Message>
-            ))
-          )}
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
+            ) : (
+              messages.map((message) => (
+                <Message from={message.role} key={message.id}>
+                  <MessageContent>
+                    <div className="prose prose-sm max-w-none whitespace-pre-wrap text-xs sm:text-sm">
+                      {message.content}
+                    </div>
+                  </MessageContent>
+                </Message>
+              ))
+            )}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+      </div>
 
-      <div className="p-4 border-t">
+      {/* Input - Fixed */}
+      <div className="flex-none p-3 sm:p-4 border-t">
         <PromptInput 
           onSubmit={(message) => {
             if (message.text && message.text.trim() && !isStreaming) {
@@ -72,11 +77,17 @@ export function ChatPane({ mode }: ChatPaneProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
-              className="min-h-[80px]"
+              className="min-h-[60px] sm:min-h-[80px] text-sm"
+              disabled={isStreaming}
             />
           </PromptInputBody>
           <PromptInputFooter>
-            <PromptInputSubmit disabled={isStreaming || !input.trim()} />
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs text-muted-foreground">
+                {isStreaming ? 'Agent is thinking...' : 'Press Enter to send'}
+              </span>
+              <PromptInputSubmit disabled={isStreaming || !input.trim()} />
+            </div>
           </PromptInputFooter>
         </PromptInput>
       </div>

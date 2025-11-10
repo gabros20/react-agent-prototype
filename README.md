@@ -2,6 +2,11 @@
 
 AI-powered content management system with ReAct-style agent assistant.
 
+## 🚀 New to the Project?
+
+- **[Getting Started Guide](GETTING_STARTED.md)** - Complete walkthrough for beginners with test cases and examples
+- **[Quick Reference Card](QUICK_REFERENCE.md)** - Commands, URLs, and troubleshooting cheat sheet
+
 ## Quick Start
 
 ### 1. Install Dependencies

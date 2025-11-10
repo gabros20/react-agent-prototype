@@ -23,42 +23,52 @@ export function DebugPane() {
   const filteredLogs = filterType === 'all' ? logs : logs.filter((log) => log.type === filterType);
 
   return (
-    <div className="flex flex-col h-full border rounded-lg bg-card">
-      <div className="p-4 border-b flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Debug Log</h2>
-          <p className="text-sm text-muted-foreground">{filteredLogs.length} events</p>
-        </div>
-        <div className="flex gap-2">
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as LogEntry['type'] | 'all')}
-            className="text-sm border rounded px-2 py-1"
-          >
-            <option value="all">All</option>
-            <option value="tool-call">Tool Calls</option>
-            <option value="tool-result">Results</option>
-            <option value="step-complete">Steps</option>
-            <option value="error">Errors</option>
-            <option value="info">Info</option>
-          </select>
-          <Button variant="outline" size="sm" onClick={clearLogs}>
-            Clear
-          </Button>
+    <div className="flex flex-col h-full border rounded-lg bg-card overflow-hidden">
+      {/* Header - Fixed */}
+      <div className="flex-none p-3 sm:p-4 border-b">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg font-semibold">Debug Log</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground">{filteredLogs.length} events</p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as LogEntry['type'] | 'all')}
+              className="text-xs sm:text-sm border rounded px-2 py-1 bg-background"
+            >
+              <option value="all">All</option>
+              <option value="tool-call">Tool Calls</option>
+              <option value="tool-result">Results</option>
+              <option value="step-complete">Steps</option>
+              <option value="error">Errors</option>
+              <option value="info">Info</option>
+              <option value="system">System</option>
+            </select>
+            <Button variant="outline" size="sm" onClick={clearLogs}>
+              Clear
+            </Button>
+          </div>
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2">
-          {filteredLogs.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p className="text-sm">No log entries yet</p>
-            </div>
-          ) : (
-            filteredLogs.map((log) => <LogEntryItem key={log.id} log={log} />)
-          )}
-        </div>
-      </ScrollArea>
+      {/* Scrollable Content - Flex-1 with proper overflow */}
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-3 sm:p-4 space-y-2">
+            {filteredLogs.length === 0 ? (
+              <div className="flex items-center justify-center py-12 text-muted-foreground">
+                <div className="text-center">
+                  <p className="text-sm">No log entries yet</p>
+                  <p className="text-xs mt-1">Logs will appear here during agent execution</p>
+                </div>
+              </div>
+            ) : (
+              filteredLogs.map((log) => <LogEntryItem key={log.id} log={log} />)
+            )}
+          </div>
+        </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -75,24 +85,28 @@ function LogEntryItem({ log }: { log: LogEntry }) {
   };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg p-3">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border rounded-lg p-2 sm:p-3 bg-card/50 hover:bg-card transition-colors">
       <div className="flex items-start gap-2">
-        <Badge className={LOG_TYPE_COLORS[log.type]} variant="secondary">
+        <Badge className={`${LOG_TYPE_COLORS[log.type]} flex-shrink-0 text-[10px] sm:text-xs`} variant="secondary">
           {log.type}
         </Badge>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            {log.toolName && <span className="font-mono text-sm">{log.toolName}</span>}
-            <span className="text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+            {log.toolName && (
+              <span className="font-mono text-xs sm:text-sm truncate">{log.toolName}</span>
+            )}
+            <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">
               {new Date(log.timestamp).toLocaleTimeString()}
             </span>
           </div>
-          {log.message && <p className="text-sm text-muted-foreground mt-1">{log.message}</p>}
+          {log.message && (
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-words">{log.message}</p>
+          )}
         </div>
         {(log.input || log.output) ? (
           <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm">
-              <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            <Button variant="ghost" size="sm" className="flex-shrink-0 h-7 w-7 sm:h-8 sm:w-8 p-0">
+              <ChevronDown className={`h-3 w-3 sm:h-4 sm:w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </Button>
           </CollapsibleTrigger>
         ) : null}
@@ -101,16 +115,16 @@ function LogEntryItem({ log }: { log: LogEntry }) {
       <CollapsibleContent className="mt-2">
         {log.input ? (
           <div className="mt-2">
-            <p className="text-xs font-medium text-muted-foreground mb-1">Input:</p>
-            <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+            <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">Input:</p>
+            <pre className="text-[10px] sm:text-xs bg-muted p-2 rounded overflow-x-auto max-h-48 overflow-y-auto">
               {formatJson(log.input)}
             </pre>
           </div>
         ) : null}
         {log.output ? (
           <div className="mt-2">
-            <p className="text-xs font-medium text-muted-foreground mb-1">Output:</p>
-            <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+            <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">Output:</p>
+            <pre className="text-[10px] sm:text-xs bg-muted p-2 rounded overflow-x-auto max-h-48 overflow-y-auto">
               {formatJson(log.output)}
             </pre>
           </div>
