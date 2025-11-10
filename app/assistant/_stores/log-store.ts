@@ -7,7 +7,7 @@ export interface LogEntry {
   traceId: string;
   stepId: string;
   timestamp: Date;
-  type: 'tool-call' | 'tool-result' | 'step-complete' | 'error' | 'info';
+  type: 'tool-call' | 'tool-result' | 'step-complete' | 'error' | 'info' | 'system';
   toolName?: string;
   input?: unknown;
   output?: unknown;

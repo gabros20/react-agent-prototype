@@ -14,6 +14,7 @@ const LOG_TYPE_COLORS: Record<LogEntry['type'], string> = {
   'step-complete': 'bg-purple-500',
   error: 'bg-red-500',
   info: 'bg-gray-500',
+  system: 'bg-yellow-500',
 };
 
 export function DebugPane() {

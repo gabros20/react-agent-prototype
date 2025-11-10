@@ -152,6 +152,27 @@ export function useAgent(mode: AgentMode = 'cms-crud') {
                   setError(new Error(data.error || 'Unknown error'));
                   break;
 
+                case 'approval-required':
+                  // Handle HITL approval request
+                  addLog({
+                    id: crypto.randomUUID(),
+                    traceId: data.traceId || currentTraceId,
+                    stepId: data.stepId || '',
+                    timestamp: new Date(),
+                    type: 'system',
+                    message: `🛡️ Approval Required: ${data.toolName}`
+                  });
+                  
+                  // Show approval modal
+                  useApprovalStore.getState().setPendingApproval({
+                    traceId: data.traceId,
+                    stepId: data.stepId,
+                    toolName: data.toolName,
+                    input: data.input,
+                    description: data.description
+                  });
+                  break;
+
                 case 'done':
                   // Stream finished
                   break;

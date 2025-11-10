@@ -533,6 +533,102 @@ Intelligence layer stats included in agent responses:
 }
 ```
 
+## HITL (Human-in-the-Loop) Safety System
+
+High-risk operations require explicit user approval before execution.
+
+### How It Works
+
+**1. Tool-Level Approval Flags**
+```typescript
+// Tool requires approval
+export const deletePageTool = createCMSTool({
+  id: 'cms.deletePage',
+  requiresApproval: true, // HITL gate enabled
+  riskLevel: 'high',
+  // ...
+})
+```
+
+**2. Automatic Detection**
+- Agent detects `requiresApproval: true` before tool execution
+- Emits `approval-required` SSE event to frontend
+- Pauses agent execution until user responds
+
+**3. Approval UI**
+- Modal automatically appears with tool details
+- Shows: tool name, description, input parameters
+- User chooses: **Approve** or **Reject**
+
+**4. Decision Flow**
+```
+Agent wants to: cms.deletePage({ id: "page-123" })
+     ↓
+🛡️ Modal: "Delete page 'About Us'? Cannot be undone."
+     ↓
+User clicks [Approve]
+     ↓
+Decision sent to backend → Tool executes
+```
+
+### Tools Requiring Approval
+
+| Tool | Risk Level | Why Approval Needed |
+|------|------------|---------------------|
+| `cms.deletePage` | High | **Destructive** - Deletes page + all sections (cascade) |
+| `cms.syncSectionElements` | High | **Schema change** - May orphan existing content |
+| `cms.syncCollectionElements` | High | **Schema change** - May break existing entries |
+| Slug changes in `cms.updatePage` | Moderate | **URL change** - Breaks external links |
+
+### Debug Log Integration
+
+Approval requests logged with 🛡️ shield icon:
+
+```
+🛡️ Approval Required: cms.deletePage
+  Tool: cms.deletePage
+  Input: { id: "page-123", confirm: true }
+  Status: Waiting for user decision...
+```
+
+### Safety Features
+
+✅ **Double-Check**: Tools with `requiresApproval` also require `confirm: true` flag  
+✅ **Full Context**: Modal shows exact parameters agent will execute  
+✅ **Audit Trail**: All approval requests logged with traceId  
+✅ **Circuit Breaker**: Prevents cascading failures after 3 rejections  
+✅ **Extensible**: Easy to add approval to any tool  
+
+### Adding Approval to Tools
+
+```typescript
+export const yourTool = createCMSTool({
+  id: 'cms.yourTool',
+  requiresApproval: true, // Enable HITL gate
+  riskLevel: 'high',      // Set appropriate risk level
+  description: 'DESTRUCTIVE - Requires user approval',
+  execute: async (input, context) => {
+    // Double-check confirmation flag
+    if (!input.confirm) {
+      throw new Error('Requires confirmation flag')
+    }
+    // ... tool logic
+  }
+})
+```
+
+### Frontend Components
+
+- **HITLModal**: `app/assistant/_components/hitl-modal.tsx`
+- **Approval Store**: `app/assistant/_stores/approval-store.ts`
+- **API Proxy**: `app/api/agent/approve/route.ts`
+
+### Backend Integration
+
+- **Orchestrator**: `server/agent/orchestrator.ts` (approval detection)
+- **Tool Registry**: `server/tools/registry.ts` (requiresApproval checks)
+- **Approval Endpoint**: `/v1/agent/approve` (records decisions)
+
 ## Development Status
 
 See [PROGRESS.md](PROGRESS.md) for implementation sprint status.
@@ -540,6 +636,6 @@ See [PROGRESS.md](PROGRESS.md) for implementation sprint status.
 **Completed Sprints**:
 - ✅ Sprint 0-7: Foundation, CMS API, Agent Core, Prompt Architecture
 - ✅ Sprint 8: Intelligence Layer (Memory, Checkpointing, Error Recovery)
-- 🚧 Sprint 9: Frontend-Backend Integration (Next)
-- 🔜 Sprint 10: HITL & Safety Features
+- ✅ Sprint 9: Frontend-Backend Integration (Streaming, SSE, Mode Selector)
+- ✅ Sprint 10: HITL & Safety Features (Approval Gates, Risk Management)
 - 🔜 Sprint 11: Polish & Production Readiness

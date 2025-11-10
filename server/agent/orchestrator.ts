@@ -102,6 +102,35 @@ export function createAgent(mode: AgentMode, context: AgentContext) {
         description: toolDef.description,
         inputSchema: toolDef.inputSchema, // v6 uses inputSchema
         execute: async (input: any) => {
+          // Check if tool requires approval
+          const requiresApproval = registry.requiresApproval(name)
+          
+          if (requiresApproval) {
+            // Emit approval-required event to frontend
+            if (context.stream) {
+              context.stream.write({
+                type: 'approval-required',
+                traceId: context.traceId,
+                stepId: `step-${stepNumber}`,
+                toolName: name,
+                input,
+                description: toolDef.description,
+                timestamp: new Date().toISOString()
+              })
+            }
+
+            // Log approval requirement
+            context.logger.warn('Tool requires user approval', {
+              toolName: name,
+              input,
+              traceId: context.traceId
+            })
+
+            // Throw special error to pause execution
+            // In production, this would integrate with approval queue
+            throw new Error(`Tool ${name} requires user approval. Execution paused. User must approve via /v1/agent/approve endpoint.`)
+          }
+
           // Check circuit breaker
           if (errorRecovery.isCircuitOpen(name)) {
             throw new Error(

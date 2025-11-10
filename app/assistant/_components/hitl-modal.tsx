@@ -15,16 +15,62 @@ import { AlertTriangle } from 'lucide-react';
 export function HITLModal() {
   const { pendingApproval, setPendingApproval } = useApprovalStore();
 
-  const handleApprove = () => {
-    // TODO: Send approval to API
-    console.log('Approved:', pendingApproval);
-    setPendingApproval(null);
+  const handleApprove = async () => {
+    if (!pendingApproval) return;
+
+    try {
+      // Send approval to backend
+      const response = await fetch('/api/agent/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: pendingApproval.traceId, // Use traceId as sessionId for now
+          traceId: pendingApproval.traceId,
+          stepId: pendingApproval.stepId,
+          decision: 'approve',
+          message: 'User approved action'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send approval');
+      }
+
+      console.log('Approved:', pendingApproval);
+      setPendingApproval(null);
+    } catch (error) {
+      console.error('Error approving:', error);
+      alert('Failed to send approval');
+    }
   };
 
-  const handleReject = () => {
-    // TODO: Send rejection to API
-    console.log('Rejected:', pendingApproval);
-    setPendingApproval(null);
+  const handleReject = async () => {
+    if (!pendingApproval) return;
+
+    try {
+      // Send rejection to backend
+      const response = await fetch('/api/agent/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: pendingApproval.traceId,
+          traceId: pendingApproval.traceId,
+          stepId: pendingApproval.stepId,
+          decision: 'reject',
+          message: 'User rejected action'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send rejection');
+      }
+
+      console.log('Rejected:', pendingApproval);
+      setPendingApproval(null);
+    } catch (error) {
+      console.error('Error rejecting:', error);
+      alert('Failed to send rejection');
+    }
   };
 
   return (

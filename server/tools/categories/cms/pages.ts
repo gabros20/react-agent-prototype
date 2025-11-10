@@ -308,3 +308,55 @@ export const syncPageContentsTool = createCMSTool({
     }
   }
 })
+
+// Delete page (DESTRUCTIVE - requires approval)
+export const deletePageTool = createCMSTool({
+  id: 'cms.deletePage',
+  category: 'cms',
+  riskLevel: 'high',
+  requiresApproval: true, // HITL approval required
+  allowedModes: ['cms-crud'],
+  tags: ['delete', 'dangerous', 'page'],
+  description:
+    'Delete a page and all its sections. DESTRUCTIVE operation that requires user approval. Cannot be undone.',
+  inputSchema: z.object({
+    id: z.string().describe('Page ID (UUID)'),
+    confirm: z.boolean().optional().describe('Confirmation flag (must be true)')
+  }),
+  execute: async (input, context) => {
+    const { services, logger, traceId } = context
+
+    // Double-check confirmation
+    if (!input.confirm) {
+      throw new Error('Deletion requires confirmation flag')
+    }
+
+    logger.warn({ traceId, tool: 'cms.deletePage', input, action: 'DESTRUCTIVE' })
+
+    // Get page info before deletion
+    // @ts-ignore - Drizzle ORM type inference issue
+    const page = await services.pageService.getPageById(input.id)
+    if (!page) {
+      throw new Error(`Page not found: ${input.id}`)
+    }
+
+    // Delete page (cascade deletes sections and contents)
+    await services.pageService.deletePage(input.id)
+
+    // Validation: Verify deletion
+    // @ts-ignore - Drizzle ORM type inference issue
+    const stillExists = await services.pageService.getPageById(input.id)
+    if (stillExists) {
+      throw new Error('Validation failed: Page still exists after deletion')
+    }
+
+    logger.info({ traceId, tool: 'cms.deletePage', result: 'success', deletedId: input.id })
+
+    return {
+      id: input.id,
+      name: page.name,
+      slug: page.slug,
+      message: `Page "${page.name}" deleted successfully`
+    }
+  }
+})
