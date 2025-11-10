@@ -95,12 +95,12 @@ export function createAgent(mode: AgentMode, context: AgentContext) {
       // Tool without execute (for HITL approval tools in future)
       tools[name] = tool({
         description: toolDef.description,
-        inputSchema: toolDef.parameters // v6 uses inputSchema not parameters
+        inputSchema: toolDef.inputSchema // v6 uses inputSchema
       })
     } else {
       tools[name] = tool({
         description: toolDef.description,
-        inputSchema: toolDef.parameters, // v6 uses inputSchema not parameters
+        inputSchema: toolDef.inputSchema, // v6 uses inputSchema
         execute: async (input: any) => {
           // Check circuit breaker
           if (errorRecovery.isCircuitOpen(name)) {

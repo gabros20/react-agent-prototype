@@ -2,16 +2,22 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { UIMessage } from 'ai';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt: Date;
+}
 
 interface ChatState {
   sessionId: string | null;
-  messages: UIMessage[];
+  messages: ChatMessage[];
   currentTraceId: string | null;
   isStreaming: boolean;
   setSessionId: (sessionId: string | null) => void;
-  setMessages: (messages: UIMessage[]) => void;
-  addMessage: (message: UIMessage) => void;
+  setMessages: (messages: ChatMessage[]) => void;
+  addMessage: (message: ChatMessage) => void;
   setCurrentTraceId: (traceId: string | null) => void;
   setIsStreaming: (isStreaming: boolean) => void;
   reset: () => void;

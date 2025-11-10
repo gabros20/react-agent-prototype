@@ -2,10 +2,10 @@ import { tool } from 'ai'
 import type { z } from 'zod'
 import type { AgentContext, AgentMode, ToolMetadata } from './types'
 
-// Extended tool with metadata
+// Extended tool with metadata (compatible with AI SDK v6)
 export interface ExtendedTool {
   description: string
-  parameters: z.ZodSchema
+  inputSchema: z.ZodSchema  // v6 uses inputSchema, not parameters
   execute?: (input: any) => Promise<any>
   _metadata: ToolMetadata
 }
@@ -25,10 +25,10 @@ export function createCMSTool<T extends z.ZodSchema>(config: {
   // Store the original execute function that needs context
   const originalExecute = config.execute
 
-  // Create tool object (compatible with AI SDK)
+  // Create tool object (compatible with AI SDK v6)
   const extendedTool: ExtendedTool = {
     description: config.description,
-    parameters: config.inputSchema,
+    inputSchema: config.inputSchema,  // v6 uses inputSchema
     // Note: execute will be wrapped with context when registered in agent
     execute: originalExecute as any,
     _metadata: {

@@ -14,12 +14,16 @@ import {
   PromptInputFooter,
   PromptInputSubmit,
 } from '@/components/ai-elements/prompt-input';
-import { useAgent } from '../_hooks/use-agent';
+import { useAgent, type AgentMode } from '../_hooks/use-agent';
 import { useChatStore } from '../_stores/chat-store';
 
-export function ChatPane() {
+interface ChatPaneProps {
+  mode: AgentMode;
+}
+
+export function ChatPane({ mode }: ChatPaneProps) {
   const [input, setInput] = useState('');
-  const { sendMessage, isStreaming } = useAgent();
+  const { sendMessage, isStreaming } = useAgent(mode);
   const { messages } = useChatStore();
 
   return (
@@ -42,16 +46,9 @@ export function ChatPane() {
             messages.map((message) => (
               <Message from={message.role} key={message.id}>
                 <MessageContent>
-                  {message.parts?.map((part, i) => {
-                    if (part.type === 'text') {
-                      return (
-                        <div key={`${message.id}-${i}`} className="prose prose-sm max-w-none">
-                          {part.text}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
+                  <div className="prose prose-sm max-w-none whitespace-pre-wrap">
+                    {message.content}
+                  </div>
                 </MessageContent>
               </Message>
             ))
