@@ -64,6 +64,17 @@ server/          # Backend Express API
 │   └── vector-index.ts # LanceDB vector search
 ├── routes/      # API routes
 ├── middleware/  # Express middleware
+├── agent/       # AI agent orchestrator
+│   └── orchestrator.ts # ToolLoopAgent with AI SDK v6
+├── tools/       # Agent tools (17 tools)
+│   ├── registry.ts    # Tool registry with mode filtering
+│   └── categories/    # Tool categories (cms, http, planning)
+├── prompts/     # Modular prompt system
+│   ├── core/    # Identity, capabilities, rules
+│   ├── modes/   # Mode-specific prompts (architect, cms-crud, debug, ask)
+│   ├── components/ # Reusable patterns (ReAct, tool usage, error handling)
+│   ├── examples/ # Few-shot examples
+│   └── utils/   # PromptComposer with caching
 ├── templates/   # Nunjucks templates
 │   ├── layout/  # Page layout (HTML shell)
 │   ├── sections/ # Section templates (hero, feature, cta)
@@ -191,6 +202,151 @@ This project uses a **3-server architecture**:
 3. **Next.js (port 3000)**: Admin UI with AI assistant (future sprint)
 
 The preview server is **production-ready** - it can be deployed separately to serve your actual website.
+
+## Prompt Architecture
+
+The AI agent uses a **modular prompt system** following production patterns from Anthropic, OpenAI, and LangChain.
+
+### Architecture
+
+**Three-Layer System**:
+1. **Core Layer**: Identity, capabilities, universal rules (always included)
+2. **Mode Layer**: Mode-specific instructions (architect/cms-crud/debug/ask)
+3. **Component Layer**: Reusable patterns (ReAct, tool usage, error handling)
+
+**Format**: Hybrid XML + Markdown for LLM-native parsing
+
+### Directory Structure
+
+```
+server/prompts/
+├── core/                    # Universal components
+│   ├── identity.xml         # Agent identity and purpose
+│   ├── capabilities.xml     # What agent can/cannot do
+│   └── universal-rules.xml  # Critical safety rules
+├── modes/                   # Mode-specific instructions
+│   ├── architect.xml        # Planning mode (read-only)
+│   ├── cms-crud.xml         # Execution mode (full access)
+│   ├── debug.xml            # Error analysis mode
+│   └── ask.xml              # Inspection mode (read-only)
+├── components/              # Reusable instruction blocks
+│   ├── react-pattern.md     # ReAct (Think→Act→Observe→Reflect→Respond)
+│   ├── tool-usage.md        # Tool selection strategies
+│   ├── error-handling.md    # Error recovery patterns
+│   ├── validation.md        # Pre/post-mutation validation
+│   └── output-format.md     # Response formatting guidelines
+├── examples/                # Few-shot examples
+│   ├── few-shot-create.xml  # Create page workflow
+│   └── few-shot-update.xml  # Update page workflow
+└── utils/
+    └── composer.ts          # PromptComposer class
+```
+
+### Agent Modes
+
+**1. Architect Mode** (Planning)
+- **Max steps**: 6
+- **Tools**: Read-only + cms.validatePlan
+- **Purpose**: Plan CMS changes, validate feasibility
+- **Use case**: "Plan a blog system with categories"
+
+**2. CMS CRUD Mode** (Execution)
+- **Max steps**: 10
+- **Tools**: All CMS tools (read + write)
+- **Purpose**: Execute mutations with validation
+- **Use case**: "Create an About page with hero section"
+
+**3. Debug Mode** (Error Analysis)
+- **Max steps**: 4
+- **Tools**: Read tools + limited corrective writes
+- **Purpose**: Fix failed operations
+- **Use case**: "Why did my page creation fail?"
+
+**4. Ask Mode** (Inspection)
+- **Max steps**: 6
+- **Tools**: Read-only
+- **Purpose**: Explain CMS structure
+- **Use case**: "What sections are on the homepage?"
+
+### PromptComposer
+
+The `PromptComposer` class handles prompt composition:
+
+```typescript
+import { getSystemPrompt } from './server/prompts/utils/composer'
+
+// Compose prompt for specific mode
+const systemPrompt = getSystemPrompt({
+  mode: 'cms-crud',
+  maxSteps: 10,
+  toolsList: ['cms.createPage', 'cms.getPage', ...],
+  toolCount: 17,
+  sessionId: 'session-123',
+  traceId: 'trace-456',
+  currentDate: '2025-11-10'
+})
+```
+
+**Features**:
+- File-based loading with filesystem caching
+- Handlebars template engine for variable injection
+- Mode-specific composition logic
+- Cache warmup on server startup (~1ms for 14 files)
+- Hot-reload support in development
+- Token estimation for monitoring
+
+### Prompt Composition Flow
+
+1. Load core components (identity, capabilities, rules, ReAct pattern)
+2. Load mode-specific instructions
+3. Load shared components (tool usage, output format)
+4. Load mode-specific components (error handling, validation for CRUD)
+5. Load few-shot examples (create, update for CRUD)
+6. Concatenate with separators (`---`)
+7. Inject runtime variables via Handlebars
+8. Return composed system prompt
+
+### Cache Warmup
+
+Prompts are cached on server startup:
+
+```
+⏳ Warming up prompt cache...
+✓ Prompt cache warmed up (14 files, 1ms)
+```
+
+Cache statistics:
+```typescript
+import { promptComposer } from './server/prompts/utils/composer'
+
+const stats = promptComposer.getCacheStats()
+// { size: 14, keys: [...], enabled: true }
+```
+
+### Benefits
+
+✅ **Maintainable**: Edit prompts without code changes  
+✅ **Testable**: Composition tested separately from agent  
+✅ **Extensible**: Add new modes by creating new files  
+✅ **Performant**: Cached prompts load in ~1ms  
+✅ **Versioned**: Git-tracked, rollback-friendly  
+✅ **Production-ready**: Follows industry best practices  
+
+### Development
+
+To modify prompts:
+
+1. Edit files in `server/prompts/`
+2. Server auto-reloads in development (tsx watch)
+3. Cache cleared automatically on file changes
+4. Test with different modes via API
+
+To add a new mode:
+
+1. Create `server/prompts/modes/your-mode.xml`
+2. Add mode to `AgentMode` type in `server/tools/types.ts`
+3. Add mode config to `MODE_CONFIG` in `server/agent/orchestrator.ts`
+4. Update registry to filter tools for new mode
 
 ## Development Status
 

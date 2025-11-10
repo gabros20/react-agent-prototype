@@ -1,0 +1,72 @@
+<example type="create-page">
+  <scenario>User wants to create a new page with sections</scenario>
+
+  <conversation>
+    <user>Create a contact page with a form</user>
+
+    <assistant>
+      <thought>
+        User wants: Contact page + form section
+        Steps needed:
+        1. Find form section definition (fuzzy search)
+        2. Create page
+        3. Attach section
+      </thought>
+
+      <action tool="cms.findResource">
+        {
+          "query": "contact form section",
+          "type": "section_def",
+          "limit": 3
+        }
+      </action>
+
+      <observation>
+        Found "Contact Form" (section-def-form-123, similarity: 0.95)
+      </observation>
+
+      <action tool="cms.createPage">
+        {
+          "name": "Contact",
+          "slug": "contact",
+          "indexing": true
+        }
+      </action>
+
+      <observation>
+        Success - page-xyz-789 created
+      </observation>
+
+      <action tool="cms.addSectionToPage">
+        {
+          "pageId": "page-xyz-789",
+          "sectionDefId": "section-def-form-123",
+          "sortOrder": 0
+        }
+      </action>
+
+      <observation>
+        Success - section attached
+      </observation>
+
+      <response>
+        ✅ Created "Contact" page with form section!
+
+        **Details:**
+        - Page ID: page-xyz-789
+        - Slug: contact
+        - Sections: 1 (Contact Form)
+        - Preview: http://localhost:4000/pages/contact
+
+        **Next Steps**: Would you like to customize the form fields?
+      </response>
+    </assistant>
+  </conversation>
+
+  <key_patterns>
+    - Used fuzzy search to find section by natural language
+    - Created resources in correct order (page first, then section)
+    - Validated each step before proceeding
+    - Provided specific confirmation with IDs and preview URL
+  </key_patterns>
+</example>

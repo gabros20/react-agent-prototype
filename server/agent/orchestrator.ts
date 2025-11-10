@@ -2,108 +2,64 @@ import { ToolLoopAgent, tool, stepCountIs } from 'ai'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { registry } from '../tools'
 import type { AgentContext, AgentMode } from '../tools/types'
+import { getSystemPrompt, type CompositionContext } from '../prompts/utils/composer'
 
-// Mode configurations
-const MODE_CONFIG: Record<
-  AgentMode,
-  {
-    maxSteps: number
-    instructions: string
+// Mode configurations (max steps only, instructions from prompt files)
+const MODE_CONFIG: Record<AgentMode, { maxSteps: number }> = {
+  architect: { maxSteps: 6 },
+  'cms-crud': { maxSteps: 10 },
+  debug: { maxSteps: 4 },
+  ask: { maxSteps: 6 }
+}
+
+/**
+ * Compose system prompt for agent mode using modular prompt system
+ */
+function composeAgentPrompt(mode: AgentMode, context: AgentContext): string {
+  // Get tools available in this mode
+  const toolsMap = registry.getToolsForMode(mode)
+  const toolNames = Object.keys(toolsMap)
+
+  // Build composition context
+  const compositionContext: CompositionContext = {
+    mode,
+    maxSteps: MODE_CONFIG[mode].maxSteps,
+    toolsList: toolNames,
+    toolCount: toolNames.length,
+    currentDate: new Date().toISOString().split('T')[0],
+    sessionId: context.sessionId,
+    traceId: context.traceId
   }
-> = {
-  architect: {
-    maxSteps: 6,
-    instructions: `You are an AI architect that plans CMS changes.
 
-Your role:
-- Analyze user requests and create detailed plans
-- Use cms.findResource to discover existing resources
-- Use cms.validatePlan to check plan feasibility
-- Provide step-by-step guidance
-- You CANNOT execute mutations (no write operations)
-- Switch to 'cms-crud' mode for execution
+  // Compose and return
+  const systemPrompt = getSystemPrompt(compositionContext)
 
-Available tools: Read-only CMS tools + cms.findResource + cms.validatePlan
+  // Log prompt size for monitoring
+  const promptTokens = estimateTokens(systemPrompt)
+  context.logger.info('System prompt composed', {
+    mode,
+    promptTokens,
+    promptLength: systemPrompt.length,
+    toolCount: toolNames.length,
+    traceId: context.traceId
+  })
 
-Follow ReAct pattern:
-1. Think: Analyze the request
-2. Act: Use tools to gather information
-3. Observe: Analyze tool results
-4. Plan: Create detailed execution plan with tool calls
-5. Final: Present plan to user for approval`
-  },
+  return systemPrompt
+}
 
-  'cms-crud': {
-    maxSteps: 10,
-    instructions: `You are an AI agent that executes CMS operations.
-
-Your role:
-- Execute CMS mutations (create, update, sync content)
-- Validate all operations after execution
-- Auto-retry failed operations (max 2 attempts)
-- Request approval for high-risk operations
-- Log all changes
-
-Available tools: All CMS tools (read + write)
-
-Follow ReAct pattern:
-1. Think: Understand the task
-2. Act: Use tools to execute operations
-3. Observe: Verify operation succeeded
-4. Fix: If validation fails, analyze and retry
-5. Final: Confirm success
-
-Important:
-- Always verify operations by reading back the created/updated resource
-- If validation fails, analyze error and retry with corrections
-- For complex operations, break into smaller steps
-- Request human approval for destructive operations`
-  },
-
-  debug: {
-    maxSteps: 4,
-    instructions: `You are an AI debugger that fixes failed operations.
-
-Your role:
-- Analyze error messages and logs
-- Identify root cause of failures
-- Suggest corrections
-- Perform single corrective action if possible
-
-Available tools: Read tools + single write operation for correction
-
-Follow ReAct pattern:
-1. Think: Analyze the error
-2. Act: Gather context (read affected resources)
-3. Observe: Identify root cause
-4. Fix: Suggest or perform correction
-5. Final: Explain what was wrong and how to fix it`
-  },
-
-  ask: {
-    maxSteps: 6,
-    instructions: `You are an AI assistant that explains CMS structure.
-
-Your role:
-- Inspect CMS state (pages, sections, collections, entries)
-- Explain relationships and structure
-- Answer questions about existing content
-- You CANNOT make changes (read-only mode)
-
-Available tools: Read-only CMS tools + cms.findResource
-
-Follow ReAct pattern:
-1. Think: Understand the question
-2. Act: Use tools to gather information
-3. Observe: Analyze results
-4. Explain: Provide clear explanation
-5. Final: Answer the question with context`
-  }
+/**
+ * Estimate token count (rough heuristic: 1 token ≈ 4 characters)
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4)
 }
 
 // Create agent for specific mode
 export function createAgent(mode: AgentMode, context: AgentContext) {
   const config = MODE_CONFIG[mode]
+
+  // Compose system prompt from modular prompt files
+  const systemPrompt = composeAgentPrompt(mode, context)
 
   // Get tools allowed for this mode
   const toolsMap = registry.getToolsForMode(mode)
@@ -140,7 +96,7 @@ export function createAgent(mode: AgentMode, context: AgentContext) {
   // Create ToolLoopAgent with v6 API
   const agent = new ToolLoopAgent({
     model: openrouter.languageModel(modelId),
-    instructions: config.instructions,
+    instructions: systemPrompt, // Use composed prompt
     tools,
     stopWhen: stepCountIs(config.maxSteps),
     onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
@@ -180,9 +136,4 @@ export function createAgent(mode: AgentMode, context: AgentContext) {
 // Get max steps for mode
 export function getMaxSteps(mode: AgentMode): number {
   return MODE_CONFIG[mode].maxSteps
-}
-
-// Get instructions for mode
-export function getModeInstructions(mode: AgentMode): string {
-  return MODE_CONFIG[mode].instructions
 }

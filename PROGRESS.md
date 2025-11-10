@@ -11,7 +11,7 @@
 - [x] Sprint 4: Template System & Preview Server (✅ Completed)
 - [x] Sprint 5: Frontend Foundation (✅ Completed)
 - [x] Sprint 6: Agent Core & Tool Registry (✅ Completed)
-- [ ] Sprint 7: Prompt Architecture
+- [x] Sprint 7: Prompt Architecture (✅ Completed)
 - [ ] Sprint 8: Agent Intelligence Layer
 - [ ] Sprint 9: Frontend-Backend Integration
 - [ ] Sprint 10: HITL & Safety Features
@@ -295,3 +295,91 @@ Tasks:
 - RendererService with automatic template discovery
 - Successfully renders homepage with hero section
 - Preview server script added to package.json dev command
+
+### Sprint 7: Prompt Architecture ✅
+**Status**: Completed
+**Started**: 2025-11-10
+**Completed**: 2025-11-10
+
+Tasks:
+- [x] Create prompt directory structure (core, modes, components, examples, utils)
+- [x] Create core prompts (identity, capabilities, universal-rules)
+- [x] Create component prompts (react-pattern, tool-usage, error-handling, validation, output-format)
+- [x] Create mode-specific prompts (architect, cms-crud, debug, ask)
+- [x] Create few-shot examples (create, update)
+- [x] Implement PromptComposer class with Handlebars templating
+- [x] Implement prompt caching system
+- [x] Integrate prompt system with ToolLoopAgent orchestrator
+- [x] Add prompt cache warmup on server startup
+- [x] Test prompt composition and caching
+
+**Prompt System Architecture**:
+- **Format**: Hybrid XML + Markdown for LLM-native parsing
+- **Three-Layer System**:
+  1. Core Layer: Identity, capabilities, universal rules (always included)
+  2. Mode Layer: Mode-specific instructions (architect/cms-crud/debug/ask)
+  3. Component Layer: Reusable patterns (ReAct, tool usage, error handling, etc.)
+
+**Files Created** (14 total):
+- Core: identity.xml, capabilities.xml, universal-rules.xml
+- Components: react-pattern.md, tool-usage.md, error-handling.md, validation.md, output-format.md
+- Modes: architect.xml, cms-crud.xml, debug.xml, ask.xml
+- Examples: few-shot-create.xml, few-shot-update.xml
+- Utils: composer.ts (PromptComposer class)
+
+**PromptComposer Features**:
+- File-based prompt loading with filesystem caching
+- Handlebars template engine for variable injection
+- Mode-specific composition logic
+- Cache warmup on server startup (~1ms for 14 files)
+- Hot-reload support in development
+- Token estimation for monitoring
+
+**Integration with Agent**:
+- Orchestrator now uses composed prompts instead of hardcoded strings
+- Dynamic tool list injection per mode
+- Context variables: mode, maxSteps, toolCount, sessionId, traceId, currentDate
+- Logging of prompt size and composition time
+
+**Mode-Specific Prompts**:
+1. **Architect Mode**: Planning and validation (read-only, max 6 steps)
+2. **CMS-CRUD Mode**: Full execution with validation (all tools, max 10 steps)
+3. **Debug Mode**: Error analysis and correction (limited writes, max 4 steps)
+4. **Ask Mode**: CMS state inspection (read-only, max 6 steps)
+
+**Prompt Composition Process**:
+1. Load core components (identity, capabilities, rules, ReAct pattern)
+2. Load mode-specific instructions
+3. Load shared components (tool usage, output format)
+4. Load mode-specific components (error handling, validation for CRUD)
+5. Load few-shot examples (create, update for CRUD)
+6. Concatenate with separators
+7. Inject runtime variables (Handlebars)
+8. Return composed system prompt
+
+**Server Startup Output**:
+```
+✅ Tool Registry initialized with 17 tools
+⏳ Warming up prompt cache...
+✓ Prompt cache warmed up (14 files, 1ms)
+✓ Vector index opened
+✓ Services initialized
+✅ Express API server running on http://localhost:8787
+```
+
+**Deliverables**:
+- Modular prompt architecture following Anthropic/OpenAI production patterns
+- 14 prompt files organized by purpose (core, modes, components, examples)
+- PromptComposer class with caching and variable injection
+- Integrated with ToolLoopAgent orchestrator
+- Cache warmup on server startup (1ms average)
+- Zero TypeScript errors ✅
+- Production-ready prompt system with version control support
+
+**Benefits**:
+- ✅ Maintainable: Edit prompts without code changes
+- ✅ Testable: Composition tested separately from agent
+- ✅ Extensible: Add new modes easily
+- ✅ Performant: Cached, optimized (1ms warmup)
+- ✅ Versioned: Git-tracked, rollback-friendly
+- ✅ Production-ready: Used by major AI companies
