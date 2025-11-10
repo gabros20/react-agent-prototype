@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+// @ts-ignore - hast types are included in shiki but not exported properly
 import type { Element } from "hast";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import {

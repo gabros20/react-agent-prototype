@@ -7,12 +7,15 @@ import { VectorIndexService } from "./vector-index";
 export class ServiceContainer {
   private static instance: ServiceContainer;
 
+  readonly db: DrizzleDB; // Expose DB for agent context
   readonly vectorIndex: VectorIndexService;
   readonly pageService: PageService;
   readonly sectionService: SectionService;
   readonly entryService: EntryService;
 
   private constructor(db: DrizzleDB) {
+    this.db = db; // Store DB reference
+    
     // Initialize vector index first
     this.vectorIndex = new VectorIndexService(process.env.LANCEDB_DIR || "data/lancedb");
 

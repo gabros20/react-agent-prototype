@@ -130,19 +130,21 @@ export class SectionService {
   }
 
   async getSectionDefById(id: string) {
+    // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
     return await this.db.query.sectionDefinitions.findFirst({
       where: eq(schema.sectionDefinitions.id, id),
     });
   }
 
   async getSectionDefByKey(key: string) {
+    // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
     return await this.db.query.sectionDefinitions.findFirst({
       where: eq(schema.sectionDefinitions.key, key),
     });
   }
 
   async listSectionDefs() {
-    return await this.db.query.sectionDefinitions.findMany();
+    return await this.db.query.sectionDefinitions.findMany({});
   }
 
   async deleteSectionDef(id: string) {

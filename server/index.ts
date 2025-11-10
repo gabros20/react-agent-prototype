@@ -4,7 +4,9 @@ import { db } from "./db/client";
 import { corsMiddleware } from "./middleware/cors";
 import { errorHandler } from "./middleware/error-handler";
 import { createCMSRoutes } from "./routes/cms";
+import { createAgentRoutes } from "./routes/agent";
 import { ServiceContainer } from "./services/service-container";
+import './tools'; // Initialize tool registry
 
 const app = express();
 const PORT = process.env.EXPRESS_PORT || 8787;
@@ -23,6 +25,7 @@ async function startServer() {
 
     // Routes
     app.use("/v1/teams/:team/sites/:site/environments/:env", createCMSRoutes(services));
+    app.use("/v1/agent", createAgentRoutes(services));
 
     // Health check
     app.get("/health", (_req, res) => {
@@ -49,6 +52,7 @@ async function startServer() {
       console.log(
         `   API base: http://localhost:${PORT}/v1/teams/dev-team/sites/local-site/environments/main`,
       );
+      console.log(`   Agent endpoint: http://localhost:${PORT}/v1/agent/stream`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);
