@@ -1,367 +1,539 @@
-import { ToolLoopAgent, tool, stepCountIs, type CoreMessage } from 'ai'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import { registry } from '../tools'
-import type { AgentContext, AgentMode } from '../tools/types'
-import { getSystemPrompt, type CompositionContext } from '../prompts/utils/composer'
-import { HierarchicalMemoryManager } from '../services/agent/memory-manager'
-import { CheckpointManager } from '../services/agent/checkpoint-manager'
-import { ErrorRecoveryManager } from '../services/agent/error-recovery'
+/**
+ * Agent Orchestrator - Native AI SDK v6 Pattern
+ * 
+ * Based on v0 recursive agent pattern:
+ * - Single ToolLoopAgent
+ * - Think → Act → Observe → Repeat loop
+ * - Automatic prompt chaining
+ * - Retry logic with exponential backoff
+ * - Error recovery at tool and agent levels
+ * - All tools available always
+ */
 
-// Mode configurations (max steps only, instructions from prompt files)
-const MODE_CONFIG: Record<AgentMode, { maxSteps: number }> = {
-  architect: { maxSteps: 6 },
-  'cms-crud': { maxSteps: 10 },
-  debug: { maxSteps: 4 },
-  ask: { maxSteps: 6 }
+import { ToolLoopAgent, stepCountIs, streamText, APICallError, type CoreMessage } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { ALL_TOOLS } from "../tools/all-tools";
+import Handlebars from 'handlebars';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { AgentContext } from "../tools/types";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const openrouter = createOpenRouter({
+	apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+// Agent configuration
+const AGENT_CONFIG = {
+	maxSteps: 15, // Higher limit for complex multi-step tasks
+	modelId: "openai/gpt-4o-mini",
+	maxOutputTokens: 4096,
+	retries: 3, // Max retry attempts
+	baseDelay: 1000, // Base delay for exponential backoff (ms)
+};
+
+/**
+ * Load and compile system prompt
+ */
+function getSystemPrompt(context: {
+	toolsList: string[];
+	toolCount: number;
+	sessionId: string;
+	currentDate: string;
+}): string {
+	const promptPath = path.join(__dirname, '../prompts/react.xml');
+	const template = fs.readFileSync(promptPath, 'utf-8');
+
+	// Compile with Handlebars
+	const compiled = Handlebars.compile(template);
+	return compiled({
+		...context,
+		toolsFormatted: context.toolsList.map((t) => `- ${t}`).join('\n'),
+	});
 }
 
 /**
- * Compose system prompt for agent mode using modular prompt system
+ * Create ToolLoopAgent - All tools available
  */
-function composeAgentPrompt(mode: AgentMode, context: AgentContext): string {
-  // Get tools available in this mode
-  const toolsMap = registry.getToolsForMode(mode)
-  const toolNames = Object.keys(toolsMap)
+export function createAgent(context: AgentContext): any {
+	const systemPrompt = getSystemPrompt({
+		toolsList: Object.keys(ALL_TOOLS),
+		toolCount: Object.keys(ALL_TOOLS).length,
+		sessionId: context.sessionId,
+		currentDate: new Date().toISOString().split("T")[0],
+	});
 
-  // Build composition context
-  const compositionContext: CompositionContext = {
-    mode,
-    maxSteps: MODE_CONFIG[mode].maxSteps,
-    toolsList: toolNames,
-    toolCount: toolNames.length,
-    currentDate: new Date().toISOString().split('T')[0],
-    sessionId: context.sessionId,
-    traceId: context.traceId
-  }
+	context.logger.info("Creating agent", {
+		toolCount: Object.keys(ALL_TOOLS).length,
+		modelId: AGENT_CONFIG.modelId,
+		maxSteps: AGENT_CONFIG.maxSteps,
+		traceId: context.traceId,
+	});
 
-  // Compose and return
-  const systemPrompt = getSystemPrompt(compositionContext)
+	// Create agent with ALL tools (no filtering!)
+	return new ToolLoopAgent({
+		model: openrouter.languageModel(AGENT_CONFIG.modelId),
+		instructions: systemPrompt,
+		tools: ALL_TOOLS, // All tools available always
 
-  // Log prompt size for monitoring
-  const promptTokens = estimateTokens(systemPrompt)
-  context.logger.info('System prompt composed', {
-    mode,
-    promptTokens,
-    promptLength: systemPrompt.length,
-    toolCount: toolNames.length,
-    traceId: context.traceId
-  })
+		// Stop conditions: max steps OR final answer detected
+		stopWhen: async ({ steps }) => {
+			// Max steps reached
+			if (steps.length >= AGENT_CONFIG.maxSteps) {
+				context.logger.warn("Max steps reached", { steps: steps.length });
+				return true;
+			}
 
-  return systemPrompt
+			// Check if last step contains final answer
+			const lastStep = steps[steps.length - 1];
+			const hasFinalAnswer = lastStep?.text?.includes("FINAL_ANSWER:") || false;
+
+			if (hasFinalAnswer) {
+				context.logger.info("Final answer detected", { steps: steps.length });
+			}
+
+			return hasFinalAnswer;
+		},
+
+		// prepareStep: Memory management + checkpointing
+		prepareStep: async ({ stepNumber, steps, messages }: any) => {
+			context.logger.info(`Step ${stepNumber} starting`, {
+				totalSteps: steps.length,
+				messageCount: messages.length,
+			});
+
+			// Auto-checkpoint every 3 steps
+			if (stepNumber > 0 && stepNumber % 3 === 0) {
+				try {
+					await context.sessionService.saveMessages(context.sessionId, messages as any[]);
+					context.logger.info("Checkpoint saved", {
+						stepNumber,
+						messageCount: messages.length,
+						sessionId: context.sessionId,
+					});
+				} catch (error) {
+					context.logger.error("Checkpoint save failed", {
+						error: (error as Error).message,
+						stepNumber,
+					});
+				}
+			}
+
+			// Trim history if too long (prevent token overflow)
+			if (messages.length > 20) {
+				context.logger.info("Trimming message history", {
+					originalCount: messages.length,
+					newCount: 11,
+				});
+
+				return {
+					messages: [
+						messages[0], // Keep system prompt
+						...messages.slice(-10), // Keep last 10 messages
+					],
+				};
+			}
+
+			return {};
+		},
+
+		// onStepFinish: Progress tracking
+		onStepFinish: async (result: any) => {
+			const { toolCalls, toolResults, finishReason, usage } = result;
+
+			context.logger.info("Step completed", {
+				toolCallCount: toolCalls?.length || 0,
+				resultCount: toolResults?.length || 0,
+				finishReason,
+				usage,
+			});
+
+			// Emit progress to frontend (if streaming)
+			if (context.stream && toolCalls) {
+				context.stream.write({
+					type: "step-completed",
+					toolsExecuted: toolCalls.map((tc: any) => tc.toolName),
+					finishReason,
+					timestamp: new Date().toISOString(),
+				});
+			}
+		},
+	});
 }
 
 /**
- * Estimate token count (rough heuristic: 1 token ≈ 4 characters)
+ * Execute agent with retry logic and exponential backoff
+ * Following v0 pattern for error recovery
  */
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4)
+export async function executeAgentWithRetry(
+	userMessage: string,
+	context: AgentContext,
+	previousMessages: CoreMessage[] = []
+): Promise<{
+	text: string;
+	steps: any[];
+	usage: any;
+	retries: number;
+	response: { messages: CoreMessage[] };
+}> {
+	let retryCount = 0;
+	let delay = AGENT_CONFIG.baseDelay;
+
+	while (retryCount <= AGENT_CONFIG.retries) {
+		try {
+			context.logger.info(`Attempt ${retryCount + 1} - Executing agent`, {
+				userMessage: userMessage.slice(0, 100),
+				previousMessageCount: previousMessages.length,
+				retryCount,
+			});
+
+			// Create agent
+			const agent = createAgent(context);
+
+			// Build messages array (AI SDK v6 pattern)
+			const messages: CoreMessage[] = [
+				...previousMessages,
+				{ role: "user", content: userMessage },
+			];
+
+			// Execute agent
+			const result = await agent.generate({
+				messages,
+				experimental_context: context, // Inject context into ALL tools
+			} as any);
+
+			context.logger.info("Agent execution completed", {
+				steps: result.steps.length,
+				finishReason: result.finishReason,
+				textLength: result.text.length,
+				retries: retryCount,
+			});
+
+			return {
+				text: result.text,
+				steps: result.steps,
+				usage: result.usage,
+				retries: retryCount,
+				response: {
+					messages: result.response.messages,
+				},
+			};
+		} catch (error) {
+			retryCount++;
+
+			// Handle API errors (following v0 pattern)
+			if (APICallError.isInstance(error)) {
+				context.logger.error(`API Error ${error.statusCode}: ${error.message}`, {
+					statusCode: error.statusCode,
+					retryCount,
+				});
+
+				// Don't retry on client errors (4xx except 429 rate limits)
+				if (
+					error.statusCode &&
+					error.statusCode >= 400 &&
+					error.statusCode < 500 &&
+					error.statusCode !== 429
+				) {
+					throw new Error(`Non-recoverable API error: ${error.message}`);
+				}
+			} else {
+				context.logger.error(`Agent error: ${(error as Error).message}`, {
+					retryCount,
+					error: (error as Error).stack,
+				});
+			}
+
+			// If we've exhausted retries, throw the error
+			if (retryCount > AGENT_CONFIG.retries) {
+				throw new Error(
+					`Agent failed after ${AGENT_CONFIG.retries} retries: ${(error as Error).message}`
+				);
+			}
+
+			// Exponential backoff with jitter (v0 pattern)
+			const jitter = Math.random() * 500;
+			const waitTime = Math.min(delay * 2 ** retryCount, 10000) + jitter;
+
+			context.logger.info(`Retry ${retryCount}/${AGENT_CONFIG.retries}`, {
+				waitTime: Math.round(waitTime),
+				reason: (error as Error).message,
+			});
+
+			await new Promise((resolve) => setTimeout(resolve, waitTime));
+		}
+	}
+
+	throw new Error("Unexpected error: retry loop exited without result");
 }
 
-// Create agent for specific mode with intelligence layer
-export function createAgent(mode: AgentMode, context: AgentContext) {
-  const config = MODE_CONFIG[mode]
+/**
+ * Stream agent execution with approval handling + retry logic
+ * Following v0 pattern for streaming with error recovery
+ */
+export async function streamAgentWithApproval(
+	userMessage: string,
+	context: AgentContext,
+	previousMessages: CoreMessage[] = [],
+	onApprovalRequest?: (request: any) => Promise<{ approved: boolean; reason?: string }>
+) {
+	let retryCount = 0;
+	let delay = AGENT_CONFIG.baseDelay;
 
-  // Initialize intelligence layer services
-  const memoryManager = new HierarchicalMemoryManager({
-    logger: context.logger,
-    traceId: context.traceId
-  })
+	while (retryCount <= AGENT_CONFIG.retries) {
+		try {
+			context.logger.info(`Attempt ${retryCount + 1} - Streaming agent with approval`, {
+				userMessage: userMessage.slice(0, 100),
+				previousMessageCount: previousMessages.length,
+				retryCount,
+			});
 
-  const checkpointManager = new CheckpointManager(context.db, {
-    logger: context.logger
-  })
+			// Build messages array
+			const messages: CoreMessage[] = [
+				...previousMessages,
+				{ role: "user", content: userMessage },
+			];
 
-  const errorRecovery = new ErrorRecoveryManager({
-    logger: context.logger,
-    traceId: context.traceId
-  })
+			// Get system prompt
+			const systemPrompt = getSystemPrompt({
+				toolsList: Object.keys(ALL_TOOLS),
+				toolCount: Object.keys(ALL_TOOLS).length,
+				sessionId: context.sessionId,
+				currentDate: new Date().toISOString().split("T")[0],
+			});
 
-  // Compose system prompt from modular prompt files
-  const systemPrompt = composeAgentPrompt(mode, context)
+			// Use streamText directly (more reliable than ToolLoopAgent.stream())
+			const streamResult = streamText({
+				model: openrouter.languageModel(AGENT_CONFIG.modelId),
+				system: systemPrompt,
+				messages,
+				tools: ALL_TOOLS, // All tools available
+				maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
+				stopWhen: stepCountIs(AGENT_CONFIG.maxSteps), // Allow multi-step execution
+				experimental_context: context,
+			});
 
-  // Get tools allowed for this mode
-  const toolsMap = registry.getToolsForMode(mode)
+			// Collect results
+			const steps: any[] = [];
+			const toolCalls: any[] = [];
+			const toolResults: any[] = [];
+			let finalText = "";
+			let finishReason = "unknown";
+			let usage: any = {};
 
-  // Tool execution state
-  let stepNumber = 0
-  let currentPhase: 'planning' | 'executing' | 'verifying' | 'reflecting' = 'planning'
-  let completedSubgoals: string[] = []
-  let currentSubgoal: string | null = null
+			// Process stream chunks with approval handling
+			for await (const chunk of streamResult.fullStream) {
+				switch (chunk.type) {
+					case "text-delta":
+						finalText += chunk.text;
+						if (context.stream) {
+							context.stream.write({
+								type: "text-delta",
+								delta: chunk.text,
+								timestamp: new Date().toISOString(),
+							});
+						}
+						break;
 
-  // Convert tools to AI SDK v6 format with enhanced error handling
-  const tools: Record<string, any> = {}
-  for (const [name, toolDef] of Object.entries(toolsMap)) {
-    if (!toolDef.execute) {
-      // Tool without execute (for HITL approval tools in future)
-      tools[name] = tool({
-        description: toolDef.description,
-        inputSchema: toolDef.inputSchema // v6 uses inputSchema
-      })
-    } else {
-      tools[name] = tool({
-        description: toolDef.description,
-        inputSchema: toolDef.inputSchema, // v6 uses inputSchema
-        execute: async (input: any) => {
-          // Check if tool requires approval
-          const requiresApproval = registry.requiresApproval(name)
-          
-          if (requiresApproval) {
-            // Emit approval-required event to frontend
-            if (context.stream) {
-              context.stream.write({
-                type: 'approval-required',
-                traceId: context.traceId,
-                stepId: `step-${stepNumber}`,
-                toolName: name,
-                input,
-                description: toolDef.description,
-                timestamp: new Date().toISOString()
-              })
-            }
+					case "tool-call":
+						context.logger.info("Tool called", {
+							toolName: chunk.toolName,
+							toolCallId: chunk.toolCallId,
+						});
 
-            // Log approval requirement
-            context.logger.warn('Tool requires user approval', {
-              toolName: name,
-              input,
-              traceId: context.traceId
-            })
+						toolCalls.push({
+							toolName: chunk.toolName,
+							toolCallId: chunk.toolCallId,
+							args: chunk.input,
+						});
 
-            // Throw special error to pause execution
-            // In production, this would integrate with approval queue
-            throw new Error(`Tool ${name} requires user approval. Execution paused. User must approve via /v1/agent/approve endpoint.`)
-          }
+						if (context.stream) {
+							context.stream.write({
+								type: "tool-call",
+								toolName: chunk.toolName,
+								args: chunk.input,
+								timestamp: new Date().toISOString(),
+							});
+						}
+						break;
 
-          // Check circuit breaker
-          if (errorRecovery.isCircuitOpen(name)) {
-            throw new Error(
-              `Circuit breaker open for ${name} - tool temporarily unavailable. Wait 30s before retry.`
-            )
-          }
+					case "tool-result":
+						context.logger.info("Tool result received", {
+							toolCallId: chunk.toolCallId,
+						});
 
-          try {
-            // Execute with context
-            const result = await toolDef.execute!(input, context)
+						toolResults.push({
+							toolCallId: chunk.toolCallId,
+							toolName: chunk.toolName,
+							result: chunk.output,
+						});
 
-            // Record success (reset circuit breaker)
-            errorRecovery.recordSuccess(name)
+						if (context.stream) {
+							context.stream.write({
+								type: "tool-result",
+								toolCallId: chunk.toolCallId,
+								result: chunk.output,
+								timestamp: new Date().toISOString(),
+							});
+						}
+						break;
 
-            return result
-          } catch (error: any) {
-            // Record failure (update circuit breaker)
-            errorRecovery.recordFailure(name, error)
+					case "tool-approval-request":
+						context.logger.info("Tool approval requested", {
+							approvalId: chunk.approvalId,
+							toolName: chunk.toolCall.toolName,
+						});
 
-            // Generate agent-friendly error observation
-            const errorObs = errorRecovery.generateErrorObservation({
-              toolName: name,
-              error,
-              attemptNumber: 0 // Will be tracked in future
-            })
+						if (context.stream) {
+							context.stream.write({
+								type: "approval-required",
+								approvalId: chunk.approvalId,
+								toolName: chunk.toolCall.toolName,
+								input: chunk.toolCall.input,
+								description: `Approve execution of ${chunk.toolCall.toolName}?`,
+								timestamp: new Date().toISOString(),
+							});
+						}
 
-            // Log error with recovery info
-            context.logger.error('Tool execution failed', {
-              toolName: name,
-              error: error.message,
-              traceId: context.traceId,
-              circuitStatus: errorRecovery.getCircuitStatus().find(c => c.toolName === name)
-            })
+						// Wait for approval response
+						let approved = false;
+						let reason: string | undefined = "No approval handler provided";
 
-            // Re-throw with enhanced error message
-            throw new Error(errorObs)
-          }
-        }
-      })
-    }
-  }
+						if (onApprovalRequest) {
+							try {
+								const response = await onApprovalRequest({
+									approvalId: chunk.approvalId,
+									toolName: chunk.toolCall.toolName,
+									input: chunk.toolCall.input,
+								});
+								approved = response.approved;
+								reason = response.reason || undefined;
+							} catch (error) {
+								context.logger.error("Approval request failed", { error });
+								approved = false;
+								reason = "Approval request failed";
+							}
+						}
 
-  // Get OpenRouter provider
-  const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY!,
-    headers: process.env.OPENROUTER_HEADERS ? JSON.parse(process.env.OPENROUTER_HEADERS) : {}
-  })
+						context.logger.info("Approval response", {
+							approvalId: chunk.approvalId,
+							approved,
+							reason,
+						});
 
-  const modelId = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free'
+						// Send approval response back to AI SDK
+						await (streamResult as any).addToolApprovalResponse({
+							approvalId: chunk.approvalId,
+							approved,
+							reason,
+						});
+						break;
 
-  // Create ToolLoopAgent with v6 API and intelligence layer integration
-  const agent = new ToolLoopAgent({
-    model: openrouter.languageModel(modelId),
-    instructions: systemPrompt, // Use composed prompt
-    tools,
-    stopWhen: stepCountIs(config.maxSteps),
-    prepareStep: async ({ stepNumber: step, steps }) => {
-      stepNumber = step
+					case "finish":
+						finishReason = chunk.finishReason;
+						usage = chunk.totalUsage;
 
-      // Add previous step to memory
-      if (steps.length > 0) {
-        const lastStep = steps[steps.length - 1]
-        
-        // Create message from last step
-        const message: CoreMessage = {
-          role: 'assistant',
-          content: lastStep.text || ''
-        }
+						context.logger.info("Stream finished", {
+							finishReason,
+							usage,
+							toolCalls: toolCalls.length,
+							retries: retryCount,
+						});
 
-        await memoryManager.addMessage(message)
+						// Only send completion event at the very end
+						if (context.stream) {
+							context.stream.write({
+								type: "finish",
+								finishReason,
+								usage,
+								toolCallsCount: toolCalls.length,
+								timestamp: new Date().toISOString(),
+							});
+						}
+						break;
 
-        // Add tool results to memory
-        if (lastStep.toolResults) {
-          await memoryManager.addMessage({
-            role: 'assistant',
-            content: `Tool results: ${JSON.stringify(lastStep.toolResults)}`
-          })
-        }
-      }
+					case "error":
+						context.logger.error("Stream error", { error: chunk.error });
+						throw chunk.error;
 
-      // Log memory stats
-      const memoryTokens = memoryManager.estimateTokens()
-      context.logger.info(`Step ${stepNumber}: Context size = ${memoryTokens} tokens`, {
-        traceId: context.traceId,
-        stepNumber,
-        phase: currentPhase
-      })
+					case "tool-error":
+						context.logger.error(`Tool ${chunk.toolName} failed`, {
+							error: chunk.error,
+						});
+						// Tool errors don't stop the stream - agent can recover
+						break;
 
-      return {
-        activeTools: Object.keys(toolsMap)
-      }
-    },
-    onStepFinish: async ({ text, toolCalls, toolResults, finishReason, usage }) => {
-      stepNumber++
+					// Ignore other chunk types (tool-input-start, tool-input-delta, step-start, etc.)
+					// These are internal to the AI SDK and don't need explicit handling
+					default:
+						// Silently ignore unknown chunk types
+						break;
+				}
+			}
 
-      // Log step
-      context.logger.info({
-        traceId: context.traceId,
-        stepNumber,
-        phase: currentPhase,
-        toolCalls: toolCalls?.map((tc: any) => ({ name: tc.toolName, input: tc.args })),
-        toolResults: toolResults?.map((tr: any) => ({
-          success: !tr.error,
-          output: tr.result || tr.error
-        })),
-        finishReason,
-        usage
-      })
+			// Get response messages
+			const responseData = await streamResult.response;
 
-      // Emit to frontend debug log if stream available
-      if (context.stream) {
-        context.stream.write({
-          type: 'step-complete',
-          traceId: context.traceId,
-          stepNumber,
-          phase: currentPhase,
-          toolCalls: toolCalls?.map((tc: any) => ({
-            toolName: tc.toolName,
-            input: tc.args
-          })),
-          toolResults: toolResults?.map((tr: any) => ({
-            success: !tr.error,
-            output: tr.result || tr.error
-          })),
-          memoryTokens: memoryManager.estimateTokens()
-        })
-      }
+			return {
+				text: finalText,
+				finishReason,
+				usage,
+				steps,
+				toolCalls,
+				toolResults,
+				retries: retryCount,
+				response: {
+					messages: responseData.messages,
+				},
+			};
+		} catch (error) {
+			retryCount++;
 
-      // Detect phase transitions from assistant text
-      const previousPhase = currentPhase
-      if (text) {
-        if (text.includes('Planning:') || text.includes('Architect Mode')) {
-          currentPhase = 'planning'
-        } else if (text.includes('Executing:') || text.includes('CMS CRUD')) {
-          currentPhase = 'executing'
-        } else if (text.includes('Verifying:') || text.includes('Validation')) {
-          currentPhase = 'verifying'
-        } else if (text.includes('Reflecting:') || text.includes('Review')) {
-          currentPhase = 'reflecting'
-        }
+			// Handle API errors (following v0 pattern)
+			if (APICallError.isInstance(error)) {
+				context.logger.error(`API Error ${error.statusCode}: ${error.message}`, {
+					statusCode: error.statusCode,
+					retryCount,
+				});
 
-        // Extract current subgoal
-        const subgoalMatch = text.match(/(?:Subgoal|Task):\s*(.+?)(?:\n|$)/i)
-        if (subgoalMatch) {
-          currentSubgoal = subgoalMatch[1].trim()
-        }
+				// Don't retry on client errors (except rate limits)
+				if (
+					error.statusCode &&
+					error.statusCode >= 400 &&
+					error.statusCode < 500 &&
+					error.statusCode !== 429
+				) {
+					throw new Error(`Non-recoverable API error: ${error.message}`);
+				}
+			} else {
+				context.logger.error(`Stream error: ${(error as Error).message}`, {
+					retryCount,
+					error: (error as Error).stack,
+				});
+			}
 
-        // Detect completed subgoals
-        if (text.includes('✅ Done:') || text.includes('Completed:')) {
-          const doneMatch = text.match(/(?:✅\s*Done|Completed):\s*(.+?)(?:\n|$)/i)
-          if (doneMatch) {
-            completedSubgoals.push(doneMatch[1].trim())
-          }
-        }
-      }
+			// If we've exhausted retries, throw the error
+			if (retryCount > AGENT_CONFIG.retries) {
+				throw new Error(
+					`Agent failed after ${AGENT_CONFIG.retries} retries: ${(error as Error).message}`
+				);
+			}
 
-      // Determine if checkpoint should be created
-      const shouldCheckpoint = checkpointManager.shouldCheckpoint({
-        stepNumber,
-        phase: currentPhase,
-        previousPhase,
-        isBeforeApproval: false, // TODO: Detect from tool calls
-        isAfterError: toolResults?.some((tr: any) => tr.error) || false
-      })
+			// Exponential backoff with jitter
+			const jitter = Math.random() * 500;
+			const waitTime = Math.min(delay * 2 ** retryCount, 10000) + jitter;
 
-      if (shouldCheckpoint) {
-        // Create and save checkpoint
-        const checkpoint = checkpointManager.createCheckpoint({
-          sessionId: context.sessionId,
-          traceId: context.traceId,
-          phase: currentPhase,
-          mode,
-          stepNumber,
-          maxSteps: config.maxSteps,
-          messages: memoryManager.getContext(),
-          memoryState: memoryManager.getState(),
-          currentSubgoal,
-          completedSubgoals,
-          lastToolResult: toolResults?.[toolResults.length - 1]
-        })
+			context.logger.info(`Retry ${retryCount}/${AGENT_CONFIG.retries}`, {
+				waitTime: Math.round(waitTime),
+				reason: (error as Error).message,
+			});
 
-        await checkpointManager.save(checkpoint)
-      }
-    }
-  })
+			await new Promise((resolve) => setTimeout(resolve, waitTime));
+		}
+	}
 
-  return { agent, memoryManager, checkpointManager, errorRecovery }
-}
-
-// Resume agent from checkpoint
-export async function resumeAgent(
-  sessionId: string,
-  context: AgentContext
-): Promise<{ agent: ReturnType<typeof createAgent>; checkpoint: any }> {
-  // Get checkpoint manager
-  const checkpointManager = new CheckpointManager(context.db, {
-    logger: context.logger
-  })
-
-  // Restore checkpoint
-  const checkpoint = await checkpointManager.restore(sessionId)
-  if (!checkpoint) {
-    throw new Error(`No checkpoint found for session ${sessionId}`)
-  }
-
-  // Create agent with restored state
-  const agentSetup = createAgent(checkpoint.mode, {
-    ...context,
-    sessionId,
-    traceId: crypto.randomUUID() // New trace for resumed session
-  })
-
-  // Restore memory state
-  agentSetup.memoryManager.restoreState({
-    workingMemory: checkpoint.workingMemory,
-    subgoalMemory: checkpoint.subgoalMemory,
-    longTermFacts: []
-  })
-
-  context.logger.info('Agent resumed from checkpoint', {
-    sessionId,
-    checkpointId: checkpoint.id,
-    stepNumber: checkpoint.stepNumber,
-    phase: checkpoint.phase,
-    subgoalsCompleted: checkpoint.completedSubgoals.length
-  })
-
-  return { agent: agentSetup, checkpoint }
-}
-
-// Get max steps for mode
-export function getMaxSteps(mode: AgentMode): number {
-  return MODE_CONFIG[mode].maxSteps
+	throw new Error("Unexpected error: retry loop exited without result");
 }

@@ -48,6 +48,10 @@ async function startPreviewServer() {
       }
     });
 
+    app.get("/", (_req, res) => {
+      res.redirect("/pages/home?locale=en");
+    });
+
     app.use("/assets", express.static(path.join(TEMPLATE_DIR, "assets")));
 
     app.get("/health", (_req, res) => {

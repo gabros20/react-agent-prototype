@@ -182,8 +182,10 @@ export class SectionService {
       sortOrder = existingSections.length;
     }
 
+    const pageSectionId = randomUUID();
+    
     const pageSection = {
-      id: randomUUID(),
+      id: pageSectionId,
       pageId: input.pageId,
       sectionDefId: input.sectionDefId,
       sortOrder,
@@ -193,6 +195,17 @@ export class SectionService {
     };
 
     await this.db.insert(schema.pageSections).values(pageSection);
+
+    // Create empty content for default locale so section renders
+    const emptyContent = {};
+    await this.db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId,
+      localeCode: 'en',
+      content: emptyContent,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     return pageSection;
   }

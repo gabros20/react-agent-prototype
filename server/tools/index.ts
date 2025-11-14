@@ -1,37 +1,14 @@
-import { ToolRegistry } from './registry'
-import * as cmsTools from './categories/cms'
-import * as httpTools from './categories/http'
-import * as planningTools from './categories/planning'
+/**
+ * Tools - Native AI SDK v6 Pattern
+ * 
+ * All tools are defined in all-tools.ts with native AI SDK v6 pattern.
+ * No registry, no factories, no wrappers - just pure AI SDK tools.
+ */
 
-// Create registry instance
-export const registry = new ToolRegistry()
-
-// Register all CMS tools
-Object.values(cmsTools).forEach((tool) => {
-  if (tool && typeof tool === 'object' && '_metadata' in tool) {
-    registry.register(tool)
-  }
-})
-
-// Register HTTP tools
-Object.values(httpTools).forEach((tool) => {
-  if (tool && typeof tool === 'object' && '_metadata' in tool) {
-    registry.register(tool)
-  }
-})
-
-// Register planning tools
-Object.values(planningTools).forEach((tool) => {
-  if (tool && typeof tool === 'object' && '_metadata' in tool) {
-    registry.register(tool)
-  }
-})
-
-// Export tools for direct use
-export { cmsTools, httpTools, planningTools }
-export { ToolRegistry } from './registry'
+export { ALL_TOOLS, TOOL_METADATA } from './all-tools'
 export * from './types'
 
-// Log registered tools
-console.log(`✅ Tool Registry initialized with ${registry.getAllToolIds().length} tools:`)
-registry.getAllToolIds().forEach((id) => console.log(`   - ${id}`))
+// Log available tools
+import { ALL_TOOLS } from './all-tools'
+console.log(`✅ Native AI SDK v6 Tools initialized: ${Object.keys(ALL_TOOLS).length} tools`)
+Object.keys(ALL_TOOLS).forEach((name) => console.log(`   - ${name}`))

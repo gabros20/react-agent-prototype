@@ -2,6 +2,7 @@ import type { DrizzleDB } from "../db/client";
 import { EntryService } from "./cms/entry-service";
 import { PageService } from "./cms/page-service";
 import { SectionService } from "./cms/section-service";
+import { SessionService } from "./session-service";
 import { VectorIndexService } from "./vector-index";
 
 export class ServiceContainer {
@@ -12,6 +13,7 @@ export class ServiceContainer {
   readonly pageService: PageService;
   readonly sectionService: SectionService;
   readonly entryService: EntryService;
+  readonly sessionService: SessionService;
 
   private constructor(db: DrizzleDB) {
     this.db = db; // Store DB reference
@@ -23,6 +25,9 @@ export class ServiceContainer {
     this.pageService = new PageService(db, this.vectorIndex);
     this.sectionService = new SectionService(db, this.vectorIndex);
     this.entryService = new EntryService(db, this.vectorIndex);
+    
+    // Initialize session service
+    this.sessionService = new SessionService(db);
   }
 
   static async initialize(db: DrizzleDB): Promise<ServiceContainer> {

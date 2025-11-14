@@ -1,16 +1,26 @@
+/**
+ * Agent Routes - Pure ReAct Pattern
+ * 
+ * Simplified routes:
+ * - Single agent handles all tasks
+ * - Retry logic with exponential backoff
+ * - Error recovery at multiple levels
+ */
+
 import express from 'express'
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
-import { createAgent } from '../agent/orchestrator'
+import { executeAgentWithRetry, streamAgentWithApproval } from '../agent/orchestrator'
 import type { ServiceContainer } from '../services/service-container'
-import type { AgentMode } from '../tools/types'
+import type { AgentContext } from '../tools/types'
+import type { CoreMessage } from 'ai'
+import { approvalQueue } from '../services/approval-queue'
 
 // Request schema
 const agentRequestSchema = z.object({
   sessionId: z.string().uuid().optional(),
   prompt: z.string().min(1),
-  mode: z.enum(['architect', 'cms-crud', 'debug', 'ask']).optional().default('cms-crud'),
-  toolsEnabled: z.array(z.string()).optional(),
+  toolsEnabled: z.array(z.string()).optional(), // Optional: for future use
   cmsTarget: z
     .object({
       siteId: z.string().optional(),
@@ -22,13 +32,14 @@ const agentRequestSchema = z.object({
 export function createAgentRoutes(services: ServiceContainer) {
   const router = express.Router()
 
-  // POST /v1/agent/stream - Streaming agent execution
+  // POST /v1/agent/stream - Streaming agent
   router.post('/stream', async (req, res) => {
     try {
       const input = agentRequestSchema.parse(req.body)
 
       // Generate trace ID
       const traceId = randomUUID()
+      const sessionId = input.sessionId || randomUUID()
 
       // Setup SSE headers
       res.setHeader('Content-Type', 'text/event-stream')
@@ -82,129 +93,301 @@ export function createAgentRoutes(services: ServiceContainer) {
       }
 
       // Create agent context
-      const context = {
+      const context: AgentContext = {
         db: services.db,
         vectorIndex: services.vectorIndex,
         logger,
         stream: {
           write: (event: any) => {
-            writeSSE('step', event)
+            // Send different SSE event types based on event type
+            const eventType = event.type || 'step'
+            writeSSE(eventType, event)
           }
         },
         traceId,
-        sessionId: input.sessionId || randomUUID(),
-        currentMode: input.mode as AgentMode,
-        services
+        sessionId,
+        services,
+        sessionService: services.sessionService,
+        cmsTarget: input.cmsTarget ? {
+          siteId: input.cmsTarget.siteId || 'default-site',
+          environmentId: input.cmsTarget.environmentId || 'main'
+        } : {
+          siteId: 'default-site',
+          environmentId: 'main'
+        }
       }
 
       logger.info('Starting agent execution', {
         traceId,
-        mode: input.mode,
+        sessionId,
         prompt: input.prompt.slice(0, 100)
       })
 
       try {
-        // Create agent with intelligence layer
-        const { agent, memoryManager, checkpointManager, errorRecovery } = createAgent(
-          input.mode as AgentMode,
-          context
+        // Load previous messages from session
+        let previousMessages: CoreMessage[] = []
+        if (input.sessionId) {
+          try {
+            previousMessages = await services.sessionService.loadMessages(input.sessionId)
+            
+            logger.info('Loaded session history', {
+              sessionId: input.sessionId,
+              messageCount: previousMessages.length
+            })
+          } catch (error) {
+            logger.warn('Could not load session history', {
+              sessionId: input.sessionId,
+              error: (error as Error).message
+            })
+          }
+        }
+
+        // Execute agent with streaming + approval + retry
+        const result = await streamAgentWithApproval(
+          input.prompt,
+          context,
+          previousMessages,
+          // Approval handler callback
+          async (request) => {
+            logger.info('Approval request received', {
+              approvalId: request.approvalId,
+              toolName: request.toolName
+            })
+            
+            // Wait for user response via approval queue
+            const response = await approvalQueue.requestApproval({
+              approvalId: request.approvalId,
+              toolName: request.toolName,
+              input: request.input,
+              description: `Approve execution of ${request.toolName}?`,
+              timestamp: new Date()
+            })
+            
+            logger.info('Approval response received', {
+              approvalId: request.approvalId,
+              approved: response.approved,
+              reason: response.reason
+            })
+            
+            return response
+          }
         )
 
-        // Execute agent
-        const result = await agent.generate({
-          prompt: input.prompt
-        })
-
-        // Log intelligence layer stats
         logger.info('Agent execution completed', {
           traceId,
           stepsCount: result.steps?.length || 0,
-          memoryTokens: memoryManager.estimateTokens(),
-          circuitStatus: errorRecovery.getCircuitStatus()
+          finishReason: result.finishReason,
+          retries: result.retries
         })
 
-        // Clear checkpoint on successful completion
-        await checkpointManager.clear(context.sessionId)
+        // Save conversation to session
+        if (sessionId) {
+          try {
+            // Combine previous messages + new result messages
+            const updatedMessages: CoreMessage[] = [
+              ...previousMessages,
+              { role: 'user', content: input.prompt },
+              ...result.response.messages
+            ]
+
+            await services.sessionService.saveMessages(sessionId, updatedMessages)
+
+            logger.info('Saved messages to session', {
+              sessionId,
+              totalMessages: updatedMessages.length
+            })
+          } catch (error) {
+            logger.error('Failed to save messages to session', {
+              sessionId,
+              error: (error as Error).message
+            })
+          }
+        }
 
         // Send final result
         writeSSE('result', {
           traceId,
+          sessionId,
           text: result.text,
           toolCalls: result.toolCalls,
           toolResults: result.toolResults,
           steps: result.steps,
-          intelligence: {
-            memoryTokens: memoryManager.estimateTokens(),
-            subgoalsCompleted: memoryManager.getState().subgoalMemory.length,
-            circuitBreakers: errorRecovery.getCircuitStatus()
-          }
+          finishReason: result.finishReason,
+          usage: result.usage,
+          retries: result.retries
         })
 
         // Close connection
-        writeSSE('done', { traceId })
+        writeSSE('done', { traceId, sessionId })
         res.end()
-      } catch (agentError) {
-        logger.error('Agent execution failed', {
+
+      } catch (error) {
+        logger.error('Agent execution error', {
           traceId,
-          error: (agentError as Error).message
+          error: (error as Error).message,
+          stack: (error as Error).stack
         })
 
         writeSSE('error', {
           traceId,
-          error: (agentError as Error).message
+          error: (error as Error).message
         })
 
         res.end()
       }
     } catch (error) {
-      console.error('Agent stream error:', error)
-
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Invalid request',
-            details: error.issues
-          },
-          statusCode: 400
-        })
-      } else {
-        res.status(500).json({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: (error as Error).message
-          },
-          statusCode: 500
-        })
-      }
+      console.error('Route error:', error)
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   })
 
-  // POST /v1/agent/approve - HITL approval
-  router.post('/approve', async (req, res) => {
+  // POST /v1/agent/generate - Non-streaming agent
+  router.post('/generate', async (req, res) => {
     try {
-      const { sessionId, traceId, stepId, decision, message } = req.body
+      const input = agentRequestSchema.parse(req.body)
 
-      // TODO: Implement HITL approval logic in Sprint 10
-      // For now, just acknowledge
+      const traceId = randomUUID()
+      const sessionId = input.sessionId || randomUUID()
+
+      // Simple console logger for non-streaming
+      const logger = {
+        info: (msg: string | object, meta?: any) => {
+          console.log('[INFO]', typeof msg === 'string' ? msg : JSON.stringify(msg), meta)
+        },
+        warn: (msg: string | object, meta?: any) => {
+          console.warn('[WARN]', typeof msg === 'string' ? msg : JSON.stringify(msg), meta)
+        },
+        error: (msg: string | object, meta?: any) => {
+          console.error('[ERROR]', typeof msg === 'string' ? msg : JSON.stringify(msg), meta)
+        }
+      }
+
+      // Create agent context
+      const context: AgentContext = {
+        db: services.db,
+        vectorIndex: services.vectorIndex,
+        logger,
+        traceId,
+        sessionId,
+        services,
+        sessionService: services.sessionService,
+        cmsTarget: input.cmsTarget ? {
+          siteId: input.cmsTarget.siteId || 'default-site',
+          environmentId: input.cmsTarget.environmentId || 'main'
+        } : {
+          siteId: 'default-site',
+          environmentId: 'main'
+        }
+      }
+
+      logger.info('Starting agent execution (non-streaming)', {
+        traceId,
+        sessionId,
+        prompt: input.prompt.slice(0, 100)
+      })
+
+      // Load previous messages
+      let previousMessages: CoreMessage[] = []
+      if (input.sessionId) {
+        try {
+          previousMessages = await services.sessionService.loadMessages(input.sessionId)
+        } catch (error) {
+          logger.warn('Could not load session history', {
+            sessionId: input.sessionId,
+            error: (error as Error).message
+          })
+        }
+      }
+
+      // Execute with retry logic
+      const result = await executeAgentWithRetry(
+        input.prompt,
+        context,
+        previousMessages
+      )
+
+      logger.info('Agent execution completed', {
+        traceId,
+        stepsCount: result.steps?.length || 0,
+        retries: result.retries
+      })
+
+      // Save to session
+      if (sessionId) {
+        try {
+          const updatedMessages: CoreMessage[] = [
+            ...previousMessages,
+            { role: 'user', content: input.prompt },
+            ...result.response.messages
+          ]
+
+          await services.sessionService.saveMessages(sessionId, updatedMessages)
+        } catch (error) {
+          logger.error('Failed to save messages', {
+            error: (error as Error).message
+          })
+        }
+      }
+
+      // Return result
+      res.json({
+        traceId,
+        sessionId,
+        text: result.text,
+        steps: result.steps,
+        usage: result.usage,
+        retries: result.retries
+      })
+
+    } catch (error) {
+      console.error('Route error:', error)
+      res.status(500).json({
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
+  })
+
+  // POST /v1/agent/approval/:approvalId - Submit approval response
+  router.post('/approval/:approvalId', async (req, res) => {
+    try {
+      const { approvalId } = req.params
+      const { approved, reason } = z.object({
+        approved: z.boolean(),
+        reason: z.string().optional()
+      }).parse(req.body)
+
+      console.log(`[Approval Route] Received approval response:`, {
+        approvalId,
+        approved,
+        reason,
+        queueStats: approvalQueue.getStats()
+      })
+
+      // Submit response to approval queue
+      const response = await approvalQueue.respondToApproval(approvalId, approved, reason)
+
+      console.log(`[Approval Route] Successfully processed approval:`, {
+        approvalId,
+        approved: response.approved
+      })
 
       res.json({
-        data: {
-          sessionId,
-          traceId,
-          stepId,
-          decision,
-          message: 'Approval processed (placeholder)'
-        },
-        statusCode: 200
+        success: true,
+        approvalId,
+        response
       })
     } catch (error) {
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: (error as Error).message
-        },
-        statusCode: 500
+      console.error('[Approval Route] Error processing approval:', {
+        approvalId: req.params.approvalId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        approvalId: req.params.approvalId
       })
     }
   })

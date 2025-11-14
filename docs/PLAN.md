@@ -1105,20 +1105,31 @@ This agent architecture combines **standard ReAct** (Think → Act → Observe) 
 
 **Design Principles:**
 
-1. Tools are self-contained modules with metadata
-2. Central registry enables dynamic discovery
-3. Mode-based filtering prevents unauthorized operations
-4. HITL tools omit `execute` function (AI SDK forwards to client)
-5. Validation built into tool execution (throw on failure)
+1. Tools are created using AI SDK v6 `tool()` function (no custom wrappers)
+2. Metadata stored separately from AI SDK tool objects
+3. Central registry enables dynamic discovery
+4. Mode-based filtering prevents unauthorized operations
+5. Execute functions injected in orchestrator with context
+6. Validation built into tool execution (throw on failure)
 
 #### Tool Definition Pattern
 
-**Extended Metadata Wrapper:**
+**CRITICAL: Separation of AI SDK Tool + Metadata**
+
+**Why this pattern:** The AI SDK v6 `ToolLoopAgent` expects pure `tool()` instances. Attaching custom properties causes internal Zod validation errors (`Cannot read properties of undefined (reading '_zod')`).
 
 ```typescript
 // server/tools/registry.ts
 import { tool } from 'ai'
 import { z } from 'zod'
+
+// Store AI SDK tool + metadata separately
+export interface ToolWithMetadata {
+  aiTool: ReturnType<typeof tool>  // Pure AI SDK tool
+  metadata: ToolMetadata & {
+    execute?: (input: any, context: AgentContext) => Promise<any>
+  }
+}
 
 interface ToolMetadata {
   id: string // "cms.createPage"
@@ -1129,33 +1140,36 @@ interface ToolMetadata {
   tags: string[] // ['write', 'page', 'cms']
 }
 
-// Factory function wraps AI SDK tool() with metadata
-export function createCMSTool<T extends z.ZodSchema>(
-  metadata: ToolMetadata & {
-    description: string
-    inputSchema: T
-    execute?: (input: z.infer<T>, context: AgentContext) => Promise<any>
-  }
-) {
-  // Create AI SDK tool
+// Factory - creates REAL AI SDK tool + stores metadata separately
+export function createCMSTool<T extends z.ZodSchema>(config: {
+  id: string
+  category: ToolMetadata['category']
+  riskLevel: ToolMetadata['riskLevel']
+  requiresApproval: boolean
+  allowedModes: AgentMode[]
+  tags: string[]
+  description: string
+  inputSchema: T
+  execute?: (input: z.infer<T>, context: AgentContext) => Promise<any>
+}): ToolWithMetadata {
+  // Create pure AI SDK v6 tool - no execute yet (will inject in orchestrator)
   const aiTool = tool({
-    description: metadata.description,
-    inputSchema: metadata.inputSchema,
-    outputSchema: z.any(), // Required for HITL tools
-    execute: metadata.execute // Omit for HITL → forwards to client
+    description: config.description,
+    parameters: config.inputSchema  // AI SDK v6 uses 'parameters'
   })
 
-  // Attach metadata for registry queries
-  return Object.assign(aiTool, {
-    _metadata: {
-      id: metadata.id,
-      category: metadata.category,
-      riskLevel: metadata.riskLevel,
-      requiresApproval: metadata.requiresApproval,
-      allowedModes: metadata.allowedModes,
-      tags: metadata.tags
+  return {
+    aiTool,  // Pure AI SDK tool
+    metadata: {
+      id: config.id,
+      category: config.category,
+      riskLevel: config.riskLevel,
+      requiresApproval: config.requiresApproval,
+      allowedModes: config.allowedModes,
+      tags: config.tags,
+      execute: config.execute  // Store separately
     }
-  })
+  }
 }
 ```
 
@@ -1231,53 +1245,72 @@ export const deletePageTool = createCMSTool({
 ```typescript
 // server/tools/registry.ts
 export class ToolRegistry {
-  private tools = new Map<string, ReturnType<typeof createCMSTool>>()
+  private tools = new Map<string, ToolWithMetadata>()
 
   // Register tool
-  register(id: string, tool: ReturnType<typeof createCMSTool>) {
-    this.tools.set(id, tool)
+  register(toolWithMeta: ToolWithMetadata) {
+    this.tools.set(toolWithMeta.metadata.id, toolWithMeta)
   }
 
-  // Get tools filtered by agent mode
-  getToolsForMode(mode: AgentMode): Record<string, any> {
-    const filtered: Record<string, any> = {}
+  // Get pure AI SDK tools for agent mode - NO metadata attached
+  // CRITICAL: Returns only AI SDK tool() objects for ToolLoopAgent
+  getToolsForMode(mode: AgentMode): Record<string, ReturnType<typeof tool>> {
+    const filtered: Record<string, ReturnType<typeof tool>> = {}
 
-    for (const [id, tool] of this.tools) {
-      if (tool._metadata.allowedModes.includes(mode)) {
-        filtered[id] = tool // Return AI SDK tool (without metadata)
+    for (const [id, { aiTool, metadata }] of this.tools) {
+      if (metadata.allowedModes.includes(mode)) {
+        filtered[id] = aiTool  // Pure AI SDK tool
       }
     }
 
     return filtered
   }
 
-  // Get tools by risk level
-  getToolsByRisk(risk: 'safe' | 'moderate' | 'high'): string[] {
-    return Array.from(this.tools.values())
-      .filter((t) => t._metadata.riskLevel === risk)
-      .map((t) => t._metadata.id)
+  // Get metadata for a tool
+  getMetadata(toolId: string) {
+    return this.tools.get(toolId)?.metadata
   }
 
-  // Get tools requiring approval
-  getApprovalTools(): string[] {
-    return Array.from(this.tools.values())
-      .filter((t) => t._metadata.requiresApproval)
-      .map((t) => t._metadata.id)
+  // Check if tool requires approval
+  requiresApproval(toolId: string): boolean {
+    return this.tools.get(toolId)?.metadata.requiresApproval ?? false
   }
 
-  // Get single tool
-  get(id: string) {
-    return this.tools.get(id)
+  // Get all tool IDs
+  getAllToolIds(): string[] {
+    return Array.from(this.tools.keys())
   }
+}
+```
 
-  // Get all tools (for prepareStep filtering)
-  getAllTools(): Record<string, any> {
-    const all: Record<string, any> = {}
-    for (const [id, tool] of this.tools) {
-      all[id] = tool
+**Orchestrator Integration:**
+
+```typescript
+// server/agent/orchestrator.ts
+export function createAgent(mode: AgentMode, context: AgentContext) {
+  // Get pure AI SDK tools for this mode
+  const toolsMap = registry.getToolsForMode(mode)
+
+  // Inject execute functions with approval/circuit breaker logic
+  const tools: Record<string, any> = {}
+  for (const [name, aiTool] of Object.entries(toolsMap)) {
+    const metadata = registry.getMetadata(name)
+    if (!metadata?.execute) {
+      tools[name] = aiTool  // HITL tool without execute
+      continue
     }
-    return all
+
+    // Wrap execute with context injection
+    const wrappedExecute = async (input: any) => {
+      // Approval checks, circuit breaker, error recovery
+      return await metadata.execute(input, context)
+    }
+
+    tools[name] = { ...aiTool, execute: wrappedExecute }
   }
+
+  // Create ToolLoopAgent with enhanced tools
+  return new ToolLoopAgent({ model, instructions, tools, ... })
 }
 ```
 
@@ -1582,22 +1615,64 @@ export type AgentMode = 'architect' | 'cms-crud' | 'debug' | 'ask'
 
 **Leverages AI SDK v6 Native Features:**
 
-- ✅ `tool()` function with Zod validation (no custom wrapper needed)
-- ✅ HITL by omitting `execute` (automatic client forwarding)
-- ✅ `ToolLoopAgent` handles loops, retries, context management
+- ✅ `tool()` function with Zod validation - used directly, no custom wrappers
+- ✅ `ToolLoopAgent` expects pure `tool()` instances
 - ✅ `prepareStep` for dynamic tool control
 - ✅ `onStepFinish` for logging and observability
-- ✅ `experimental_context` passes dependencies to tools
+- ✅ Context injection happens in orchestrator, not in tool definitions
 
 **Adds Production Patterns:**
 
-- ✅ Metadata wrapper for categorization and mode filtering
+- ✅ Metadata stored separately from AI SDK tools (clean separation)
 - ✅ Registry enables dynamic discovery and security
 - ✅ Validation built into tool execution (throw on failure)
 - ✅ Modular organization (easy to add new tools)
 - ✅ Type-safe context injection
 
 **Complexity:** ~6-8 hours to implement registry + modular structure; tools added incrementally.
+
+#### Troubleshooting: Common Issues
+
+**Error: "Cannot read properties of undefined (reading '_zod')"**
+
+**Cause:** Passing objects with custom properties to `ToolLoopAgent` instead of pure AI SDK `tool()` instances. The agent internally calls Zod schema validation on tool objects, and custom properties break this.
+
+**Wrong Pattern (causes error):**
+```typescript
+// ❌ Attaching metadata directly to tool object
+const toolWithMetadata = {
+  ...aiTool,
+  _metadata: { id, category, ... }
+}
+```
+
+**Correct Pattern:**
+```typescript
+// ✅ Store AI SDK tool and metadata separately
+return {
+  aiTool: tool({ description, parameters }),
+  metadata: { id, category, execute, ... }
+}
+```
+
+**Fix Steps:**
+1. Ensure `createCMSTool()` returns `{ aiTool, metadata }` structure
+2. Ensure `ToolRegistry.getToolsForMode()` returns only `aiTool` objects
+3. Inject `execute` functions in orchestrator using `getMetadata()`
+4. Never spread custom properties onto AI SDK tool objects
+
+**Verification:**
+```bash
+# Server should start with tools registered:
+pnpm dev:server
+# Output: ✅ Tool Registry initialized with 18 tools
+
+# Test agent execution:
+curl -X POST http://localhost:8787/v1/agent/stream \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"550e8400-e29b-41d4-a716-446655440000","prompt":"What pages exist?","mode":"architect"}'
+# Should return page list, not _zod error
+```
 
 ---
 

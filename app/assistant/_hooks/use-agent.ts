@@ -4,7 +4,6 @@ import { useCallback, useState } from 'react';
 import { useChatStore } from '../_stores/chat-store';
 import { useLogStore } from '../_stores/log-store';
 import { useApprovalStore } from '../_stores/approval-store';
-export type AgentMode = 'architect' | 'cms-crud' | 'debug' | 'ask';
 
 // Custom message type that's simpler than UIMessage
 export interface ChatMessage {
@@ -14,7 +13,7 @@ export interface ChatMessage {
   createdAt: Date;
 }
 
-export function useAgent(mode: AgentMode = 'cms-crud') {
+export function useAgent() {
   const { messages, addMessage, setIsStreaming, sessionId, setSessionId, setCurrentTraceId } =
     useChatStore();
   const { addLog } = useLogStore();
@@ -44,8 +43,7 @@ export function useAgent(mode: AgentMode = 'cms-crud') {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sessionId: sessionId || undefined,
-            prompt,
-            mode
+            prompt
           })
         });
 
@@ -98,6 +96,38 @@ export function useAgent(mode: AgentMode = 'cms-crud') {
                     input: data.metadata
                   });
                   currentTraceId = data.traceId || currentTraceId;
+                  break;
+
+                case 'text-delta':
+                  // Streaming text chunks - accumulate but don't display yet
+                  // (will be shown in final 'result' event)
+                  assistantText += data.delta || data.text || '';
+                  break;
+
+                case 'tool-call':
+                  // Tool is being called
+                  addLog({
+                    id: crypto.randomUUID(),
+                    traceId: currentTraceId,
+                    stepId: data.toolCallId || crypto.randomUUID(),
+                    timestamp: new Date(),
+                    type: 'tool-call',
+                    message: `Calling tool: ${data.toolName}`,
+                    input: data.args
+                  });
+                  break;
+
+                case 'tool-result':
+                  // Tool execution completed
+                  addLog({
+                    id: crypto.randomUUID(),
+                    traceId: currentTraceId,
+                    stepId: data.toolCallId || crypto.randomUUID(),
+                    timestamp: new Date(),
+                    type: 'tool-result',
+                    message: `Tool ${data.toolName || 'result'} completed`,
+                    input: data.result
+                  });
                   break;
 
                 case 'step':
@@ -153,23 +183,24 @@ export function useAgent(mode: AgentMode = 'cms-crud') {
                   break;
 
                 case 'approval-required':
-                  // Handle HITL approval request
+                  // Handle HITL approval request (Native AI SDK v6)
                   addLog({
                     id: crypto.randomUUID(),
                     traceId: data.traceId || currentTraceId,
-                    stepId: data.stepId || '',
+                    stepId: data.approvalId || data.stepId || '',
                     timestamp: new Date(),
                     type: 'system',
                     message: `🛡️ Approval Required: ${data.toolName}`
                   });
                   
-                  // Show approval modal
+                  // Show approval modal with approvalId
                   useApprovalStore.getState().setPendingApproval({
-                    traceId: data.traceId,
-                    stepId: data.stepId,
+                    approvalId: data.approvalId,  // Native AI SDK v6 approval ID
+                    traceId: data.traceId || currentTraceId,
+                    stepId: data.approvalId || data.stepId || '',
                     toolName: data.toolName,
                     input: data.input,
-                    description: data.description
+                    description: data.description || `Approve execution of ${data.toolName}?`
                   });
                   break;
 
@@ -207,7 +238,7 @@ export function useAgent(mode: AgentMode = 'cms-crud') {
         setIsStreaming(false);
       }
     },
-    [sessionId, mode, addMessage, setIsStreaming, setSessionId, setCurrentTraceId, addLog, setPendingApproval]
+    [sessionId, addMessage, setIsStreaming, setSessionId, setCurrentTraceId, addLog, setPendingApproval]
   );
 
   return {

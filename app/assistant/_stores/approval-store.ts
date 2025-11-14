@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 
 export interface ApprovalRequest {
+  approvalId?: string;  // New: AI SDK v6 approvalId
   traceId: string;
   stepId: string;
   toolName: string;

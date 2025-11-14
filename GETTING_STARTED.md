@@ -14,8 +14,7 @@
 6. [Testing the CMS API](#testing-the-cms-api)
 7. [Testing the Preview Server](#testing-the-preview-server)
 8. [Testing the AI Agent](#testing-the-ai-agent)
-9. [Testing HITL Approval System](#testing-hitl-approval-system)
-10. [Troubleshooting](#troubleshooting)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -24,16 +23,16 @@
 This is an **AI-powered Content Management System** with three main components:
 
 1. **CMS API** (port 8787): RESTful API for managing pages, sections, and content
-2. **Preview Server** (port 4000): Renders your CMS pages as a real website
-3. **AI Assistant** (port 3000): Chat with an AI agent that can manage your CMS
+2. **Preview Server** (port 4000): Renders your CMS pages as a real website  
+3. **AI Assistant** (port 3000): Chat with a unified ReAct agent that manages your CMS
 
 The AI agent can:
 - ✅ Create, read, update, and delete pages
 - ✅ Add sections to pages (hero, features, CTA)
-- ✅ Sync content in multiple languages
-- ✅ Search for resources using natural language
-- ✅ Validate changes before executing them
-- ✅ Ask for approval before destructive operations
+- ✅ Update page content
+- ✅ Search for resources using natural language (fuzzy search)
+- ✅ Execute multi-step tasks autonomously
+- ✅ Self-correct when errors occur
 
 ---
 
@@ -219,42 +218,39 @@ Before starting, let's understand what you just installed:
 
 ```
 1. User types in Chat UI (port 3000)
-2. Frontend sends to /api/agent
+2. Frontend sends to /api/agent  
 3. Next.js proxies to Express (port 8787)
-4. AI Agent (ToolLoopAgent) thinks and plans
+4. Unified ReAct Agent thinks step-by-step
 5. Agent calls cms.createPage tool
 6. Tool creates page in SQLite
-7. Tool indexes page in LanceDB
-8. Agent calls cms.addSectionToPage tool
+7. Agent calls cms.addSectionToPage tool  
+8. Agent calls cms.syncPageContent tool
 9. Results streamed back via SSE
-10. Frontend updates chat & debug log
+10. Frontend updates chat (blue bubbles) & execution log
 11. User can preview at http://localhost:4000/pages/about
 ```
 
 ### Key Concepts
 
-**1. Tools** (17 available)
-- CMS tools: `cms.createPage`, `cms.updatePage`, `cms.deletePage`, etc.
-- Search tools: `cms.findResource` (semantic search)
-- Planning tools: `cms.validatePlan` (preflight checks)
-- HTTP tools: `http.fetch` (external data)
+**1. Tools** (13 available)
+- CMS tools: `cms.createPage`, `cms.updatePage`, `cms.getPage`, `cms.addSectionToPage`, etc.
+- Search tools: `cms.findResource` (semantic/fuzzy search)
+- HTTP tools: `http.get`, `http.post` (external APIs)
+- Planning tools: `plan.analyzeTask` (task breakdown)
 
-**2. Agent Modes** (4 modes)
-- **Architect**: Planning mode (read-only, max 6 steps)
-- **CMS CRUD**: Execution mode (all tools, max 10 steps)
-- **Debug**: Error analysis (limited writes, max 4 steps)
-- **Ask**: Inspection mode (read-only, max 6 steps)
+**2. Unified ReAct Agent**
+- **Single agent** - No modes, all tools available always
+- **Think → Act → Observe → Repeat** loop
+- **Self-correcting** - Retries on errors with exponential backoff
+- **Max 15 steps** per conversation turn
+- **Autonomous** - Chains multiple operations without asking permission
 
-**3. Intelligence Layer**
-- **Memory Manager**: Prevents context overflow on long tasks
-- **Checkpoint Manager**: Save/resume state after crashes
-- **Error Recovery**: Circuit breaker pattern (fail fast)
-- **Validation Service**: Pre/post-mutation checks
-
-**4. HITL (Human-in-the-Loop)**
-- High-risk tools require user approval
-- Modal shows tool details before execution
-- Example: `cms.deletePage` asks "Delete page 'About'?"
+**3. Native AI SDK v6 Pattern**
+- Tools created once with `experimental_context`
+- No custom abstractions or factories
+- Memory managed via `prepareStep` callback
+- Auto-checkpointing every 3 steps
+- Streaming with full SSE support
 
 ---
 
@@ -309,11 +305,15 @@ Open these URLs in your browser:
 1. **API Health Check**: http://localhost:8787/health
    - Should show: `{"status":"ok","timestamp":"..."}`
 
-2. **Preview Homepage**: http://localhost:4000/pages/home?locale=en
+2. **Preview Site**: http://localhost:4000/
+   - Should redirect to homepage automatically
+   - Or visit directly: http://localhost:4000/pages/home?locale=en
    - Should show rendered homepage with hero section
 
 3. **AI Assistant**: http://localhost:3000/assistant
    - Should show chat interface with debug log
+
+**Note**: The preview server only serves `/pages/:slug` routes. Visiting the root `/` redirects to the homepage for convenience.
 
 **Success!** All servers are running.
 
@@ -518,40 +518,34 @@ Now for the fun part - chatting with the AI!
 
 1. Open http://localhost:3000/assistant in your browser
 2. You should see:
-   - **Left side**: Debug log panel (2/3 width)
-   - **Right side**: Chat interface (1/3 width)
-   - **Top**: Mode selector with 4 tabs
+   - **Left side**: Execution log panel (1/3 width)
+   - **Right side**: Chat interface (2/3 width) 
+   - **Header**: Bot icon + "CMS ReAct Agent" title
 
 ### Understanding the UI
 
-**Mode Selector**:
-- **Architect**: Planning and validation (can't create/edit)
-- **CMS CRUD**: Full access to create/edit/delete
-- **Debug**: Analyze errors and suggest fixes
-- **Ask**: Answer questions about CMS structure
+**Chat Pane** (Right side, main focus):
+- Type messages to the agent
+- Agent responds in **blue chat bubbles** (assistant messages)
+- User messages in gray
+- Streaming responses (text appears word-by-word)
+- Auto-scrolls to show latest messages
 
-**Debug Log**:
+**Execution Log** (Left side):
 - Shows all agent actions in real-time
 - Color-coded by type:
   - 🔵 Blue: Tool calls
-  - 🟢 Green: Tool results
+  - 🟢 Green: Tool results  
   - 🟣 Purple: Step complete
   - 🔴 Red: Errors
-  - 🟡 Yellow: System events (HITL approval)
   - ⚪ Gray: Info messages
-
-**Chat Pane**:
-- Type messages to the agent
-- Agent responds with actions + final answer
-- Streaming responses (see text appear word-by-word)
+- Terminal icon with "Execution Log" label
 
 ---
 
 ## Test Cases for AI Agent
 
-### Test Case 1: List Existing Pages (Ask Mode)
-
-**Mode**: Ask (read-only)
+### Test Case 1: List Existing Pages
 
 **Prompt**:
 ```
@@ -559,20 +553,18 @@ What pages exist in the CMS?
 ```
 
 **Expected behavior**:
-1. Debug log shows: Tool call → `cms.listPages`
-2. Debug log shows: Tool result with page list
-3. Chat responds: "There are 2 pages: home and about"
+1. Execution log shows: Tool call → `cms.listPages`
+2. Execution log shows: Tool result with page list
+3. Chat responds in blue bubble: "There are 2 pages: home and about"
 
 **Look for**:
-- Agent uses read-only tool
-- No mutations attempted
+- Agent uses appropriate tool
+- Results displayed clearly
 - Friendly response format
 
 ---
 
-### Test Case 2: Create a Simple Page (CMS CRUD Mode)
-
-**Mode**: CMS CRUD (full access)
+### Test Case 2: Create a Simple Page
 
 **Prompt**:
 ```
@@ -581,14 +573,14 @@ Create a "Contact" page with slug "contact"
 
 **Expected behavior**:
 1. Agent calls `cms.createPage` with correct slug
-2. Debug log shows validation (page exists after creation)
-3. Chat responds: "Page created successfully"
+2. Execution log shows page created successfully
+3. Chat responds with confirmation
 4. Check: http://localhost:8787/v1/.../pages shows 3 pages
 
 **Look for**:
 - Correct slug format (lowercase, hyphens only)
-- Validation step after creation
 - Success message with page details
+- Blue chat bubble for assistant response
 
 **Verify**:
 ```bash
@@ -597,9 +589,7 @@ curl http://localhost:8787/v1/teams/dev-team/sites/local-site/environments/main/
 
 ---
 
-### Test Case 3: Add Section to Page (CMS CRUD Mode)
-
-**Mode**: CMS CRUD
+### Test Case 3: Add Section to Page
 
 **Prompt**:
 ```
@@ -607,16 +597,16 @@ Add a hero section to the contact page with title "Get in Touch"
 ```
 
 **Expected behavior**:
-1. Agent calls `cms.getPage` to find contact page
-2. Agent calls `cms.listSections` to find hero section def
+1. Agent uses `cms.findResource` to find contact page
+2. Agent uses `cms.findResource` to find hero section definition
 3. Agent calls `cms.addSectionToPage`
-4. Agent calls `cms.syncPageContents` with title content
-5. All steps succeed
+4. Agent calls `cms.syncPageContent` with title content
+5. All steps chained autonomously
 
 **Look for**:
 - Multi-step reasoning (4-5 tool calls)
-- Proper chaining of operations
-- Content validation
+- Proper chaining without asking permission
+- Content populated correctly
 
 **Verify**:
 - Visit http://localhost:4000/pages/contact?locale=en
@@ -624,9 +614,7 @@ Add a hero section to the contact page with title "Get in Touch"
 
 ---
 
-### Test Case 4: Semantic Search (Any Mode)
-
-**Mode**: Ask
+### Test Case 4: Semantic Search
 
 **Prompt**:
 ```
@@ -635,86 +623,39 @@ Find pages about contacting us
 
 **Expected behavior**:
 1. Agent calls `cms.findResource` with query "contacting us"
-2. Vector search returns contact page
+2. Vector search returns contact page (fuzzy match)
 3. Agent responds with page details
 
 **Look for**:
-- Fuzzy matching works
-- Similarity scores shown
+- Fuzzy matching works (finds "contact" from "contacting")
 - Agent interprets results naturally
+- Blue bubble response
 
 ---
 
-### Test Case 5: Validation Failure (CMS CRUD Mode)
-
-**Mode**: CMS CRUD
+### Test Case 5: Error Recovery with Retry
 
 **Prompt**:
 ```
-Create a page with slug "CONTACT-US-123"
+Create a page with slug "home"
 ```
 
 **Expected behavior**:
-1. Agent calls `cms.createPage`
-2. Tool throws validation error (uppercase not allowed)
-3. Agent observes error
-4. Agent retries with corrected slug "contact-us-123"
-5. Second attempt succeeds
+1. Agent calls `cms.createPage` with slug "home"
+2. Database returns UNIQUE constraint error (home already exists)
+3. Agent observes error in red
+4. Agent retries automatically with exponential backoff
+5. Eventually provides helpful error message
 
 **Look for**:
 - Red error log entry
-- Agent self-corrects
-- Retry with valid slug
-- Final success message
+- Retry attempts visible in execution log
+- Agent explains the issue clearly
+- Exponential backoff delays (1s, 2s, 4s)
 
 ---
 
-### Test Case 6: HITL Approval - Delete Page (CMS CRUD Mode)
-
-**Mode**: CMS CRUD
-
-**Prompt**:
-```
-Delete the about page
-```
-
-**Expected behavior**:
-1. Agent calls `cms.deletePage` (high-risk tool)
-2. **PAUSE**: Modal appears with approval request
-3. Modal shows:
-   - Tool: cms.deletePage
-   - Description: "DESTRUCTIVE - Cannot be undone"
-   - Input: `{ id: "...", confirm: true }`
-4. Debug log shows yellow "🛡️ Approval Required" entry
-5. **User Action Required**: Click "Approve" or "Reject"
-
-**If you click Approve**:
-- Agent continues execution
-- Page deleted from database
-- Success message shown
-
-**If you click Reject**:
-- Agent stops execution
-- Page remains in database
-- Rejection logged
-
-**Verify deletion**:
-```bash
-curl http://localhost:8787/v1/teams/dev-team/sites/local-site/environments/main/pages
-# Should NOT show "about" page
-```
-
-**Verify rejection** (if you rejected):
-```bash
-curl http://localhost:8787/v1/teams/dev-team/sites/local-site/environments/main/pages
-# Should STILL show "about" page
-```
-
----
-
-### Test Case 7: Complex Multi-Step Task (CMS CRUD Mode)
-
-**Mode**: CMS CRUD
+### Test Case 6: Complex Multi-Step Task
 
 **Prompt**:
 ```
@@ -722,19 +663,22 @@ Create a "Services" page with a hero section (title: "Our Services") and a featu
 ```
 
 **Expected behavior**:
-1. Agent plans 5-6 steps
-2. Creates page
-3. Adds hero section
-4. Syncs hero content
-5. Adds feature section
-6. Syncs feature content
-7. Validates all changes
+1. Agent autonomously chains 6+ steps:
+   - Creates page
+   - Finds hero section definition
+   - Adds hero section
+   - Syncs hero content
+   - Finds feature section definition
+   - Adds feature section
+   - Syncs feature content
+2. All steps execute without asking permission
+3. Final confirmation in blue bubble
 
 **Look for**:
-- ReAct pattern: Think → Act → Observe → Reflect
+- Think → Act → Observe → Repeat pattern
 - Each tool call logged separately
-- Proper error handling if failures
-- Intelligence metrics at end (memory tokens, subgoals completed)
+- Smooth chaining of operations
+- Final success message
 
 **Verify**:
 ```bash
@@ -747,87 +691,146 @@ open http://localhost:4000/pages/services?locale=en
 
 ---
 
-### Test Case 8: Error Recovery (CMS CRUD Mode)
+## Session Management
 
-**Mode**: CMS CRUD
+The assistant supports multiple chat sessions with full history persistence.
 
-**Prompt**:
-```
-Create a page with slug "home"
-```
+**Features**:
+- Create unlimited sessions
+- Switch between sessions instantly  
+- All messages saved to database
+- Sessions persist across browser reloads
 
-**Expected behavior**:
-1. Agent calls `cms.createPage` with slug "home"
-2. Database returns UNIQUE constraint error (home already exists)
-3. Agent observes error
-4. Agent suggests alternative: "home-2" or "home-new"
-5. Agent retries with alternative slug
-6. Second attempt succeeds
-
-**Look for**:
-- Circuit breaker tracks failures
-- Agent self-corrects without user intervention
-- Fallback strategy applied
-- Final success with modified slug
+**How to Use**:
+1. Click "New Session" button to start fresh conversation
+2. Switch between sessions by clicking on them in the sidebar (left panel, mobile hidden)
+3. Each session maintains its own conversation history
+4. Messages auto-saved after each agent response
 
 ---
 
-### Test Case 9: Architect Mode - Planning Only (Architect Mode)
+## Troubleshooting
 
-**Mode**: Architect (read-only)
+### Problem: Agent not responding
 
-**Prompt**:
+**Symptom**: Message sent but no response appears
+
+**Solution**:
+1. Check browser console for errors (F12 → Console)
+2. Check API server logs in terminal
+3. Verify OpenRouter API key is valid in `.env`
+4. Try refreshing the page (Cmd/Ctrl + R)
+5. Try a simpler prompt: "What pages exist?"
+
+### Problem: "Cannot read properties of undefined"
+
+**Symptom**: JavaScript errors in browser console
+
+**Solution**:
+1. Hard refresh: Cmd/Ctrl + Shift + R
+2. Clear browser cache
+3. Restart dev servers: `pnpm dev`
+4. Check that all dependencies installed: `pnpm install`
+
+### Problem: Tool execution fails
+
+**Symptom**: Execution log shows red error entries
+
+**Solution**:
+1. Check error message in execution log
+2. Common issues:
+   - Slug already exists → Use different slug
+   - Page/section not found → Use `cms.findResource` first
+   - Invalid format → Check slug is lowercase with hyphens only
+3. Agent should retry automatically with exponential backoff
+4. If agent doesn't recover, provide more context in next message
+
+### Problem: Preview shows 404
+
+**Symptom**: http://localhost:4000/pages/slug shows "Page not found"
+
+**Solution**:
+```bash
+# Check database has pages
+pnpm db:studio
+# Open browser → check "pages" table has data
+
+# Re-seed if empty
+pnpm seed
+
+# Check slug is correct
+curl http://localhost:8787/v1/.../pages
+# Use exact slug from response
 ```
-Plan how to build a blog system with categories
+
+### Problem: Vector search returns no results
+
+**Symptom**: Agent can't find resources with semantic search
+
+**Solution**:
+```bash
+# Reindex vector database
+pnpm reindex
+
+# Check LanceDB directory exists
+ls -la data/lancedb/
+
+# Verify OpenRouter API key works (same key for chat + embeddings)
 ```
-
-**Expected behavior**:
-1. Agent uses read-only tools only
-2. Agent calls `cms.validatePlan` with proposed operations
-3. Agent provides detailed plan without executing
-4. Plan includes:
-   - Create collection definition for blog
-   - Define elements structure (title, body, cover, tags)
-   - Create entries
-   - Link to pages
-
-**Look for**:
-- No mutations attempted
-- Planning steps clearly outlined
-- Validation of feasibility
-- Actionable steps for user
 
 ---
 
-### Test Case 10: Debug Mode - Analyze Failure (Debug Mode)
+## Next Steps
 
-**Mode**: Debug
+### Learn More
 
-**Setup**: First cause an error in CMS CRUD mode (e.g., try to add section to non-existent page)
+- Read [README.md](README.md) for architecture overview
+- Read [PROGRESS.md](docs/PROGRESS.md) for implementation history
+- Read [IMPLEMENTATION_SPRINTS.md](docs/IMPLEMENTATION_SPRINTS.md) for detailed sprint breakdown
 
-**Prompt** (in Debug mode):
-```
-Why did the last operation fail?
-```
+### Key Documentation
 
-**Expected behavior**:
-1. Agent reviews recent log entries
-2. Agent identifies error cause
-3. Agent suggests corrective action
-4. Agent may offer to fix automatically
+- **Native AI SDK v6 Pattern**: `docs/NATIVE_AI_SDK_REFACTOR_PLAN.md`
+- **Unified ReAct Agent**: `docs/UNIFIED_REACT_AGENT_REFACTOR.md`
+- **UI Overhaul**: `docs/UI_OVERHAUL_SUMMARY.md`
 
-**Look for**:
-- Root cause analysis
-- Specific suggestion (e.g., "Page ID doesn't exist")
-- Option to correct the issue
+### Development
+
+**Explore the code**:
+1. `server/agent/orchestrator.ts` - Unified ReAct agent orchestrator
+2. `server/tools/all-tools.ts` - All 13 tools with native patterns
+3. `server/prompts/react.xml` - Single unified prompt
+4. `app/assistant/_hooks/use-agent.ts` - Frontend streaming integration
+
+**Add new tools**:
+1. Add tool to `server/tools/all-tools.ts` using `tool()` from AI SDK
+2. Export from `ALL_TOOLS` object
+3. Tool automatically available to agent (no registration needed)
+
+**Modify prompt**:
+1. Edit `server/prompts/react.xml`
+2. Server auto-reloads in development
+3. Test with agent immediately
 
 ---
 
-## Testing HITL Approval System
+## Summary Checklist
 
-### Setup: Create Test Scenario
+Before testing, verify:
 
-**Step 1**: Start with CMS CRUD mode
+- [x] Dependencies installed (`pnpm install`)
+- [x] `.env` file created with OpenRouter API key
+- [x] Database initialized (`pnpm db:push`)
+- [x] Sample data seeded (`pnpm seed`)
+- [x] Vector index populated (`pnpm reindex`)
+- [x] All servers running (`pnpm dev`)
+- [x] API health check passes (http://localhost:8787/health)
+- [x] Preview renders pages (http://localhost:4000/pages/home?locale=en)
+- [x] Assistant UI loads (http://localhost:3000/assistant)
+
+**You're ready to test!** Start with simple prompts and progress to complex multi-step tasks.
+
+Happy testing! 🚀
 
 **Step 2**: Create a test page
 ```
@@ -1017,7 +1020,7 @@ pnpm typecheck
 
 ### Problem: Preview shows 404
 
-**Symptom**: http://localhost:4000/pages/home shows "Page not found"
+**Symptom**: http://localhost:4000/pages/home shows "Page not found" (or root `/` shows "Cannot GET /")
 
 **Solution**:
 ```bash
@@ -1116,7 +1119,8 @@ Before you start testing, verify:
 - [x] Vector index populated (`pnpm reindex`)
 - [x] All servers running (`pnpm dev`)
 - [x] API health check passes (http://localhost:8787/health)
-- [x] Preview loads (http://localhost:4000/pages/home)
+- [x] Preview root redirects (http://localhost:4000/ → /pages/home)
+- [x] Preview renders pages (http://localhost:4000/pages/home)
 - [x] Assistant UI loads (http://localhost:3000/assistant)
 
 **You're ready to test!** Start with simple prompts and work your way up to complex multi-step tasks.

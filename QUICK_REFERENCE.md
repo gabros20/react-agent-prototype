@@ -1,19 +1,19 @@
 # Quick Reference Card
 
-Quick commands and URLs for daily development.
+Quick commands, URLs, and key patterns for daily development with the unified ReAct agent.
 
 ---
 
 ## 🚀 Start/Stop
 
 ```bash
-# Start everything
+# Start everything (recommended)
 pnpm dev
 
 # Start individually
-pnpm dev:server   # API (8787)
-pnpm dev:preview  # Preview (4000)
-pnpm dev:web      # Next.js (3000)
+pnpm dev:server   # API server (8787)
+pnpm dev:preview  # Preview server (4000)
+pnpm dev:web      # Next.js frontend (3000)
 
 # Stop all
 Ctrl+C in terminal
@@ -23,12 +23,13 @@ Ctrl+C in terminal
 
 ## 🌐 URLs
 
-| Service              | URL                                        | Purpose            |
-| -------------------- | ------------------------------------------ | ------------------ |
-| **AI Assistant**     | http://localhost:3000/assistant            | Chat with AI agent |
-| **Preview Homepage** | http://localhost:4000/pages/home?locale=en | See rendered site  |
-| **API Health**       | http://localhost:8787/health               | Check API status   |
-| **Database Studio**  | `pnpm db:studio`                           | Browse database    |
+| Service          | URL                                        | Purpose                  |
+| ---------------- | ------------------------------------------ | ------------------------ |
+| **AI Assistant** | http://localhost:3000/assistant            | Unified ReAct agent chat |
+| **Preview Site** | http://localhost:4000/                     | Redirects to home        |
+| **Preview Page** | http://localhost:4000/pages/home?locale=en | See rendered page        |
+| **API Health**   | http://localhost:8787/health               | Check API status         |
+| **DB Studio**    | `pnpm db:studio`                           | Browse database          |
 
 ---
 
@@ -38,16 +39,17 @@ Ctrl+C in terminal
 # Database
 pnpm db:push      # Update schema
 pnpm seed         # Add sample data
-pnpm reindex      # Rebuild vector search
-pnpm db:studio    # Open DB browser
+pnpm reindex      # Rebuild vector index
+pnpm db:studio    # Open Drizzle Studio
 
 # Code Quality
-pnpm typecheck    # Check types
-pnpm lint         # Run linter
-pnpm format       # Format code
+pnpm typecheck    # TypeScript check
+pnpm lint         # Biome linter
+pnpm format       # Format with Biome
 
-# Preview
+# Development
 pnpm preview      # Open homepage in browser
+pnpm build        # Production build
 ```
 
 ---
@@ -78,47 +80,52 @@ curl -X POST http://localhost:8787/v1/cms/search/resources \
 
 ## 💬 AI Agent Test Prompts
 
-### Easy (1-2 steps)
+### Simple (1-2 steps)
 
 ```
 What pages exist?
 Show me the homepage content
 List all section definitions
+Find pages about contact
 ```
 
 ### Medium (3-5 steps)
 
 ```
 Create a "Services" page
-Add a hero section to the contact page
-Find pages about contact
+Add a hero section to the contact page with title "Get in Touch"
+Update the homepage title to "Welcome Home"
 ```
 
-### Hard (6+ steps)
+### Complex (6+ steps)
 
 ```
 Create an About page with hero and feature sections
-Build a blog system with categories
-Update all pages to use the new hero variant
+Add a hero section to contact page with custom content
+Update multiple sections on the services page
 ```
 
-### HITL Testing (requires approval)
+### Error Handling
 
 ```
-Delete the about page
-Change the homepage slug to "landing"
+Create a page with slug "home" (already exists - watch retry)
+Add section to non-existent page (watch error recovery)
 ```
 
 ---
 
-## 🎯 Agent Modes
+## 🤖 Unified ReAct Agent
 
-| Mode          | Use Case   | Max Steps | Tools                    |
-| ------------- | ---------- | --------- | ------------------------ |
-| **Architect** | Planning   | 6         | Read-only + validatePlan |
-| **CMS CRUD**  | Execution  | 10        | All tools                |
-| **Debug**     | Fix errors | 4         | Read + limited writes    |
-| **Ask**       | Questions  | 6         | Read-only                |
+**Architecture**: Single agent, all tools available always
+
+| Property       | Value                          |
+| -------------- | ------------------------------ |
+| **Pattern**    | Think → Act → Observe → Repeat |
+| **Max Steps**  | 15 per conversation turn       |
+| **Tools**      | 13 (no filtering)              |
+| **Retries**    | 3 with exponential backoff     |
+| **Model**      | openai/gpt-4o-mini             |
+| **Checkpoint** | Auto-save every 3 steps        |
 
 ---
 
@@ -146,16 +153,15 @@ pnpm typecheck  # Check real errors
 
 ---
 
-## 📊 Debug Log Color Codes
+## 📊 Execution Log Color Codes
 
-| Color     | Type          | Meaning               |
-| --------- | ------------- | --------------------- |
-| 🔵 Blue   | tool-call     | Agent calling tool    |
-| 🟢 Green  | tool-result   | Tool returned success |
-| 🟣 Purple | step-complete | Step finished         |
-| 🔴 Red    | error         | Something failed      |
-| 🟡 Yellow | system        | HITL approval needed  |
-| ⚪ Gray   | info          | General information   |
+| Color     | Type          | Meaning             |
+| --------- | ------------- | ------------------- |
+| 🔵 Blue   | tool-call     | Agent calling tool  |
+| 🟢 Green  | tool-result   | Tool success        |
+| 🟣 Purple | step-complete | Step finished       |
+| 🔴 Red    | error         | Tool/agent error    |
+| ⚪ Gray   | info          | General information |
 
 ---
 
@@ -165,8 +171,9 @@ pnpm typecheck  # Check real errors
 # Required
 OPENROUTER_API_KEY=sk-or-v1-...
 
-# Optional (good defaults)
-OPENROUTER_MODEL=google/gemini-2.0-flash-exp:free
+# Optional (with current defaults)
+OPENROUTER_MODEL=openai/gpt-4o-mini          # Unified agent model
+EMBEDDING_MODEL=openai/text-embedding-3-small # Vector search
 DATABASE_URL=file:data/sqlite.db
 LANCEDB_DIR=data/lancedb
 EXPRESS_PORT=8787
@@ -180,58 +187,117 @@ NEXT_PORT=3000
 
 ```
 server/
-├── agent/orchestrator.ts      # AI agent brain
-├── tools/registry.ts           # Tool system
-├── prompts/modes/*.xml         # Agent instructions
-└── services/cms/*.ts           # Business logic
+├── agent/orchestrator.ts       # Unified ReAct agent orchestrator
+├── tools/all-tools.ts          # All 13 tools (native AI SDK v6)
+├── prompts/react.xml           # Single unified prompt
+├── routes/agent.ts             # SSE streaming endpoints
+└── services/
+    ├── cms/*.ts                # Business logic (pages, sections, etc.)
+    ├── session-service.ts      # Session management
+    └── approval-queue.ts       # HITL approval coordination
 
 app/
-├── assistant/_hooks/use-agent.ts  # Frontend integration
-└── assistant/_components/*.tsx    # UI components
+├── assistant/
+│   ├── page.tsx                # Main layout (chat + execution log)
+│   ├── _hooks/use-agent.ts     # Streaming integration
+│   ├── _components/
+│   │   ├── chat-pane.tsx       # Blue bubble chat UI
+│   │   └── debug-pane.tsx      # Execution log with colors
+│   └── _stores/
+│       ├── chat-store.ts       # Messages + sessions
+│       └── log-store.ts        # Execution log entries
+└── globals.css                 # OKLCH theme (blue bubbles)
 
 data/
-├── sqlite.db                   # Database
-└── lancedb/                    # Vector index
+├── sqlite.db                   # SQLite database
+└── lancedb/                    # Vector index (embeddings)
 ```
 
 ---
 
 ## 🐛 Common Issues
 
-| Problem                          | Solution                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------- |
-| "Can't resolve 'tw-animate-css'" | Remove `@import "tw-animate-css";` from `app/globals.css` (already fixed) |
-| "API key not found"              | Check `.env` file has `OPENROUTER_API_KEY=...`                            |
-| "Port in use"                    | Kill process: `lsof -i :8787` then `kill -9 PID`                          |
-| "Database locked"                | Stop all servers, delete `data/sqlite.db`, re-seed                        |
-| "No results in search"           | Run `pnpm reindex`                                                        |
-| "Modal doesn't appear"           | Check browser console (F12) for errors                                    |
-| Agent not responding             | Check API server logs, verify API key valid                               |
+| Problem                        | Solution                                                  |
+| ------------------------------ | --------------------------------------------------------- |
+| "Cannot GET /" on preview      | Expected - root redirects to `/pages/home`                |
+| "API key not found"            | Check `.env` file has `OPENROUTER_API_KEY=...`            |
+| "Port in use"                  | Kill process: `lsof -i :8787` then `kill -9 PID`          |
+| "Database locked"              | Stop servers, delete `data/sqlite.db`, re-seed            |
+| "No results in search"         | Run `pnpm reindex`                                        |
+| Agent not responding           | Check API logs, verify API key, try simple prompt         |
+| Blue bubbles not showing       | Hard refresh (Cmd+Shift+R), check `app/globals.css`      |
+| Execution log empty            | Check browser console (F12), verify SSE connection        |
+| TypeScript errors              | Run `pnpm typecheck`, restart TS server (VS Code)         |
+| Tool execution fails           | Check execution log for error details, agent auto-retries |
+
+### Architecture Pattern: Native AI SDK v6
+
+**Current Implementation** (Post-Refactor):
+```typescript
+// Tools created ONCE with execute function
+export const cmsGetPage = tool({
+  description: 'Get page by slug or ID',
+  inputSchema: z.object({ slug: z.string().optional() }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    return await ctx.services.pageService.getPageBySlug(input.slug)
+  }
+})
+
+// All tools exported in ALL_TOOLS object
+export const ALL_TOOLS = {
+  cmsGetPage,
+  cmsCreatePage,
+  // ... 11 more tools
+}
+
+// Agent uses tools AS-IS (no wrappers!)
+const agent = new ToolLoopAgent({
+  model: openrouter.languageModel('openai/gpt-4o-mini'),
+  instructions: systemPrompt,
+  tools: ALL_TOOLS,  // Passed directly
+  stopWhen: stepCountIs(15)
+})
+```
+
+**Key Files**:
+- `server/tools/all-tools.ts` - All 13 tools
+- `server/agent/orchestrator.ts` - Unified agent
+- `server/prompts/react.xml` - Single prompt
 
 ---
 
 ## 📚 Documentation
 
--   [GETTING_STARTED.md](GETTING_STARTED.md) - Beginner guide with test cases
--   [README.md](README.md) - Architecture and features
--   [TAILWIND_ANALYSIS.md](TAILWIND_ANALYSIS.md) - Tailwind CSS v4 setup analysis
--   [TAILWIND_CONFIG_ANALYSIS.md](TAILWIND_CONFIG_ANALYSIS.md) - Do we need tailwind.config.ts?
--   [TAILWIND_FIX_SUMMARY.md](TAILWIND_FIX_SUMMARY.md) - How we fixed the styling issues
--   [PLAN.md](PLAN.md) - Technical specification
--   [PROGRESS.md](PROGRESS.md) - Implementation status
--   [PROMPT_ARCHITECTURE_BLUEPRINT.md](docs/PROMPT_ARCHITECTURE_BLUEPRINT.md) - Prompt system
+**Getting Started**:
+- [GETTING_STARTED.md](GETTING_STARTED.md) - Complete setup guide with test cases
+- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - This file (commands & patterns)
+- [README.md](README.md) - Architecture overview and features
+
+**Implementation History**:
+- [docs/PROGRESS.md](docs/PROGRESS.md) - Sprint-by-sprint progress
+- [docs/IMPLEMENTATION_SPRINTS.md](docs/IMPLEMENTATION_SPRINTS.md) - Detailed sprint breakdown
+- [docs/PLAN.md](docs/PLAN.md) - Original technical specification
+
+**Key Refactors**:
+- [docs/NATIVE_AI_SDK_REFACTOR_PLAN.md](docs/NATIVE_AI_SDK_REFACTOR_PLAN.md) - Sprint 12: Native AI SDK v6
+- [docs/UNIFIED_REACT_AGENT_REFACTOR.md](docs/UNIFIED_REACT_AGENT_REFACTOR.md) - Sprint 13: Unified agent
+- [docs/UI_OVERHAUL_SUMMARY.md](docs/UI_OVERHAUL_SUMMARY.md) - Sprint 14: Modern UI
 
 ---
 
 ## 🎓 Learning Path
 
-1. **Day 1**: Follow [GETTING_STARTED.md](GETTING_STARTED.md)
-2. **Day 2**: Try all test cases
-3. **Day 3**: Read [PLAN.md](PLAN.md) architecture
-4. **Day 4**: Explore code (start with orchestrator.ts)
-5. **Day 5**: Create your first tool
-6. **Day 6**: Add your own agent mode
-7. **Day 7**: Build a custom feature
+1. **Day 1**: Follow [GETTING_STARTED.md](GETTING_STARTED.md) - Setup and basic testing
+2. **Day 2**: Try all test prompts - Simple to complex tasks
+3. **Day 3**: Read [README.md](README.md) - Understand architecture
+4. **Day 4**: Explore code:
+   - `server/agent/orchestrator.ts` - Agent logic
+   - `server/tools/all-tools.ts` - All 13 tools
+   - `server/prompts/react.xml` - Unified prompt
+5. **Day 5**: Create your first tool - Add to `all-tools.ts`
+6. **Day 6**: Customize the prompt - Edit `react.xml`
+7. **Day 7**: Build a custom feature - Sessions, UI, etc.
 
 ---
 
@@ -239,15 +305,80 @@ data/
 
 Before reporting issues, verify:
 
--   [ ] All 3 servers running (`pnpm dev`)
--   [ ] API health check passes (http://localhost:8787/health)
--   [ ] Preview loads (http://localhost:4000/pages/home)
--   [ ] Assistant UI loads (http://localhost:3000/assistant)
--   [ ] `.env` file exists with valid API key
--   [ ] Database has data (`pnpm db:studio`)
--   [ ] TypeScript compiles (`pnpm typecheck`)
--   [ ] Browser console has no errors (F12)
+- [ ] All 3 servers running (`pnpm dev`)
+- [ ] API health check passes (http://localhost:8787/health)
+- [ ] Preview renders pages (http://localhost:4000/pages/home?locale=en)
+- [ ] Assistant UI loads (http://localhost:3000/assistant)
+- [ ] `.env` file exists with valid `OPENROUTER_API_KEY`
+- [ ] Database has data (`pnpm db:studio` → check pages table)
+- [ ] Vector index populated (`ls data/lancedb/` shows files)
+- [ ] TypeScript compiles (`pnpm typecheck` shows 0 errors)
+- [ ] Browser console clean (F12 → Console → no red errors)
+- [ ] Execution log shows events (blue/green/purple entries)
 
 ---
 
-**Pro Tip**: Keep this file open in a second monitor while developing!
+## 🔧 Quick Fixes
+
+```bash
+# Full reset (nuclear option)
+rm -rf node_modules data/sqlite.db data/lancedb
+pnpm install
+pnpm db:push
+pnpm seed
+pnpm reindex
+pnpm dev
+
+# Restart servers
+Ctrl+C (stop all)
+pnpm dev (restart)
+
+# Clear frontend cache
+# Browser: Cmd/Ctrl + Shift + R (hard refresh)
+
+# Check what's running
+lsof -i :3000  # Next.js
+lsof -i :4000  # Preview
+lsof -i :8787  # API server
+```
+
+---
+
+## 📝 Code Snippets
+
+**Add a new tool**:
+```typescript
+// In server/tools/all-tools.ts
+export const myNewTool = tool({
+  description: 'What this tool does',
+  inputSchema: z.object({
+    param: z.string().describe('Parameter description')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    // Your logic here
+    return { success: true, result: '...' }
+  }
+})
+
+// Add to ALL_TOOLS export
+export const ALL_TOOLS = {
+  // ... existing tools
+  myNewTool,
+}
+```
+
+**Test the agent**:
+```bash
+curl -X POST http://localhost:8787/v1/agent/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "test-session",
+    "prompt": "What pages exist?",
+    "stream": true
+  }'
+```
+
+---
+
+**Pro Tip**: Keep this file open while developing for quick reference!

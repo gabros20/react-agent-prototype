@@ -112,6 +112,15 @@ export class PageService {
     // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
     return await this.db.query.pages.findFirst({
       where: eq(schema.pages.id, id),
+      with: {
+        pageSections: {
+          with: {
+            sectionDefinition: true,
+            contents: true,
+          },
+          orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
+        },
+      },
     });
   }
 

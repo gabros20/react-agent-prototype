@@ -1,11 +1,11 @@
 # ReAct AI Agent Prototype - CMS-Focused
 
-AI-powered content management system with ReAct-style agent assistant.
+AI-powered content management system with unified ReAct agent using native AI SDK v6 patterns.
 
 ## 🚀 New to the Project?
 
-- **[Getting Started Guide](GETTING_STARTED.md)** - Complete walkthrough for beginners with test cases and examples
-- **[Quick Reference Card](QUICK_REFERENCE.md)** - Commands, URLs, and troubleshooting cheat sheet
+- **[Getting Started Guide](GETTING_STARTED.md)** - Complete setup walkthrough with test cases
+- **[Quick Reference Card](QUICK_REFERENCE.md)** - Commands, URLs, patterns, and troubleshooting
 
 ## Quick Start
 
@@ -45,16 +45,16 @@ pnpm dev
 # Or start individually:
 pnpm dev:server   # API server on port 8787
 pnpm dev:preview  # Preview server on port 4000
-pnpm dev:web      # Next.js on port 3000
+pnpm dev:web      # Next.js frontend on port 3000
 ```
 
-### 5. Preview Your Site
+### 5. Open the Assistant
 
 ```bash
-# Open rendered homepage in browser
-pnpm preview
+# Visit the AI assistant
+http://localhost:3000/assistant
 
-# Or visit manually:
+# Preview rendered pages
 http://localhost:4000/pages/home?locale=en
 ```
 
@@ -66,20 +66,19 @@ server/          # Backend Express API
 ├── services/    # Business logic layer
 │   ├── cms/     # CMS services (pages, sections, entries)
 │   ├── renderer.ts   # Nunjucks template rendering
-│   └── vector-index.ts # LanceDB vector search
+│   ├── vector-index.ts # LanceDB vector search
+│   ├── session-service.ts # Session management
+│   └── approval-queue.ts # HITL approval coordination
 ├── routes/      # API routes
+│   ├── agent.ts # SSE streaming endpoints
+│   └── sessions.ts # Session CRUD routes
 ├── middleware/  # Express middleware
 ├── agent/       # AI agent orchestrator
-│   └── orchestrator.ts # ToolLoopAgent with AI SDK v6
-├── tools/       # Agent tools (17 tools)
-│   ├── registry.ts    # Tool registry with mode filtering
-│   └── categories/    # Tool categories (cms, http, planning)
-├── prompts/     # Modular prompt system
-│   ├── core/    # Identity, capabilities, rules
-│   ├── modes/   # Mode-specific prompts (architect, cms-crud, debug, ask)
-│   ├── components/ # Reusable patterns (ReAct, tool usage, error handling)
-│   ├── examples/ # Few-shot examples
-│   └── utils/   # PromptComposer with caching
+│   └── orchestrator.ts # Unified ReAct agent (native AI SDK v6)
+├── tools/       # Agent tools (13 tools)
+│   └── all-tools.ts # All tools with experimental_context
+├── prompts/     # Single unified prompt
+│   └── react.xml # ReAct pattern prompt
 ├── templates/   # Nunjucks templates
 │   ├── layout/  # Page layout (HTML shell)
 │   ├── sections/ # Section templates (hero, feature, cta)
@@ -90,12 +89,12 @@ server/          # Backend Express API
 
 app/             # Next.js frontend
 ├── assistant/   # Main assistant UI
-└── api/         # Next.js API routes
-
-shared/          # Shared code
-├── components/  # Reusable UI
-├── hooks/       # Custom hooks
-└── types/       # TypeScript types
+│   ├── page.tsx # Layout (chat + execution log)
+│   ├── _components/ # Chat pane, debug pane, HITL modal
+│   ├── _hooks/  # use-agent (SSE streaming)
+│   └── _stores/ # chat-store, log-store, approval-store
+├── api/         # Next.js API routes (proxies)
+└── globals.css  # OKLCH theme with blue bubbles
 
 data/            # Local data (git-ignored)
 ├── sqlite.db    # SQLite database
@@ -164,11 +163,14 @@ The preview server renders your CMS pages as a real website using Nunjucks templ
 
 **Base URL**: `http://localhost:4000`
 
-### Endpoints
+### Routes
+- `GET /` - Redirects to `/pages/home?locale=en` (default homepage)
 - `GET /pages/:slug?locale=en` - Render page as HTML
 - `GET /pages/:slug/raw?locale=en` - Get page data as JSON (debugging)
 - `GET /assets/*` - Static assets (CSS, images)
 - `GET /health` - Health check with template registry
+
+**Note**: The root path (`/`) returns a 404 without the redirect - this is expected behavior as the preview server is designed to render specific page slugs.
 
 ### Templates
 
@@ -191,10 +193,10 @@ Templates are located in `server/templates/`:
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16, React 19, Tailwind CSS, shadcn/ui
+- **Frontend**: Next.js 15, React 19, Tailwind CSS, shadcn/ui
 - **Backend**: Express, Drizzle ORM, SQLite
 - **Templates**: Nunjucks with custom filters (markdown, truncate, asset)
-- **AI**: Vercel AI SDK v6, OpenRouter (Google Gemini 2.5 Flash)
+- **AI**: Vercel AI SDK v6 (native patterns), OpenRouter (GPT-4o-mini)
 - **Vector Search**: LanceDB with OpenRouter embeddings
 - **State**: Zustand with localStorage persistence
 
@@ -202,445 +204,309 @@ Templates are located in `server/templates/`:
 
 This project uses a **3-server architecture**:
 
-1. **API Server (port 8787)**: RESTful CRUD operations for CMS resources
+1. **API Server (port 8787)**: RESTful CRUD operations + AI agent streaming
 2. **Preview Server (port 4000)**: Renders pages as HTML using Nunjucks templates
-3. **Next.js (port 3000)**: Admin UI with AI assistant (future sprint)
+3. **Next.js (port 3000)**: AI assistant UI with blue chat bubbles
 
-The preview server is **production-ready** - it can be deployed separately to serve your actual website.
+### Unified ReAct Agent
 
-## Prompt Architecture
+**Native AI SDK v6 pattern** - no custom abstractions:
+- **Single agent** with all 13 tools available always
+- **Think → Act → Observe → Repeat** autonomous loop
+- **Max 15 steps** per conversation turn
+- **Auto-retry** with exponential backoff (3 attempts)
+- **Auto-checkpoint** every 3 steps for crash recovery
+- **Streaming SSE** with execution log events
 
-The AI agent uses a **modular prompt system** following production patterns from Anthropic, OpenAI, and LangChain.
+## Unified ReAct Prompt
 
-### Architecture
+The agent uses a **single unified prompt** (`server/prompts/react.xml`) - 82 lines, replaces 800+ lines of modular system.
 
-**Three-Layer System**:
-1. **Core Layer**: Identity, capabilities, universal rules (always included)
-2. **Mode Layer**: Mode-specific instructions (architect/cms-crud/debug/ask)
-3. **Component Layer**: Reusable patterns (ReAct, tool usage, error handling)
+### Prompt Structure
 
-**Format**: Hybrid XML + Markdown for LLM-native parsing
+**Single file with embedded examples**:
+- Agent identity and ReAct pattern
+- Think → Act → Observe → Repeat instructions
+- Complete example session (create page + add sections)
+- Tool list (injected dynamically)
+- Session context (sessionId, date)
 
-### Directory Structure
+### Key Sections
 
-```
-server/prompts/
-├── core/                    # Universal components
-│   ├── identity.xml         # Agent identity and purpose
-│   ├── capabilities.xml     # What agent can/cannot do
-│   └── universal-rules.xml  # Critical safety rules
-├── modes/                   # Mode-specific instructions
-│   ├── architect.xml        # Planning mode (read-only)
-│   ├── cms-crud.xml         # Execution mode (full access)
-│   ├── debug.xml            # Error analysis mode
-│   └── ask.xml              # Inspection mode (read-only)
-├── components/              # Reusable instruction blocks
-│   ├── react-pattern.md     # ReAct (Think→Act→Observe→Reflect→Respond)
-│   ├── tool-usage.md        # Tool selection strategies
-│   ├── error-handling.md    # Error recovery patterns
-│   ├── validation.md        # Pre/post-mutation validation
-│   └── output-format.md     # Response formatting guidelines
-├── examples/                # Few-shot examples
-│   ├── few-shot-create.xml  # Create page workflow
-│   └── few-shot-update.xml  # Update page workflow
-└── utils/
-    └── composer.ts          # PromptComposer class
-```
+```xml
+<agent>
+You are an autonomous AI assistant using the ReAct pattern.
 
-### Agent Modes
+**CORE LOOP:**
+Think → Act → Observe → Repeat until completion
 
-**1. Architect Mode** (Planning)
-- **Max steps**: 6
-- **Tools**: Read-only + cms.validatePlan
-- **Purpose**: Plan CMS changes, validate feasibility
-- **Use case**: "Plan a blog system with categories"
+**CRITICAL RULES:**
+1. THINK before acting
+2. EXECUTE immediately (no permission needed)
+3. CHAIN operations (multi-step in one turn)
+4. OBSERVE results
+5. RECURSE when needed
 
-**2. CMS CRUD Mode** (Execution)
-- **Max steps**: 10
-- **Tools**: All CMS tools (read + write)
-- **Purpose**: Execute mutations with validation
-- **Use case**: "Create an About page with hero section"
+**EXAMPLE SESSION:**
+User: "Add a hero section to the about page"
+[Shows complete multi-step flow with thinking, tool calls, observations]
 
-**3. Debug Mode** (Error Analysis)
-- **Max steps**: 4
-- **Tools**: Read tools + limited corrective writes
-- **Purpose**: Fix failed operations
-- **Use case**: "Why did my page creation fail?"
-
-**4. Ask Mode** (Inspection)
-- **Max steps**: 6
-- **Tools**: Read-only
-- **Purpose**: Explain CMS structure
-- **Use case**: "What sections are on the homepage?"
-
-### PromptComposer
-
-The `PromptComposer` class handles prompt composition:
-
-```typescript
-import { getSystemPrompt } from './server/prompts/utils/composer'
-
-// Compose prompt for specific mode
-const systemPrompt = getSystemPrompt({
-  mode: 'cms-crud',
-  maxSteps: 10,
-  toolsList: ['cms.createPage', 'cms.getPage', ...],
-  toolCount: 17,
-  sessionId: 'session-123',
-  traceId: 'trace-456',
-  currentDate: '2025-11-10'
-})
-```
-
-**Features**:
-- File-based loading with filesystem caching
-- Handlebars template engine for variable injection
-- Mode-specific composition logic
-- Cache warmup on server startup (~1ms for 14 files)
-- Hot-reload support in development
-- Token estimation for monitoring
-
-### Prompt Composition Flow
-
-1. Load core components (identity, capabilities, rules, ReAct pattern)
-2. Load mode-specific instructions
-3. Load shared components (tool usage, output format)
-4. Load mode-specific components (error handling, validation for CRUD)
-5. Load few-shot examples (create, update for CRUD)
-6. Concatenate with separators (`---`)
-7. Inject runtime variables via Handlebars
-8. Return composed system prompt
-
-### Cache Warmup
-
-Prompts are cached on server startup:
-
-```
-⏳ Warming up prompt cache...
-✓ Prompt cache warmed up (14 files, 1ms)
-```
-
-Cache statistics:
-```typescript
-import { promptComposer } from './server/prompts/utils/composer'
-
-const stats = promptComposer.getCacheStats()
-// { size: 14, keys: [...], enabled: true }
+**AVAILABLE TOOLS:** {{toolCount}} tools
+{{toolsFormatted}}
+</agent>
 ```
 
 ### Benefits
 
-✅ **Maintainable**: Edit prompts without code changes  
-✅ **Testable**: Composition tested separately from agent  
-✅ **Extensible**: Add new modes by creating new files  
-✅ **Performant**: Cached prompts load in ~1ms  
-✅ **Versioned**: Git-tracked, rollback-friendly  
-✅ **Production-ready**: Follows industry best practices  
+✅ **Simpler**: 82 lines vs 800+ lines (90% reduction)  
+✅ **Faster**: No composition overhead (~0ms vs ~1ms)  
+✅ **Clearer**: Everything in one file, easy to understand  
+✅ **More effective**: Agent sees complete example flow  
+✅ **Hot-reload**: Edit and test immediately  
 
-### Development
+### Customization
 
-To modify prompts:
+To modify the prompt:
 
-1. Edit files in `server/prompts/`
-2. Server auto-reloads in development (tsx watch)
-3. Cache cleared automatically on file changes
-4. Test with different modes via API
+1. Edit `server/prompts/react.xml`
+2. Server auto-reloads in development
+3. Test with agent immediately
+4. Use Handlebars syntax for variables: `{{toolCount}}`
 
-To add a new mode:
+## Native AI SDK v6 Pattern
 
-1. Create `server/prompts/modes/your-mode.xml`
-2. Add mode to `AgentMode` type in `server/tools/types.ts`
-3. Add mode config to `MODE_CONFIG` in `server/agent/orchestrator.ts`
-4. Update registry to filter tools for new mode
+The agent uses **native AI SDK v6 patterns** without custom abstractions:
 
-## Agent Intelligence Layer
+### 1. Tools with `experimental_context`
 
-The agent features production-grade reliability systems for long-running tasks:
-
-### 1. Hierarchical Memory Management
-
-Prevents context overflow on long conversations (100+ steps):
-
-**Three-Layer Architecture**:
-- **Working Memory**: Last 5-10 messages (~2k-5k tokens)
-- **Subgoal Memory**: Compressed completed tasks (~1k-2k tokens)
-- **Long-term Facts**: Persistent knowledge (future feature)
-
-**Auto-Compression**:
-- Triggers at 80% capacity (100k tokens / 128k Gemini limit)
-- Detects subgoals: `"✅ Done: Created hero section"`
-- Compresses to summary: `"Completed: Created hero section. Key actions: page created, section added."`
-- Typical compression: 250x (5k tokens → 20 tokens)
-
-**Importance Scoring**:
-- Tool results: +2 score
-- Errors: +2 score
-- HITL approvals: +3 score
-- Keeps top 50% by importance when pruning
-
-### 2. Checkpointing System
-
-Survive crashes, timeouts, and browser closures:
-
-**Auto-Checkpoint Triggers**:
-- Every 3 steps
-- Phase transitions (planning → executing → verifying → reflecting)
-- Before HITL approval
-- After errors
-
-**Checkpoint Data** (saved to `sessions.checkpoint`):
-```json
-{
-  "id": "checkpoint-uuid",
-  "sessionId": "session-uuid",
-  "stepNumber": 6,
-  "phase": "executing",
-  "mode": "cms-crud",
-  "messages": [...],
-  "workingMemory": [...],
-  "subgoalMemory": [...],
-  "completedSubgoals": ["Created homepage", "Added hero section"],
-  "tokenCount": 4500,
-  "estimatedCompletion": 60
-}
-```
-
-**Resume After Crash**:
-```typescript
-// Automatic on server restart
-const { agent, checkpoint } = await resumeAgent(sessionId, context)
-// Continues from last checkpoint with new traceId
-```
-
-### 3. Circuit Breaker Pattern
-
-Prevent cascading failures with fail-fast error handling:
-
-**Circuit States**:
-- **Closed**: Normal operation (0-2 failures)
-- **Open**: Fail immediately after 3 failures (30s lockout)
-- **Half-Open**: Test call after cooldown period
-
-**Example Flow**:
-```
-cms.createPage
-├─ Failure 1: Slug conflict → Retry with suggestion
-├─ Failure 2: Validation error → Retry
-├─ Failure 3: Timeout → Circuit OPEN
-├─ Any call → "Circuit breaker open - wait 30s"
-├─ After 30s → Circuit HALF-OPEN
-└─ Success → Circuit CLOSED (reset)
-```
-
-**Circuit Status Monitoring**:
-```typescript
-const status = errorRecovery.getCircuitStatus()
-// [{ toolName: 'cms.createPage', state: 'open', failures: 3, lastFailure: Date }]
-```
-
-### 4. Error Classification & Recovery
-
-7 error categories with specific recovery strategies:
-
-| Category | Pattern | Strategy | Example |
-|----------|---------|----------|---------|
-| **Validation** | Invalid input, schema mismatch | **Retry** | Check schema, fuzzy match suggestions |
-| **Constraint** | Unique constraint, duplicate | **Fallback** | Try `about-1234`, `about-new` |
-| **Not Found** | Resource doesn't exist | **Fallback** | Use fuzzy search to find similar |
-| **Reference** | Broken reference, cascade | **Escalate** | Create parent resource first |
-| **Circuit Breaker** | Service unavailable | **Skip** | Wait 30s, use alternative |
-| **Timeout** | Operation timeout | **Retry** | Exponential backoff (1s, 2s, 4s) |
-| **Unknown** | Uncategorized | **Escalate** | Manual intervention needed |
-
-**Agent-Friendly Error Messages**:
-```
-❌ Tool Error: cms.createPage
-
-**Error Category:** constraint
-**Message:** Slug 'about' already exists
-
-**Suggested Actions:**
-1. Slug already exists - try appending timestamp or number
-2. Use cms.listPages to find existing slugs
-3. Update existing resource instead of creating new
-
-💡 **Recovery:** Retry attempt 1/2 (wait 1000ms)
-```
-
-### 5. Advanced Validation
-
-Pre and post-mutation validation catches errors early:
-
-**Pre-Mutation Checks**:
-- Slug format: `/^[a-z0-9-]{2,64}$/`
-- Uniqueness: Check for existing resources
-- Resource existence: Verify IDs exist
-- Schema compatibility: Match elements_structure
-
-**Post-Mutation Checks**:
-- Resource created: Verify in database
-- Fields match: Expected values applied
-- Side effects: Vector index updated
-- Constraints satisfied: No orphaned references
-
-**Validation Result**:
-```typescript
-{
-  valid: false,
-  issues: [
-    {
-      type: 'error',
-      category: 'constraint',
-      field: 'slug',
-      message: "Slug 'about' already exists",
-      suggestion: "Try: about-1234 or about-new"
-    }
-  ]
-}
-```
-
-### Intelligence Layer Services
-
-Located in `server/services/agent/`:
-
-- `memory-manager.ts` - Hierarchical context compression
-- `checkpoint-manager.ts` - State persistence & resume
-- `error-recovery.ts` - Circuit breaker + error classification
-- `validation-service.ts` - Pre/post-mutation validation
-
-### Production Benefits
-
-Based on industry benchmarks (HiAgent 2024, OpenAI Best Practices):
-
-✅ **2x success rate** on long-horizon tasks (10+ steps)  
-✅ **40% cost reduction** via context compression  
-✅ **Zero data loss** with automatic checkpointing  
-✅ **3x faster error recovery** with circuit breaker  
-✅ **Survive crashes/timeouts** (resume in <1s)  
-✅ **Prevent cascading failures** (fail fast after 3 attempts)  
-✅ **Agent-friendly errors** (structured observations with suggestions)  
-
-### Monitoring
-
-Intelligence layer stats included in agent responses:
-
-```json
-{
-  "traceId": "trace-456",
-  "text": "Page created successfully",
-  "intelligence": {
-    "memoryTokens": 4500,
-    "subgoalsCompleted": 2,
-    "circuitBreakers": [
-      { "toolName": "cms.createPage", "state": "closed", "failures": 0 }
-    ]
-  }
-}
-```
-
-## HITL (Human-in-the-Loop) Safety System
-
-High-risk operations require explicit user approval before execution.
-
-### How It Works
-
-**1. Tool-Level Approval Flags**
-```typescript
-// Tool requires approval
-export const deletePageTool = createCMSTool({
-  id: 'cms.deletePage',
-  requiresApproval: true, // HITL gate enabled
-  riskLevel: 'high',
-  // ...
-})
-```
-
-**2. Automatic Detection**
-- Agent detects `requiresApproval: true` before tool execution
-- Emits `approval-required` SSE event to frontend
-- Pauses agent execution until user responds
-
-**3. Approval UI**
-- Modal automatically appears with tool details
-- Shows: tool name, description, input parameters
-- User chooses: **Approve** or **Reject**
-
-**4. Decision Flow**
-```
-Agent wants to: cms.deletePage({ id: "page-123" })
-     ↓
-🛡️ Modal: "Delete page 'About Us'? Cannot be undone."
-     ↓
-User clicks [Approve]
-     ↓
-Decision sent to backend → Tool executes
-```
-
-### Tools Requiring Approval
-
-| Tool | Risk Level | Why Approval Needed |
-|------|------------|---------------------|
-| `cms.deletePage` | High | **Destructive** - Deletes page + all sections (cascade) |
-| `cms.syncSectionElements` | High | **Schema change** - May orphan existing content |
-| `cms.syncCollectionElements` | High | **Schema change** - May break existing entries |
-| Slug changes in `cms.updatePage` | Moderate | **URL change** - Breaks external links |
-
-### Debug Log Integration
-
-Approval requests logged with 🛡️ shield icon:
-
-```
-🛡️ Approval Required: cms.deletePage
-  Tool: cms.deletePage
-  Input: { id: "page-123", confirm: true }
-  Status: Waiting for user decision...
-```
-
-### Safety Features
-
-✅ **Double-Check**: Tools with `requiresApproval` also require `confirm: true` flag  
-✅ **Full Context**: Modal shows exact parameters agent will execute  
-✅ **Audit Trail**: All approval requests logged with traceId  
-✅ **Circuit Breaker**: Prevents cascading failures after 3 rejections  
-✅ **Extensible**: Easy to add approval to any tool  
-
-### Adding Approval to Tools
+Tools created once with execute functions that receive context automatically:
 
 ```typescript
-export const yourTool = createCMSTool({
-  id: 'cms.yourTool',
-  requiresApproval: true, // Enable HITL gate
-  riskLevel: 'high',      // Set appropriate risk level
-  description: 'DESTRUCTIVE - Requires user approval',
-  execute: async (input, context) => {
-    // Double-check confirmation flag
-    if (!input.confirm) {
-      throw new Error('Requires confirmation flag')
-    }
-    // ... tool logic
+export const cmsGetPage = tool({
+  description: 'Get page by slug or ID',
+  inputSchema: z.object({
+    slug: z.string().optional()
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    return await ctx.services.pageService.getPageBySlug(input.slug)
   }
 })
 ```
 
-### Frontend Components
+**No factories, no wrappers, no recreation** - tools passed AS-IS to agent.
 
-- **HITLModal**: `app/assistant/_components/hitl-modal.tsx`
-- **Approval Store**: `app/assistant/_stores/approval-store.ts`
-- **API Proxy**: `app/api/agent/approve/route.ts`
+### 2. Memory Management with `prepareStep`
 
-### Backend Integration
+Replaces 331-line memory manager with 15 lines:
 
-- **Orchestrator**: `server/agent/orchestrator.ts` (approval detection)
-- **Tool Registry**: `server/tools/registry.ts` (requiresApproval checks)
-- **Approval Endpoint**: `/v1/agent/approve` (records decisions)
+```typescript
+prepareStep: async ({ stepNumber, messages }) => {
+  // Auto-checkpoint every 3 steps
+  if (stepNumber % 3 === 0) {
+    await sessionService.saveMessages(sessionId, messages)
+  }
+  
+  // Trim history (keep last 20 messages)
+  if (messages.length > 20) {
+    return { messages: [messages[0], ...messages.slice(-10)] }
+  }
+  
+  return {}
+}
+```
 
-## Development Status
+### 3. Retry Logic with Exponential Backoff
 
-See [PROGRESS.md](PROGRESS.md) for implementation sprint status.
+Built into orchestrator, follows v0 pattern:
 
-**Completed Sprints**:
-- ✅ Sprint 0-7: Foundation, CMS API, Agent Core, Prompt Architecture
-- ✅ Sprint 8: Intelligence Layer (Memory, Checkpointing, Error Recovery)
-- ✅ Sprint 9: Frontend-Backend Integration (Streaming, SSE, Mode Selector)
-- ✅ Sprint 10: HITL & Safety Features (Approval Gates, Risk Management)
-- 🔜 Sprint 11: Polish & Production Readiness
+```typescript
+async function executeWithRetry() {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await agent.generate({ messages, experimental_context })
+    } catch (error) {
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt) + jitter()
+        await sleep(delay)
+        continue
+      }
+      throw error
+    }
+  }
+}
+```
+
+### 4. Automatic Checkpointing
+
+Simple message array save/load:
+
+```typescript
+// Save checkpoint
+await sessionService.saveMessages(sessionId, messages)
+
+// Resume from checkpoint
+const messages = await sessionService.loadMessages(sessionId)
+const result = await agent.generate({ messages, experimental_context })
+```
+
+### Benefits
+
+✅ **Simpler**: 28% less code (1,200 → 860 lines)  
+✅ **Native**: Follows AI SDK v6 patterns exactly  
+✅ **Reliable**: No "_zod" errors, no context issues  
+✅ **Fast**: No overhead from abstractions  
+✅ **Maintainable**: Easy to understand and extend
+
+## Session Management
+
+Multiple chat sessions with full history persistence:
+
+### Features
+
+- **Unlimited sessions** - Create as many conversations as needed
+- **Session sidebar** - Switch between sessions instantly
+- **Full history** - All messages saved to SQLite database
+- **Auto-save** - Messages persisted after each agent response
+- **Smart titles** - Auto-generated from first user message
+- **Session actions** - Clear history or delete session
+
+### Implementation
+
+**Backend** (`server/services/session-service.ts`):
+```typescript
+class SessionService {
+  async createSession(title?: string): Promise<Session>
+  async loadMessages(sessionId: string): Promise<CoreMessage[]>
+  async saveMessages(sessionId: string, messages: CoreMessage[]): Promise<void>
+  async updateSessionTitle(sessionId: string, title: string): Promise<void>
+  async deleteSession(sessionId: string): Promise<void>
+  async clearSessionHistory(sessionId: string): Promise<void>
+}
+```
+
+**Frontend** (`app/assistant/_stores/session-store.ts`):
+```typescript
+interface SessionStore {
+  sessions: Session[]
+  currentSessionId: string | null
+  loadSessions(): Promise<void>
+  createSession(): Promise<void>
+  switchSession(sessionId: string): Promise<void>
+  deleteSession(sessionId: string): Promise<void>
+}
+```
+
+### Database Schema
+
+```sql
+-- sessions table
+CREATE TABLE sessions (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  checkpoint TEXT, -- JSON checkpoint data
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)
+
+-- messages table
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  role TEXT NOT NULL, -- 'user' | 'assistant' | 'tool'
+  content TEXT NOT NULL, -- JSON content
+  tool_name TEXT,
+  step_idx INTEGER,
+  created_at INTEGER NOT NULL
+)
+```
+
+## Modern UI with OKLCH Theme
+
+Professional interface with modern color system:
+
+### Design Features
+
+- **Blue chat bubbles** - Assistant messages in light blue/purple gradient
+- **2/3 chat layout** - Chat is main focus (was 1/3 in old design)
+- **1/3 execution log** - Terminal icon with color-coded events
+- **OKLCH colors** - Modern color system with better perceptual uniformity
+- **Reduced border radius** - 0.375rem for sharper, more professional look
+- **Improved dark mode** - Better contrast and consistent theming
+- **Responsive** - Session sidebar hidden on mobile
+
+### Color System
+
+```css
+/* Primary colors (purple/blue) */
+--primary: 262.1 83.3% 57.8%
+--primary-foreground: 210 20% 98%
+
+/* Assistant message bubbles */
+.message-assistant {
+  background: linear-gradient(135deg, 
+    oklch(var(--primary) / 0.1) 0%, 
+    oklch(var(--primary) / 0.15) 100%);
+  border-left: 3px solid oklch(var(--primary));
+}
+```
+
+### Layout
+
+```
+┌─────────────────────────────────────────┐
+│ Header: Bot Icon + "CMS ReAct Agent"   │
+├──────────┬──────────────────────────────┤
+│ Session  │         Chat Pane            │
+│ Sidebar  │    (Blue Bubbles)            │
+│ (1/6)    │         (2/3)                │
+│          ├──────────────────────────────┤
+│          │    Execution Log             │
+│          │  (Color-coded events)        │
+│          │         (1/3)                │
+└──────────┴──────────────────────────────┘
+```
+
+## Troubleshooting
+
+### Common Issues
+
+| Problem                   | Solution                                          |
+| ------------------------- | ------------------------------------------------- |
+| Agent not responding      | Check API logs, verify OpenRouter API key        |
+| Blue bubbles not showing  | Hard refresh (Cmd+Shift+R), check globals.css    |
+| Tool execution fails      | Check execution log, agent auto-retries 3x       |
+| Database locked           | Stop servers, `rm data/sqlite.db`, re-seed       |
+| Vector search no results  | Run `pnpm reindex`                                |
+| Port in use               | `lsof -i :8787 \| grep LISTEN` then `kill -9 PID` |
+
+### Full Reset
+
+```bash
+# Nuclear option - complete reset
+rm -rf node_modules data/sqlite.db data/lancedb
+pnpm install
+pnpm db:push
+pnpm seed
+pnpm reindex
+pnpm dev
+```
+
+See [QUICK_REFERENCE.md](QUICK_REFERENCE.md#-common-issues) for detailed troubleshooting.
+
+## Implementation History
+
+See [docs/PROGRESS.md](docs/PROGRESS.md) for complete sprint-by-sprint details.
+
+**Major Milestones**:
+- ✅ **Sprints 0-11**: Foundation, CMS API, Agent Core, Modular Prompts, Frontend
+- ✅ **Sprint 12**: Native AI SDK v6 Refactor (28% code reduction)
+- ✅ **Sprint 13**: Unified ReAct Agent (no modes, single prompt)
+- ✅ **Sprint 14**: Modern UI with OKLCH theme (blue bubbles)
+
+**Key Refactors**:
+1. [Native AI SDK v6 Pattern](docs/NATIVE_AI_SDK_REFACTOR_PLAN.md) - Eliminated custom abstractions
+2. [Unified ReAct Agent](docs/UNIFIED_REACT_AGENT_REFACTOR.md) - Removed mode complexity
+3. [UI Overhaul](docs/UI_OVERHAUL_SUMMARY.md) - Modern design with blue bubbles
+
+**Current Status**: Production-ready prototype with 13 tools, unified agent, and modern UI.

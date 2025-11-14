@@ -18,17 +18,17 @@ export function HITLModal() {
   const handleApprove = async () => {
     if (!pendingApproval) return;
 
+    // Extract approvalId from the approval request
+    const approvalId = (pendingApproval as any).approvalId || pendingApproval.stepId;
+
     try {
-      // Send approval to backend
-      const response = await fetch('/api/agent/approve', {
+      // Send approval to backend via new endpoint
+      const response = await fetch(`/api/agent/approval/${approvalId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: pendingApproval.traceId, // Use traceId as sessionId for now
-          traceId: pendingApproval.traceId,
-          stepId: pendingApproval.stepId,
-          decision: 'approve',
-          message: 'User approved action'
+          approved: true,
+          reason: 'User approved via modal'
         })
       });
 
@@ -47,17 +47,17 @@ export function HITLModal() {
   const handleReject = async () => {
     if (!pendingApproval) return;
 
+    // Extract approvalId from the approval request
+    const approvalId = (pendingApproval as any).approvalId || pendingApproval.stepId;
+
     try {
-      // Send rejection to backend
-      const response = await fetch('/api/agent/approve', {
+      // Send rejection to backend via new endpoint
+      const response = await fetch(`/api/agent/approval/${approvalId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: pendingApproval.traceId,
-          traceId: pendingApproval.traceId,
-          stepId: pendingApproval.stepId,
-          decision: 'reject',
-          message: 'User rejected action'
+          approved: false,
+          reason: 'User rejected via modal'
         })
       });
 
