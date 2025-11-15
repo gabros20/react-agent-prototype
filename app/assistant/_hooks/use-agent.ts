@@ -147,6 +147,11 @@ export function useAgent() {
                   setCurrentTraceId(data.traceId);
                   assistantText = data.text || '';
 
+                  // Update sessionId from backend response (not traceId!)
+                  if (data.sessionId && data.sessionId !== sessionId) {
+                    setSessionId(data.sessionId);
+                  }
+
                   // Add assistant message
                   const assistantMessage: ChatMessage = {
                     id: crypto.randomUUID(),
@@ -208,6 +213,14 @@ export function useAgent() {
                   // Stream finished
                   break;
 
+                case 'finish':
+                  // AI SDK finish event with usage stats
+                  console.log('Stream finished:', data);
+                  if (data?.usage) {
+                    console.log('Token usage:', data.usage);
+                  }
+                  break;
+
                 default:
                   console.warn('Unknown SSE event type:', eventType);
               }
@@ -217,10 +230,7 @@ export function useAgent() {
           }
         }
 
-        // Update session ID if new
-        if (currentTraceId && !sessionId) {
-          setSessionId(currentTraceId);
-        }
+        // SessionId already updated from 'result' event - don't use traceId as sessionId!
       } catch (err) {
         const error = err as Error;
         console.error('Agent error:', error);

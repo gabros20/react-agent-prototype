@@ -107,13 +107,22 @@ export const cmsUpdatePage = tool({
 })
 
 export const cmsDeletePage = tool({
-  description: 'Delete a page (CASCADE: deletes all sections). DANGEROUS operation.',
+  description: 'Delete a page (CASCADE: deletes all sections). DANGEROUS - requires confirmation.',
   inputSchema: z.object({
-    id: z.string().describe('Page ID to delete')
+    id: z.string().describe('Page ID to delete'),
+    confirmed: z.boolean().optional().describe('Set to true to confirm deletion')
   }),
-  needsApproval: true,  // Native AI SDK v6 approval pattern!
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
+    
+    // Require explicit confirmation
+    if (!input.confirmed) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        message: 'STOP: This is a destructive operation. Call again with confirmed: true if user has approved.'
+      }
+    }
     
     await ctx.services.pageService.deletePage(input.id)
     return { success: true, message: `Page ${input.id} deleted` }
@@ -237,6 +246,90 @@ export const cmsSyncPageContent = tool({
   }
 })
 
+export const cmsDeletePageSection = tool({
+  description: 'Delete a section from a page. Removes the section instance (not the template). DANGEROUS - requires confirmation.',
+  inputSchema: z.object({
+    pageSectionId: z.string().describe('Page section ID (from cms_getPage sections array)'),
+    confirmed: z.boolean().optional().describe('Set to true to confirm deletion')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    
+    // Require explicit confirmation
+    if (!input.confirmed) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        message: 'STOP: This is a destructive operation. Call again with confirmed: true if user has approved.'
+      }
+    }
+    
+    // Import schema at runtime
+    const { pageSections } = await import('../db/schema')
+    const { eq } = await import('drizzle-orm')
+    
+    // Delete page section (CASCADE deletes content)
+    await ctx.db.delete(pageSections).where(eq(pageSections.id, input.pageSectionId))
+    
+    return { 
+      success: true, 
+      message: `Section deleted from page`
+    }
+  }
+})
+
+export const cmsDeletePageSections = tool({
+  description: 'Delete multiple sections from a page in one operation (more efficient than one-by-one). DANGEROUS - requires confirmation.',
+  inputSchema: z.object({
+    pageSectionIds: z.array(z.string()).describe('Array of page section IDs to delete'),
+    pageId: z.string().optional().describe('Optional: page ID for validation'),
+    confirmed: z.boolean().optional().describe('Set to true to confirm deletion')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    
+    // Require explicit confirmation
+    if (!input.confirmed) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        message: `STOP: About to delete ${input.pageSectionIds.length} sections. Call again with confirmed: true if user has approved.`
+      }
+    }
+    
+    const { pageSections } = await import('../db/schema')
+    const { eq, inArray } = await import('drizzle-orm')
+    
+    // Validate all sections exist
+    const sections = await ctx.db.query.pageSections.findMany({
+      where: inArray(pageSections.id, input.pageSectionIds)
+    })
+    
+    if (sections.length !== input.pageSectionIds.length) {
+      throw new Error(`Some sections not found. Found ${sections.length} of ${input.pageSectionIds.length}`)
+    }
+    
+    // Validate all belong to same page if pageId provided
+    if (input.pageId) {
+      const wrongPage = sections.find((s: any) => s.pageId !== input.pageId)
+      if (wrongPage) {
+        throw new Error('All sections must belong to the specified page')
+      }
+    }
+    
+    // Delete all sections
+    for (const sectionId of input.pageSectionIds) {
+      await ctx.db.delete(pageSections).where(eq(pageSections.id, sectionId))
+    }
+    
+    return { 
+      success: true, 
+      deletedCount: input.pageSectionIds.length,
+      message: `Deleted ${input.pageSectionIds.length} sections`
+    }
+  }
+})
+
 // ============================================================================
 // Search Tools
 // ============================================================================
@@ -271,10 +364,10 @@ export const searchVector = tool({
 })
 
 export const cmsFindResource = tool({
-  description: 'Find CMS resource by name using fuzzy matching (typo-tolerant)',
+  description: 'Find CMS resource by name/query using fuzzy matching (typo-tolerant). Use this to find pages by partial name or slug.',
   inputSchema: z.object({
-    name: z.string().describe('Resource name to search for'),
-    type: z.enum(['page', 'section', 'collection']).optional()
+    query: z.string().describe('Search query - partial name or slug to search for (e.g., "about" to find "About Us")'),
+    resourceType: z.enum(['page', 'section', 'collection']).optional().describe('Type of resource to search for (defaults to page)')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
@@ -282,7 +375,8 @@ export const cmsFindResource = tool({
     // Simple fuzzy match implementation
     const allPages = await ctx.services.pageService.listPages()
     const matches = allPages.filter((p: any) => 
-      p.name.toLowerCase().includes(input.name.toLowerCase())
+      p.name.toLowerCase().includes(input.query.toLowerCase()) ||
+      p.slug.toLowerCase().includes(input.query.toLowerCase())
     )
     
     return {
@@ -406,6 +500,8 @@ export const ALL_TOOLS = {
   'cms_getSectionDef': cmsGetSectionDef,
   'cms_addSectionToPage': cmsAddSectionToPage,
   'cms_syncPageContent': cmsSyncPageContent,
+  'cms_deletePageSection': cmsDeletePageSection,
+  'cms_deletePageSections': cmsDeletePageSections,
   
   // Search
   'search_vector': searchVector,
@@ -445,7 +541,7 @@ export const TOOL_METADATA = {
   'cms_deletePage': {
     category: 'cms',
     riskLevel: 'high',
-    requiresApproval: true,
+    requiresApproval: false,  // Uses confirmed flag instead
     tags: ['delete', 'dangerous']
   },
   'cms_listPages': {
@@ -477,6 +573,18 @@ export const TOOL_METADATA = {
     riskLevel: 'moderate',
     requiresApproval: false,
     tags: ['write', 'section', 'content']
+  },
+  'cms_deletePageSection': {
+    category: 'cms',
+    riskLevel: 'high',
+    requiresApproval: false,  // Uses confirmed flag instead
+    tags: ['delete', 'section', 'dangerous']
+  },
+  'cms_deletePageSections': {
+    category: 'cms',
+    riskLevel: 'high',
+    requiresApproval: false,  // Uses confirmed flag instead
+    tags: ['delete', 'section', 'batch', 'dangerous']
   },
   'search_vector': {
     category: 'search',

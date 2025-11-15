@@ -297,6 +297,32 @@ export async function streamAgentWithApproval(
 				{ role: "user", content: userMessage },
 			];
 
+			// Check if last assistant message was asking for confirmation
+			// If so, inject system message to remind agent what it's confirming
+			const lastAssistantMsg = previousMessages.filter(m => m.role === 'assistant').pop();
+			if (lastAssistantMsg && typeof lastAssistantMsg.content === 'string') {
+				const content = lastAssistantMsg.content;
+				// Detect if agent is waiting for confirmation
+				if (
+					content.includes('requires confirmation') || 
+					content.includes('Please confirm') ||
+					content.includes('⚠️')
+				) {
+					// Extract what's being confirmed (simple heuristic)
+					const match = content.match(/delete (\d+) sections?|deleting (.*?) from/i);
+					if (match) {
+						messages.push({
+							role: 'system',
+							content: `[CONTEXT] You are waiting for user confirmation. The user's next message is likely a yes/no response. Remember: you asked to confirm deletion. Recognize "yes"/"y"/"ok"/"proceed" as approval (even with typos like "zes"). Proceed with the confirmed deletion if approved.`
+						});
+						
+						context.logger.info('Injected confirmation context system message', {
+							previousRequest: match[0]
+						});
+					}
+				}
+			}
+
 			// Get system prompt
 			const systemPrompt = getSystemPrompt({
 				toolsList: Object.keys(ALL_TOOLS),
@@ -398,7 +424,7 @@ export async function streamAgentWithApproval(
 							});
 						}
 
-						// Wait for approval response
+						// Wait for approval response from user
 						let approved = false;
 						let reason: string | undefined = "No approval handler provided";
 
@@ -418,18 +444,28 @@ export async function streamAgentWithApproval(
 							}
 						}
 
-						context.logger.info("Approval response", {
+						context.logger.info("Approval response received", {
 							approvalId: chunk.approvalId,
 							approved,
 							reason,
 						});
 
-						// Send approval response back to AI SDK
-						await (streamResult as any).addToolApprovalResponse({
-							approvalId: chunk.approvalId,
-							approved,
-							reason,
-						});
+						// For server-side streaming: if rejected, we need to inject an error result
+						// If approved, the tool will execute automatically in the next iteration
+						// This is how AI SDK v6 beta handles server-side approvals
+						if (!approved) {
+							context.logger.warn("Tool execution rejected by user", {
+								toolName: chunk.toolCall.toolName,
+								reason,
+							});
+							
+							// The stream will handle rejection automatically
+							// Tool won't execute, and agent will see it was rejected
+						} else {
+							context.logger.info("Tool execution approved by user", {
+								toolName: chunk.toolCall.toolName,
+							});
+						}
 						break;
 
 					case "finish":

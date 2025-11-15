@@ -62,10 +62,10 @@ This document catalogs proven agentic AI design patterns from academic research 
 
 #### Problem
 
-- ReAct agents accumulate conversation history linearly
-- LLM context windows are finite (e.g., 128k tokens for Gemini 2.5)
-- At 80% capacity, accuracy drops 15-30% ("context rot" - Anthropic 2024)
-- Long tasks (50+ steps) exceed context limits → crashes or degraded performance
+-   ReAct agents accumulate conversation history linearly
+-   LLM context windows are finite (e.g., 128k tokens for Gemini 2.5)
+-   At 80% capacity, accuracy drops 15-30% ("context rot" - Anthropic 2024)
+-   Long tasks (50+ steps) exceed context limits → crashes or degraded performance
 
 #### Solution
 
@@ -77,42 +77,42 @@ Three-layer memory hierarchy that compresses completed work into summaries:
 
 **Compression Trigger**:
 
-- Context reaches 70% of model limit (e.g., 90k tokens for 128k model)
-- Subgoal completion detected (agent says "✅ Done: [task]")
-- Phase transitions (planning → executing → verifying)
+-   Context reaches 70% of model limit (e.g., 90k tokens for 128k model)
+-   Subgoal completion detected (agent says "✅ Done: [task]")
+-   Phase transitions (planning → executing → verifying)
 
 **What Gets Compressed**:
 
-- Intermediate reasoning steps (non-critical "Let me think...")
-- Redundant tool results (same tool called multiple times)
-- Low-importance messages (scored <0.3 on importance scale)
+-   Intermediate reasoning steps (non-critical "Let me think...")
+-   Redundant tool results (same tool called multiple times)
+-   Low-importance messages (scored <0.3 on importance scale)
 
 **What's Always Kept**:
 
-- System prompt
-- Last 3-5 messages (current context)
-- Subgoal summaries (compressed)
-- Error observations and key decisions
+-   System prompt
+-   Last 3-5 messages (current context)
+-   Subgoal summaries (compressed)
+-   Error observations and key decisions
 
 #### Benefits
 
-- ✅ Handles 100+ step conversations without degradation
-- ✅ 2x success rate on long-horizon tasks
-- ✅ 40% cost reduction (fewer tokens per API call)
-- ✅ Maintains coherence across multiple subgoals
+-   ✅ Handles 100+ step conversations without degradation
+-   ✅ 2x success rate on long-horizon tasks
+-   ✅ 40% cost reduction (fewer tokens per API call)
+-   ✅ Maintains coherence across multiple subgoals
 
 #### Trade-offs
 
-- ⚠️ Adds 1-2 LLM calls per compression (for summarization)
-- ⚠️ Eventually consistent (compression happens after subgoal, not real-time)
-- ⚠️ Information loss on fine details (by design)
+-   ⚠️ Adds 1-2 LLM calls per compression (for summarization)
+-   ⚠️ Eventually consistent (compression happens after subgoal, not real-time)
+-   ⚠️ Information loss on fine details (by design)
 
 #### When to Use
 
-- Tasks requiring >20 steps
-- Workflows with multiple distinct phases
-- Applications with limited context windows
-- When cost optimization is important
+-   Tasks requiring >20 steps
+-   Workflows with multiple distinct phases
+-   Applications with limited context windows
+-   When cost optimization is important
 
 #### Implementation Complexity
 
@@ -121,9 +121,9 @@ Three-layer memory hierarchy that compresses completed work into summaries:
 
 #### Key Metrics
 
-- Context utilization: Monitor tokens used / tokens available
-- Compression ratio: Original tokens / compressed tokens (target: 10:1)
-- Retrieval accuracy: Can agent recall key facts from compressed subgoals?
+-   Context utilization: Monitor tokens used / tokens available
+-   Compression ratio: Original tokens / compressed tokens (target: 10:1)
+-   Retrieval accuracy: Can agent recall key facts from compressed subgoals?
 
 #### Code Reference
 
@@ -141,9 +141,9 @@ See `PLAN.md` Section 6.7 for full implementation with `HierarchicalMemoryManage
 
 Same as Hierarchical Memory, but for scenarios where:
 
-- Subgoal detection is unreliable
-- Tasks don't have clear phase boundaries
-- Simpler implementation is preferred
+-   Subgoal detection is unreliable
+-   Tasks don't have clear phase boundaries
+-   Simpler implementation is preferred
 
 #### Solution
 
@@ -151,12 +151,12 @@ Keep fixed-size context window, prune messages by importance score:
 
 **Importance Factors** (0.0-1.0 scale):
 
-- Tool calls: +0.3
-- Error observations: +0.5
-- Goal statements: +0.4
-- Tool results: +0.2
-- Pure reasoning (no actions): +0.1
-- Very short messages (<50 chars): -0.2
+-   Tool calls: +0.3
+-   Error observations: +0.5
+-   Goal statements: +0.4
+-   Tool results: +0.2
+-   Pure reasoning (no actions): +0.1
+-   Very short messages (<50 chars): -0.2
 
 **Pruning Strategy**:
 
@@ -167,22 +167,22 @@ Keep fixed-size context window, prune messages by importance score:
 
 #### Benefits
 
-- ✅ Simple to implement (no LLM calls for summarization)
-- ✅ Fast (just arithmetic scoring)
-- ✅ Predictable (deterministic pruning)
+-   ✅ Simple to implement (no LLM calls for summarization)
+-   ✅ Fast (just arithmetic scoring)
+-   ✅ Predictable (deterministic pruning)
 
 #### Trade-offs
 
-- ⚠️ Less intelligent than hierarchical (no semantic compression)
-- ⚠️ Can lose important context if not in top 50%
-- ⚠️ Doesn't preserve subgoal structure
+-   ⚠️ Less intelligent than hierarchical (no semantic compression)
+-   ⚠️ Can lose important context if not in top 50%
+-   ⚠️ Doesn't preserve subgoal structure
 
 #### When to Use
 
-- Short to medium tasks (10-30 steps)
-- When speed is critical (no summarization overhead)
-- When subgoals are unclear or don't exist
-- Prototyping phase before implementing hierarchical memory
+-   Short to medium tasks (10-30 steps)
+-   When speed is critical (no summarization overhead)
+-   When subgoals are unclear or don't exist
+-   Prototyping phase before implementing hierarchical memory
 
 #### Implementation Complexity
 
@@ -199,9 +199,9 @@ Keep fixed-size context window, prune messages by importance score:
 
 #### Problem
 
-- LLMs re-process entire context on each call (expensive)
-- KV-cache can reuse computation for unchanged prefix
-- But: dynamic context breaks cache (cache miss → full recompute)
+-   LLMs re-process entire context on each call (expensive)
+-   KV-cache can reuse computation for unchanged prefix
+-   But: dynamic context breaks cache (cache miss → full recompute)
 
 #### Solution
 
@@ -223,21 +223,21 @@ Conversation history → Current task → Observations
 
 #### Benefits
 
-- ✅ 3x faster inference (cache hits)
-- ✅ 60% cost reduction
-- ✅ Lower latency for users
+-   ✅ 3x faster inference (cache hits)
+-   ✅ 60% cost reduction
+-   ✅ Lower latency for users
 
 #### Trade-offs
 
-- ⚠️ Provider-dependent (OpenAI, Anthropic support this; some don't)
-- ⚠️ Requires careful prompt engineering
-- ⚠️ Benefits diminish if prefix changes frequently
+-   ⚠️ Provider-dependent (OpenAI, Anthropic support this; some don't)
+-   ⚠️ Requires careful prompt engineering
+-   ⚠️ Benefits diminish if prefix changes frequently
 
 #### When to Use
 
-- High-throughput applications (many users)
-- Cost-sensitive deployments
-- When using providers with KV-cache support
+-   High-throughput applications (many users)
+-   Cost-sensitive deployments
+-   When using providers with KV-cache support
 
 #### Implementation Complexity
 
@@ -256,10 +256,10 @@ Conversation history → Current task → Observations
 
 #### Problem
 
-- Agents treat all errors the same (generic retry)
-- Different error types need different recovery strategies
-- Transient errors (network timeout) vs permanent errors (logic bug)
-- Wastes retries on unrecoverable errors
+-   Agents treat all errors the same (generic retry)
+-   Different error types need different recovery strategies
+-   Transient errors (network timeout) vs permanent errors (logic bug)
+-   Wastes retries on unrecoverable errors
 
 #### Solution
 
@@ -285,21 +285,21 @@ permanent: [escalate immediately]
 
 #### Benefits
 
-- ✅ 40% fewer dead-end failures
-- ✅ Faster recovery (no wasted retries on permanent errors)
-- ✅ Better UX (user only interrupted when necessary)
-- ✅ Actionable error messages
+-   ✅ 40% fewer dead-end failures
+-   ✅ Faster recovery (no wasted retries on permanent errors)
+-   ✅ Better UX (user only interrupted when necessary)
+-   ✅ Actionable error messages
 
 #### Trade-offs
 
-- ⚠️ Requires error classification logic (pattern matching or LLM)
-- ⚠️ Some errors hard to classify (ambiguous)
+-   ⚠️ Requires error classification logic (pattern matching or LLM)
+-   ⚠️ Some errors hard to classify (ambiguous)
 
 #### When to Use
 
-- Production systems (where reliability matters)
-- Multi-step workflows (where one failure blocks progress)
-- User-facing agents (where errors impact experience)
+-   Production systems (where reliability matters)
+-   Multi-step workflows (where one failure blocks progress)
+-   User-facing agents (where errors impact experience)
 
 #### Implementation Complexity
 
@@ -320,10 +320,10 @@ See `PLAN.md` Section 6.9 for full implementation with `classifyError()` and rec
 
 #### Problem
 
-- Tool repeatedly fails (e.g., API down, DB connection lost)
-- Agent wastes steps calling same failing tool
-- Exhausts retry budgets without making progress
-- User waits unnecessarily
+-   Tool repeatedly fails (e.g., API down, DB connection lost)
+-   Agent wastes steps calling same failing tool
+-   Exhausts retry budgets without making progress
+-   User waits unnecessarily
 
 #### Solution
 
@@ -331,9 +331,9 @@ Temporarily disable tool after threshold failures:
 
 **States**:
 
-- **Closed**: Tool working normally
-- **Open**: Tool disabled after N failures (e.g., 3 consecutive)
-- **Half-Open**: Testing if tool recovered (after timeout)
+-   **Closed**: Tool working normally
+-   **Open**: Tool disabled after N failures (e.g., 3 consecutive)
+-   **Half-Open**: Testing if tool recovered (after timeout)
 
 **Flow**:
 
@@ -346,23 +346,23 @@ Temporarily disable tool after threshold failures:
 
 #### Benefits
 
-- ✅ Fast-fail (no waiting on broken tools)
-- ✅ Preserves retry budget for other tools
-- ✅ Automatic recovery detection
-- ✅ Prevents cascading failures
+-   ✅ Fast-fail (no waiting on broken tools)
+-   ✅ Preserves retry budget for other tools
+-   ✅ Automatic recovery detection
+-   ✅ Prevents cascading failures
 
 #### Trade-offs
 
-- ⚠️ Aggressive thresholds can disable tools too quickly
-- ⚠️ May need manual reset for certain failures
-- ⚠️ Timeout tuning required (too short → premature retry, too long → slow recovery)
+-   ⚠️ Aggressive thresholds can disable tools too quickly
+-   ⚠️ May need manual reset for certain failures
+-   ⚠️ Timeout tuning required (too short → premature retry, too long → slow recovery)
 
 #### When to Use
 
-- External API calls (unreliable dependencies)
-- Database operations (connection issues)
-- Tools with known instability
-- Production systems with high uptime requirements
+-   External API calls (unreliable dependencies)
+-   Database operations (connection issues)
+-   Tools with known instability
+-   Production systems with high uptime requirements
 
 #### Implementation Complexity
 
@@ -371,9 +371,9 @@ Temporarily disable tool after threshold failures:
 
 #### Configuration
 
-- **Failure threshold**: 3 (recommended starting point)
-- **Reset timeout**: 10s (lenient) to 60s (aggressive)
-- **Test call**: Single call in half-open state
+-   **Failure threshold**: 3 (recommended starting point)
+-   **Reset timeout**: 10s (lenient) to 60s (aggressive)
+-   **Test call**: Single call in half-open state
 
 #### Code Reference
 
@@ -389,12 +389,12 @@ See `PLAN.md` Section 6.9 for `CircuitBreaker` class implementation.
 
 #### Problem
 
-- Tool executes successfully (returns 200 OK)
-- But: side effect didn't happen (silent failure)
-  - Example: "Page created" but page not in DB
-  - Example: "Slug updated" but slug unchanged
-- Agent assumes success, continues with broken state
-- Downstream failures, user confusion
+-   Tool executes successfully (returns 200 OK)
+-   But: side effect didn't happen (silent failure)
+    -   Example: "Page created" but page not in DB
+    -   Example: "Slug updated" but slug unchanged
+-   Agent assumes success, continues with broken state
+-   Downstream failures, user confusion
 
 #### Solution
 
@@ -417,23 +417,23 @@ Verify expected state after mutation:
 
 #### Benefits
 
-- ✅ Catches 60% of silent failures
-- ✅ Agent self-corrects automatically
-- ✅ Reduces user intervention
-- ✅ More reliable workflows
+-   ✅ Catches 60% of silent failures
+-   ✅ Agent self-corrects automatically
+-   ✅ Reduces user intervention
+-   ✅ More reliable workflows
 
 #### Trade-offs
 
-- ⚠️ Adds 1 DB query per mutation (performance cost)
-- ⚠️ Increases tool execution time (~50-100ms)
-- ⚠️ Can produce false positives (e.g., eventual consistency)
+-   ⚠️ Adds 1 DB query per mutation (performance cost)
+-   ⚠️ Increases tool execution time (~50-100ms)
+-   ⚠️ Can produce false positives (e.g., eventual consistency)
 
 #### When to Use
 
-- Critical workflows (payment, data loss risk)
-- Multi-step operations (where failures cascade)
-- External integrations (unreliable APIs)
-- Production systems
+-   Critical workflows (payment, data loss risk)
+-   Multi-step operations (where failures cascade)
+-   External integrations (unreliable APIs)
+-   Production systems
 
 #### Implementation Complexity
 
@@ -444,16 +444,16 @@ Verify expected state after mutation:
 
 ```typescript
 async function createPage(input, context) {
-  // 1. Execute mutation
-  const page = await db.pages.create(input)
+	// 1. Execute mutation
+	const page = await db.pages.create(input);
 
-  // 2. Validate
-  const exists = await db.pages.findById(page.id)
-  if (!exists) {
-    throw new Error('Validation failed: Page not in DB')
-  }
+	// 2. Validate
+	const exists = await db.pages.findById(page.id);
+	if (!exists) {
+		throw new Error("Validation failed: Page not in DB");
+	}
 
-  return page
+	return page;
 }
 ```
 
@@ -469,10 +469,10 @@ async function createPage(input, context) {
 
 #### Problem
 
-- Agent picks one approach (linear execution)
-- Approach fails → stuck in dead end
-- No backup plan, escalates to user
-- Example: "Update page" when page doesn't exist
+-   Agent picks one approach (linear execution)
+-   Approach fails → stuck in dead end
+-   No backup plan, escalates to user
+-   Example: "Update page" when page doesn't exist
 
 #### Solution
 
@@ -482,45 +482,45 @@ Generate multiple alternative plans upfront, rank by feasibility, execute best, 
 
 1. **Generate Plans** (3 alternatives):
 
-   - Plan A: Reuse existing resources (fastest)
-   - Plan B: Create new resources (flexible)
-   - Plan C: Clone from template (balanced)
+    - Plan A: Reuse existing resources (fastest)
+    - Plan B: Create new resources (flexible)
+    - Plan C: Clone from template (balanced)
 
 2. **Rank by Feasibility**:
 
-   - Preflight validation: check if required resources exist
-   - Estimate cost (# of tool calls)
-   - Identify risks
+    - Preflight validation: check if required resources exist
+    - Estimate cost (# of tool calls)
+    - Identify risks
 
 3. **Execute Best Plan**:
 
-   - Try Plan A (highest feasibility)
-   - If fails → try Plan B (second best)
-   - If fails → try Plan C (last resort)
+    - Try Plan A (highest feasibility)
+    - If fails → try Plan B (second best)
+    - If fails → try Plan C (last resort)
 
 4. **Report Result**:
-   - Success: which plan worked
-   - Failure: all plans exhausted, escalate
+    - Success: which plan worked
+    - Failure: all plans exhausted, escalate
 
 #### Benefits
 
-- ✅ 40% fewer dead ends
-- ✅ Graceful degradation (tries 3 approaches)
-- ✅ Transparent reasoning (user sees which plan tried)
-- ✅ Better success rate on ambiguous tasks
+-   ✅ 40% fewer dead ends
+-   ✅ Graceful degradation (tries 3 approaches)
+-   ✅ Transparent reasoning (user sees which plan tried)
+-   ✅ Better success rate on ambiguous tasks
 
 #### Trade-offs
 
-- ⚠️ Adds planning overhead (2-3 LLM calls)
-- ⚠️ Slower for simple tasks (unnecessary for 1-step operations)
-- ⚠️ Can generate invalid plans (requires validation)
+-   ⚠️ Adds planning overhead (2-3 LLM calls)
+-   ⚠️ Slower for simple tasks (unnecessary for 1-step operations)
+-   ⚠️ Can generate invalid plans (requires validation)
 
 #### When to Use
 
-- Complex multi-step tasks
-- Ambiguous user requests ("create a contact page")
-- Tasks with multiple valid approaches
-- Architect/planning modes (not every request)
+-   Complex multi-step tasks
+-   Ambiguous user requests ("create a contact page")
+-   Tasks with multiple valid approaches
+-   Architect/planning modes (not every request)
 
 #### Implementation Complexity
 
@@ -541,10 +541,10 @@ See `PLAN.md` Section 6.10 for full implementation with `generateAlternativePlan
 
 #### Problem
 
-- Agent creates elaborate plan
-- Starts execution
-- Step 5 fails: required resource doesn't exist
-- Wasted 4 steps, need to re-plan
+-   Agent creates elaborate plan
+-   Starts execution
+-   Step 5 fails: required resource doesn't exist
+-   Wasted 4 steps, need to re-plan
 
 #### Solution
 
@@ -575,23 +575,23 @@ Validate plan feasibility before execution:
 
 #### Benefits
 
-- ✅ Catches issues early (before wasting tool calls)
-- ✅ Agent adjusts plan proactively
-- ✅ Fewer retries, faster completion
-- ✅ Better UX (user not interrupted mid-execution)
+-   ✅ Catches issues early (before wasting tool calls)
+-   ✅ Agent adjusts plan proactively
+-   ✅ Fewer retries, faster completion
+-   ✅ Better UX (user not interrupted mid-execution)
 
 #### Trade-offs
 
-- ⚠️ Adds upfront cost (validation queries)
-- ⚠️ Only works for deterministic checks (can't predict runtime errors)
-- ⚠️ Can be overly conservative (reject valid plans)
+-   ⚠️ Adds upfront cost (validation queries)
+-   ⚠️ Only works for deterministic checks (can't predict runtime errors)
+-   ⚠️ Can be overly conservative (reject valid plans)
 
 #### When to Use
 
-- Architect/planning modes
-- Complex multi-step operations
-- When execution is expensive (API costs, user waiting)
-- Before HITL operations (validate before asking user)
+-   Architect/planning modes
+-   Complex multi-step operations
+-   When execution is expensive (API costs, user waiting)
+-   Before HITL operations (validate before asking user)
 
 #### Implementation Complexity
 
@@ -601,16 +601,16 @@ Validate plan feasibility before execution:
 #### Example
 
 ```typescript
-const plan = [{ tool: 'cms.addSectionToPage', args: { sectionDefId: 'hero-new' } }]
+const plan = [{ tool: "cms.addSectionToPage", args: { sectionDefId: "hero-new" } }];
 
-const validation = await validatePlan(plan)
+const validation = await validatePlan(plan);
 // → { valid: false, issues: ['hero-new does not exist'], ... }
 
 // Agent adjusts plan:
 const revisedPlan = [
-  { tool: 'cms.createSectionDef', args: { key: 'hero-new' } },
-  { tool: 'cms.addSectionToPage', args: { sectionDefId: 'hero-new' } }
-]
+	{ tool: "cms.createSectionDef", args: { key: "hero-new" } },
+	{ tool: "cms.addSectionToPage", args: { sectionDefId: "hero-new" } },
+];
 ```
 
 ---
@@ -623,13 +623,13 @@ const revisedPlan = [
 
 #### Problem
 
-- Agent generates response
-- Response is functional but suboptimal
-- Examples:
-  - Forgets to address part of request
-  - Ambiguous wording
-  - Missing error handling
-  - No follow-up suggestions
+-   Agent generates response
+-   Response is functional but suboptimal
+-   Examples:
+    -   Forgets to address part of request
+    -   Ambiguous wording
+    -   Missing error handling
+    -   No follow-up suggestions
 
 #### Solution
 
@@ -645,26 +645,26 @@ Self-critique loop: Generate → Critique → Refine → Repeat
 
 #### Benefits
 
-- ✅ 20% accuracy improvement (research)
-- ✅ Higher quality outputs
-- ✅ Catches omissions, ambiguities
-- ✅ Proactive follow-up suggestions
+-   ✅ 20% accuracy improvement (research)
+-   ✅ Higher quality outputs
+-   ✅ Catches omissions, ambiguities
+-   ✅ Proactive follow-up suggestions
 
 #### Trade-offs
 
-- ⚠️ Adds 2-4 LLM calls per reflection loop
-- ⚠️ 30% latency increase
-- ⚠️ Can over-polish (diminishing returns)
-- ⚠️ Not suitable for low-latency applications
+-   ⚠️ Adds 2-4 LLM calls per reflection loop
+-   ⚠️ 30% latency increase
+-   ⚠️ Can over-polish (diminishing returns)
+-   ⚠️ Not suitable for low-latency applications
 
 #### When to Use
 
-- **Adaptive**: Agent decides based on task complexity
-  - Simple tasks (1-2 steps): skip reflection
-  - Complex tasks (multi-step, ambiguous): enable reflection
-- Knowledge-intensive tasks (reports, summaries)
-- Final outputs (user-facing responses)
-- Architect mode (planning quality matters)
+-   **Adaptive**: Agent decides based on task complexity
+    -   Simple tasks (1-2 steps): skip reflection
+    -   Complex tasks (multi-step, ambiguous): enable reflection
+-   Knowledge-intensive tasks (reports, summaries)
+-   Final outputs (user-facing responses)
+-   Architect mode (planning quality matters)
 
 #### Implementation Complexity
 
@@ -673,12 +673,12 @@ Self-critique loop: Generate → Critique → Refine → Repeat
 
 #### Complexity Factors (for adaptive reflection)
 
-- Multi-step: >3 sequential operations (+0.3)
-- Data transformation: Complex logic (+0.2)
-- External dependencies: HTTP calls (+0.2)
-- Ambiguous request: Unclear intent (+0.2)
-- High-risk: Destructive operations (+0.1)
-- **Threshold**: Enable reflection if score ≥ 0.5
+-   Multi-step: >3 sequential operations (+0.3)
+-   Data transformation: Complex logic (+0.2)
+-   External dependencies: HTTP calls (+0.2)
+-   Ambiguous request: Unclear intent (+0.2)
+-   High-risk: Destructive operations (+0.1)
+-   **Threshold**: Enable reflection if score ≥ 0.5
 
 #### Code Reference
 
@@ -696,10 +696,10 @@ See `PLAN.md` Section 6.11 for full implementation with `analyzeComplexity()` an
 
 #### Problem
 
-- Agent can make irreversible changes
-- Examples: delete page, overwrite schema, bulk operations
-- User has no control, must trust agent blindly
-- Mistakes are costly (data loss, broken workflows)
+-   Agent can make irreversible changes
+-   Examples: delete page, overwrite schema, bulk operations
+-   User has no control, must trust agent blindly
+-   Mistakes are costly (data loss, broken workflows)
 
 #### Solution
 
@@ -707,43 +707,43 @@ Pause execution before high-risk operations, ask user to approve:
 
 **HITL Tools** (require approval):
 
-- DELETE operations: `cms.deletePage`, `cms.deleteEntry`
-- Schema changes: `cms.syncSectionElements` (breaking changes)
-- Bulk operations: Any tool affecting 10+ resources
-- High-risk updates: Changing slugs (breaks URLs)
+-   DELETE operations: `cms.deletePage`, `cms.deleteEntry`
+-   Schema changes: `cms.syncSectionElements` (breaking changes)
+-   Bulk operations: Any tool affecting 10+ resources
+-   High-risk updates: Changing slugs (breaks URLs)
 
 **Flow**:
 
 1. Agent decides to call HITL tool
 2. Stream pauses, emit `approval_required` event
 3. Frontend shows modal with:
-   - Tool name & description
-   - Input parameters (collapsible)
-   - Risk explanation
-   - Actions: Approve / Reject / Ask for Alternative
+    - Tool name & description
+    - Input parameters (collapsible)
+    - Risk explanation
+    - Actions: Approve / Reject / Ask for Alternative
 4. User decides → POST `/v1/agent/approve` with decision
 5. Backend resumes execution or observes rejection
 
 #### Benefits
 
-- ✅ User control over critical operations
-- ✅ Prevents costly mistakes
-- ✅ Builds user trust
-- ✅ Audit trail (who approved what)
+-   ✅ User control over critical operations
+-   ✅ Prevents costly mistakes
+-   ✅ Builds user trust
+-   ✅ Audit trail (who approved what)
 
 #### Trade-offs
 
-- ⚠️ Breaks autonomous flow (requires human)
-- ⚠️ Adds latency (wait for user response)
-- ⚠️ Risk of alert fatigue (too many approvals)
+-   ⚠️ Breaks autonomous flow (requires human)
+-   ⚠️ Adds latency (wait for user response)
+-   ⚠️ Risk of alert fatigue (too many approvals)
 
 #### When to Use
 
-- Destructive operations (delete, truncate)
-- Schema migrations (breaking changes)
-- Bulk updates (>10 resources)
-- Production deployments
-- Financial transactions
+-   Destructive operations (delete, truncate)
+-   Schema migrations (breaking changes)
+-   Bulk updates (>10 resources)
+-   Production deployments
+-   Financial transactions
 
 #### Implementation Complexity
 
@@ -755,19 +755,19 @@ Pause execution before high-risk operations, ask user to approve:
 ```typescript
 // Backend: Tool without execute → auto-forwards to client
 export const deletePageTool = tool({
-  description: 'Delete page (requires approval)',
-  inputSchema: z.object({ id: z.string() })
-  // NO execute function → AI SDK forwards to client
-})
+	description: "Delete page (requires approval)",
+	inputSchema: z.object({ id: z.string() }),
+	// NO execute function → AI SDK forwards to client
+});
 
 // Frontend: Catch tool-call event
 onToolCall: async ({ toolCall }) => {
-  if (requiresApproval.includes(toolCall.toolName)) {
-    const decision = await showApprovalModal(toolCall)
-    return { approved: decision === 'approve' }
-  }
-  return { approved: true }
-}
+	if (requiresApproval.includes(toolCall.toolName)) {
+		const decision = await showApprovalModal(toolCall);
+		return { approved: decision === "approve" };
+	}
+	return { approved: true };
+};
 ```
 
 ---
@@ -780,12 +780,12 @@ onToolCall: async ({ toolCall }) => {
 
 #### Problem
 
-- Agent is purely reactive (waits for user commands)
-- Misses opportunities to help proactively
-- Examples:
-  - Empty page created → suggest adding sections
-  - Broken reference detected → offer to fix
-  - Ambiguous request → ask clarifying questions
+-   Agent is purely reactive (waits for user commands)
+-   Misses opportunities to help proactively
+-   Examples:
+    -   Empty page created → suggest adding sections
+    -   Broken reference detected → offer to fix
+    -   Ambiguous request → ask clarifying questions
 
 #### Solution
 
@@ -799,29 +799,29 @@ Agent monitors state, suggests improvements when asked or when critical:
 
 **When to Suggest**:
 
-- After task completion: "Now that X is done, would you like me to Y?"
-- Issue detected: "I noticed Z is empty/broken. Should I fix it?"
-- Clarification needed: "Which locale should I use? (default: en)"
+-   After task completion: "Now that X is done, would you like me to Y?"
+-   Issue detected: "I noticed Z is empty/broken. Should I fix it?"
+-   Clarification needed: "Which locale should I use? (default: en)"
 
 #### Benefits
 
-- ✅ Better UX (helpful, not just obedient)
-- ✅ Catches issues early
-- ✅ Reduces back-and-forth
-- ✅ Educates users on best practices
+-   ✅ Better UX (helpful, not just obedient)
+-   ✅ Catches issues early
+-   ✅ Reduces back-and-forth
+-   ✅ Educates users on best practices
 
 #### Trade-offs
 
-- ⚠️ Can be annoying if too frequent
-- ⚠️ User might feel pressured
-- ⚠️ Adds output length (more tokens)
+-   ⚠️ Can be annoying if too frequent
+-   ⚠️ User might feel pressured
+-   ⚠️ Adds output length (more tokens)
 
 #### When to Use
 
-- Tutorial/onboarding flows
-- Novice users (need guidance)
-- Complex workflows (many options)
-- **Recommended**: On-request mode (user controls proactivity)
+-   Tutorial/onboarding flows
+-   Novice users (need guidance)
+-   Complex workflows (many options)
+-   **Recommended**: On-request mode (user controls proactivity)
 
 #### Implementation Complexity
 
@@ -856,10 +856,10 @@ Preview: http://localhost:4000/pages/about"
 
 #### Problem
 
-- Agent executes in black box (no visibility into what phase it's in)
-- User doesn't know: planning vs executing vs stuck
-- No progress tracking
-- Debugging is difficult
+-   Agent executes in black box (no visibility into what phase it's in)
+-   User doesn't know: planning vs executing vs stuck
+-   No progress tracking
+-   Debugging is difficult
 
 #### Solution
 
@@ -867,41 +867,41 @@ Explicit state machine tracking agent phase:
 
 **States**:
 
-- **Planning**: Generating plan, validating feasibility
-- **Executing**: Running tools, making changes
-- **Verifying**: Checking results, validation
-- **Reflecting**: Self-critique (complex tasks only)
-- **Completed**: Goal achieved
-- **Stuck**: No progress after N attempts
-- **Escalated**: Needs human intervention
+-   **Planning**: Generating plan, validating feasibility
+-   **Executing**: Running tools, making changes
+-   **Verifying**: Checking results, validation
+-   **Reflecting**: Self-critique (complex tasks only)
+-   **Completed**: Goal achieved
+-   **Stuck**: No progress after N attempts
+-   **Escalated**: Needs human intervention
 
 **Transitions**:
 
-- Planning → Executing (plan ready)
-- Executing → Verifying (tools done)
-- Verifying → Completed (validation passed)
-- Verifying → Executing (retry needed)
-- Any → Stuck (repeated failures)
-- Any → Escalated (unrecoverable error)
+-   Planning → Executing (plan ready)
+-   Executing → Verifying (tools done)
+-   Verifying → Completed (validation passed)
+-   Verifying → Executing (retry needed)
+-   Any → Stuck (repeated failures)
+-   Any → Escalated (unrecoverable error)
 
 #### Benefits
 
-- ✅ Transparency (user sees what agent is doing)
-- ✅ Progress visualization (% complete)
-- ✅ Better debugging (see where it got stuck)
-- ✅ 14.9% accuracy improvement (AgentFlow)
+-   ✅ Transparency (user sees what agent is doing)
+-   ✅ Progress visualization (% complete)
+-   ✅ Better debugging (see where it got stuck)
+-   ✅ 14.9% accuracy improvement (AgentFlow)
 
 #### Trade-offs
 
-- ⚠️ Requires explicit phase detection logic
-- ⚠️ Can be over-engineered for simple tasks
+-   ⚠️ Requires explicit phase detection logic
+-   ⚠️ Can be over-engineered for simple tasks
 
 #### When to Use
 
-- Long-running tasks (>5 steps)
-- Complex multi-phase workflows
-- Production dashboards (monitoring)
-- User-facing progress indicators
+-   Long-running tasks (>5 steps)
+-   Complex multi-phase workflows
+-   Production dashboards (monitoring)
+-   User-facing progress indicators
 
 #### Implementation Complexity
 
@@ -922,9 +922,9 @@ See `PLAN.md` Section 6.12 for `LoopController` class with phase tracking.
 
 #### Problem
 
-- Agent keeps looping even after goal achieved
-- Or: agent stuck in infinite loop (same action failing)
-- Wastes steps, costs money, poor UX
+-   Agent keeps looping even after goal achieved
+-   Or: agent stuck in infinite loop (same action failing)
+-   Wastes steps, costs money, poor UX
 
 #### Solution
 
@@ -932,38 +932,38 @@ Detect convergence signals:
 
 **Completion Signals**:
 
-- Agent says "✅ Done", "Task finished", "Goal achieved"
-- No more pending subgoals
-- Quality threshold met (for reflection mode)
+-   Agent says "✅ Done", "Task finished", "Goal achieved"
+-   No more pending subgoals
+-   Quality threshold met (for reflection mode)
 
 **Stuck Signals**:
 
-- Same tool called 3x in a row with same error
-- No new information added in last N steps
-- Error rate > 50% in last 5 steps
+-   Same tool called 3x in a row with same error
+-   No new information added in last N steps
+-   Error rate > 50% in last 5 steps
 
 **Action**:
 
-- Completion → stop loop, return success
-- Stuck → escalate to user with explanation
+-   Completion → stop loop, return success
+-   Stuck → escalate to user with explanation
 
 #### Benefits
 
-- ✅ Early exit (saves steps)
-- ✅ Prevents infinite loops
-- ✅ Better UX (agent stops when done)
-- ✅ Cost optimization
+-   ✅ Early exit (saves steps)
+-   ✅ Prevents infinite loops
+-   ✅ Better UX (agent stops when done)
+-   ✅ Cost optimization
 
 #### Trade-offs
 
-- ⚠️ False positives (premature stop)
-- ⚠️ Pattern matching can be brittle
+-   ⚠️ False positives (premature stop)
+-   ⚠️ Pattern matching can be brittle
 
 #### When to Use
 
-- All agent loops (recommended as default)
-- Especially: unbounded step limits
-- Production systems (prevent runaway costs)
+-   All agent loops (recommended as default)
+-   Especially: unbounded step limits
+-   Production systems (prevent runaway costs)
 
 #### Implementation Complexity
 
@@ -975,22 +975,22 @@ Detect convergence signals:
 ```typescript
 // Detect completion
 function checkConvergence(steps: Step[]): boolean {
-  const lastStep = steps[steps.length - 1]
-  const completionPatterns = [/✅.*done/i, /completed successfully/i]
+	const lastStep = steps[steps.length - 1];
+	const completionPatterns = [/✅.*done/i, /completed successfully/i];
 
-  for (const pattern of completionPatterns) {
-    if (lastStep.text?.match(pattern)) {
-      return true // Task complete
-    }
-  }
+	for (const pattern of completionPatterns) {
+		if (lastStep.text?.match(pattern)) {
+			return true; // Task complete
+		}
+	}
 
-  return false
+	return false;
 }
 
 // Detect stuck
 function detectStuck(steps: Step[]): boolean {
-  const last3 = steps.slice(-3).map((s) => s.toolCalls?.[0]?.toolName)
-  return last3.every((t) => t === last3[0]) // Same tool 3x
+	const last3 = steps.slice(-3).map((s) => s.toolCalls?.[0]?.toolName);
+	return last3.every((t) => t === last3[0]); // Same tool 3x
 }
 ```
 
@@ -1004,12 +1004,12 @@ function detectStuck(steps: Step[]): boolean {
 
 #### Problem
 
-- Long tasks (10+ steps) interrupted by:
-  - Server restart
-  - Timeout (120s limit)
-  - User closes browser
-- All progress lost, must start over
-- Poor UX, wasted API calls
+-   Long tasks (10+ steps) interrupted by:
+    -   Server restart
+    -   Timeout (120s limit)
+    -   User closes browser
+-   All progress lost, must start over
+-   Poor UX, wasted API calls
 
 #### Solution
 
@@ -1017,20 +1017,20 @@ Periodically save agent state to DB, resume from checkpoint:
 
 **Checkpoint Contents**:
 
-- Session ID, trace ID, timestamp
-- Agent phase (planning/executing/completed)
-- Current subgoal, completed subgoals
-- Messages (full conversation history)
-- Working memory, subgoal memory
-- Execution state (step number, pending actions)
-- Metadata (token count, mode, estimated completion %)
+-   Session ID, trace ID, timestamp
+-   Agent phase (planning/executing/completed)
+-   Current subgoal, completed subgoals
+-   Messages (full conversation history)
+-   Working memory, subgoal memory
+-   Execution state (step number, pending actions)
+-   Metadata (token count, mode, estimated completion %)
 
 **Checkpoint Frequency**:
 
-- Every 3 steps (automatic)
-- Phase transitions (planning → executing)
-- Before HITL approvals
-- On errors (before retry)
+-   Every 3 steps (automatic)
+-   Phase transitions (planning → executing)
+-   Before HITL approvals
+-   On errors (before retry)
 
 **Resume Flow**:
 
@@ -1043,23 +1043,23 @@ Periodically save agent state to DB, resume from checkpoint:
 
 #### Benefits
 
-- ✅ Zero progress loss (resilient to crashes)
-- ✅ Resume in <1s
-- ✅ User can leave and return anytime
-- ✅ Debugging: replay from any checkpoint
+-   ✅ Zero progress loss (resilient to crashes)
+-   ✅ Resume in <1s
+-   ✅ User can leave and return anytime
+-   ✅ Debugging: replay from any checkpoint
 
 #### Trade-offs
 
-- ⚠️ DB storage cost (JSON checkpoint per session)
-- ⚠️ Adds write latency (checkpoint save ~50ms)
-- ⚠️ State reconstruction complexity
+-   ⚠️ DB storage cost (JSON checkpoint per session)
+-   ⚠️ Adds write latency (checkpoint save ~50ms)
+-   ⚠️ State reconstruction complexity
 
 #### When to Use
 
-- Long-running tasks (>5 steps)
-- User-facing applications (browser close risk)
-- Unreliable infrastructure (timeout risk)
-- Production systems (uptime matters)
+-   Long-running tasks (>5 steps)
+-   User-facing applications (browser close risk)
+-   Unreliable infrastructure (timeout risk)
+-   Production systems (uptime matters)
 
 #### Implementation Complexity
 
@@ -1068,9 +1068,9 @@ Periodically save agent state to DB, resume from checkpoint:
 
 #### Storage Estimate
 
-- Checkpoint size: ~10-50 KB (JSON)
-- Frequency: Every 3 steps
-- 10-step task: ~3 checkpoints = 30-150 KB total
+-   Checkpoint size: ~10-50 KB (JSON)
+-   Frequency: Every 3 steps
+-   10-step task: ~3 checkpoints = 30-150 KB total
 
 #### Code Reference
 
@@ -1088,10 +1088,10 @@ See `PLAN.md` Section 6.8 for `CheckpointManager` class with save/restore/resume
 
 #### Problem
 
-- Tools scattered across codebase
-- No central discovery mechanism
-- Hard to filter by capability, risk, mode
-- Metadata (requires approval, risk level) is ad-hoc
+-   Tools scattered across codebase
+-   No central discovery mechanism
+-   Hard to filter by capability, risk, mode
+-   Metadata (requires approval, risk level) is ad-hoc
 
 #### Solution
 
@@ -1099,40 +1099,40 @@ Central registry with extended metadata:
 
 **Metadata Fields**:
 
-- `id`: Unique identifier (`cms.createPage`)
-- `category`: `cms`, `memory`, `http`, `planning`
-- `riskLevel`: `safe`, `moderate`, `high`
-- `requiresApproval`: Boolean (HITL flag)
-- `allowedModes`: Array of modes (`['cms-crud', 'architect']`)
-- `tags`: Array of strings (`['write', 'page', 'cms']`)
+-   `id`: Unique identifier (`cms.createPage`)
+-   `category`: `cms`, `memory`, `http`, `planning`
+-   `riskLevel`: `safe`, `moderate`, `high`
+-   `requiresApproval`: Boolean (HITL flag)
+-   `allowedModes`: Array of modes (`['cms-crud', 'architect']`)
+-   `tags`: Array of strings (`['write', 'page', 'cms']`)
 
 **Registry Methods**:
 
-- `register(id, tool)`: Add tool
-- `get(id)`: Get single tool
-- `getToolsForMode(mode)`: Filter by mode
-- `getToolsByRisk(risk)`: Filter by risk level
-- `getApprovalTools()`: Get all HITL tools
+-   `register(id, tool)`: Add tool
+-   `get(id)`: Get single tool
+-   `getToolsForMode(mode)`: Filter by mode
+-   `getToolsByRisk(risk)`: Filter by risk level
+-   `getApprovalTools()`: Get all HITL tools
 
 #### Benefits
 
-- ✅ Centralized management
-- ✅ Dynamic discovery (query by metadata)
-- ✅ Mode-based security (prevent unauthorized ops)
-- ✅ Easy to extend (add new tools)
-- ✅ Type-safe (TypeScript interfaces)
+-   ✅ Centralized management
+-   ✅ Dynamic discovery (query by metadata)
+-   ✅ Mode-based security (prevent unauthorized ops)
+-   ✅ Easy to extend (add new tools)
+-   ✅ Type-safe (TypeScript interfaces)
 
 #### Trade-offs
 
-- ⚠️ Upfront design cost (metadata schema)
-- ⚠️ Requires discipline (all tools must register)
+-   ⚠️ Upfront design cost (metadata schema)
+-   ⚠️ Requires discipline (all tools must register)
 
 #### When to Use
 
-- Medium to large projects (>10 tools)
-- Multiple agent modes
-- Security requirements (RBAC, approval gates)
-- Team environments (shared tool catalog)
+-   Medium to large projects (>10 tools)
+-   Multiple agent modes
+-   Security requirements (RBAC, approval gates)
+-   Team environments (shared tool catalog)
 
 #### Implementation Complexity
 
@@ -1153,9 +1153,9 @@ See `PLAN.md` Section 6 (Tool Organization Architecture) for full `ToolRegistry`
 
 #### Problem
 
-- All tools available to agent all the time
-- Risk: agent uses destructive tool in read-only mode
-- Example: "Ask mode" should not be able to delete pages
+-   All tools available to agent all the time
+-   Risk: agent uses destructive tool in read-only mode
+-   Example: "Ask mode" should not be able to delete pages
 
 #### Solution
 
@@ -1163,50 +1163,50 @@ Tag tools with allowed modes, filter at runtime:
 
 **Modes**:
 
-- **Architect**: Planning, validation (read-only + validatePlan)
-- **CMS CRUD**: Full CRUD operations (all CMS tools)
-- **Debug**: Fix errors (read + single corrective write)
-- **Ask**: Inspect state (read-only tools only)
+-   **Architect**: Planning, validation (read-only + validatePlan)
+-   **CMS CRUD**: Full CRUD operations (all CMS tools)
+-   **Debug**: Fix errors (read + single corrective write)
+-   **Ask**: Inspect state (read-only tools only)
 
 **Tool Metadata**:
 
 ```typescript
 createPageTool = {
-  allowedModes: ['cms-crud'] // Only available in CRUD mode
-  // ...
-}
+	allowedModes: ["cms-crud"], // Only available in CRUD mode
+	// ...
+};
 
 validatePlanTool = {
-  allowedModes: ['architect'] // Only available in Architect mode
-  // ...
-}
+	allowedModes: ["architect"], // Only available in Architect mode
+	// ...
+};
 ```
 
 **Runtime Filtering**:
 
 ```typescript
-const tools = registry.getToolsForMode(currentMode)
+const tools = registry.getToolsForMode(currentMode);
 // Returns only tools allowed in current mode
 ```
 
 #### Benefits
 
-- ✅ Mode-based security (prevent unauthorized ops)
-- ✅ Clearer agent capabilities (mode defines what agent can do)
-- ✅ Reduces tool choice complexity (fewer options)
-- ✅ User control (switch modes to change capabilities)
+-   ✅ Mode-based security (prevent unauthorized ops)
+-   ✅ Clearer agent capabilities (mode defines what agent can do)
+-   ✅ Reduces tool choice complexity (fewer options)
+-   ✅ User control (switch modes to change capabilities)
 
 #### Trade-offs
 
-- ⚠️ Requires upfront mode design
-- ⚠️ Agent might get stuck if mode too restrictive
+-   ⚠️ Requires upfront mode design
+-   ⚠️ Agent might get stuck if mode too restrictive
 
 #### When to Use
 
-- Multi-mode agents
-- Security-sensitive operations
-- User-controlled agent capabilities
-- Team environments (different user roles)
+-   Multi-mode agents
+-   Security-sensitive operations
+-   User-controlled agent capabilities
+-   Team environments (different user roles)
 
 #### Implementation Complexity
 
@@ -1223,10 +1223,10 @@ const tools = registry.getToolsForMode(currentMode)
 
 #### Problem
 
-- Single agent tries to do everything
-- Conflicting responsibilities (plan vs execute vs debug)
-- Context pollution (planning context mixed with execution)
-- Hard to optimize (different tasks need different strategies)
+-   Single agent tries to do everything
+-   Conflicting responsibilities (plan vs execute vs debug)
+-   Context pollution (planning context mixed with execution)
+-   Hard to optimize (different tasks need different strategies)
 
 #### Solution
 
@@ -1244,45 +1244,45 @@ Orchestrator (master)
 
 **Orchestrator Responsibilities**:
 
-- Classify user intent → route to appropriate agent
-- Mode switching (escalate from Ask → CRUD if user wants changes)
-- Context passing (transfer relevant info between agents)
-- Final response assembly
+-   Classify user intent → route to appropriate agent
+-   Mode switching (escalate from Ask → CRUD if user wants changes)
+-   Context passing (transfer relevant info between agents)
+-   Final response assembly
 
 **Sub-Agent Specialization**:
 
-- **Architect**: Plans multi-step workflows, validates feasibility
-  - Tools: read-only + `validatePlan`
-  - Max steps: 6
-- **CRUD**: Executes mutations
-  - Tools: all CMS CRUD
-  - Max steps: 10
-- **Debug**: Fixes failed operations
-  - Tools: read + single corrective write
-  - Max steps: 4
-- **Ask**: Explains CMS state
-  - Tools: read-only
-  - Max steps: 6
+-   **Architect**: Plans multi-step workflows, validates feasibility
+    -   Tools: read-only + `validatePlan`
+    -   Max steps: 6
+-   **CRUD**: Executes mutations
+    -   Tools: all CMS CRUD
+    -   Max steps: 10
+-   **Debug**: Fixes failed operations
+    -   Tools: read + single corrective write
+    -   Max steps: 4
+-   **Ask**: Explains CMS state
+    -   Tools: read-only
+    -   Max steps: 6
 
 #### Benefits
 
-- ✅ Cleaner contexts (no pollution)
-- ✅ Specialized optimization (different strategies per agent)
-- ✅ Easier debugging (know which agent failed)
-- ✅ Better performance (focused agents)
+-   ✅ Cleaner contexts (no pollution)
+-   ✅ Specialized optimization (different strategies per agent)
+-   ✅ Easier debugging (know which agent failed)
+-   ✅ Better performance (focused agents)
 
 #### Trade-offs
 
-- ⚠️ Complex orchestration logic
-- ⚠️ Context transfer overhead
-- ⚠️ Harder to reason about global flow
+-   ⚠️ Complex orchestration logic
+-   ⚠️ Context transfer overhead
+-   ⚠️ Harder to reason about global flow
 
 #### When to Use
 
-- Complex applications (many responsibilities)
-- Distinct workflows (planning vs execution vs debugging)
-- Performance optimization (specialize models per agent)
-- Team development (different teams own different agents)
+-   Complex applications (many responsibilities)
+-   Distinct workflows (planning vs execution vs debugging)
+-   Performance optimization (specialize models per agent)
+-   Team development (different teams own different agents)
 
 #### Implementation Complexity
 
@@ -1381,11 +1381,11 @@ Orchestrator: [Assembles final response]
 
 **Priority Key**:
 
-- **P0**: Implement first (foundational, security, safety)
-- **P1**: Implement for production (scalability, reliability)
-- **P2**: Implement for maturity (optimization, better UX)
-- **P3**: Implement if needed (specific use cases)
-- **P4**: Implement when scaling (complex systems)
+-   **P0**: Implement first (foundational, security, safety)
+-   **P1**: Implement for production (scalability, reliability)
+-   **P2**: Implement for maturity (optimization, better UX)
+-   **P3**: Implement if needed (specific use cases)
+-   **P4**: Implement when scaling (complex systems)
 
 ---
 
@@ -1420,10 +1420,10 @@ Orchestrator: [Assembles final response]
 
 **v1.0** (2025-11-07)
 
-- Initial compilation from ReAct CMS agent research
-- 17 patterns documented
-- Research citations added
-- Implementation guidance included
+-   Initial compilation from ReAct CMS agent research
+-   17 patterns documented
+-   Research citations added
+-   Implementation guidance included
 
 ---
 

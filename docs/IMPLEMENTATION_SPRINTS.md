@@ -36,6 +36,524 @@
 
 ---
 
+## Sprint 15: Universal Working Memory System
+
+**Goal**: Implement research-based universal working memory for entity reference resolution across all CMS resource types (pages, sections, collections, media, tasks) - language-agnostic, no extra LLM calls, token-efficient.
+
+**Duration**: 6-8 hours
+
+**Prerequisites**: Sprint 13 completed (ReAct agent operational)
+
+**Research Foundation**: Mem0, A-MEM, AWS AgentCore Memory, Anthropic Context Engineering, Galileo AI Context Engineering, AI SDK v6 patterns
+
+**Key Insight**: Working memory = RAM (what agent sees NOW), not hard drive (full history). Extract entities from tool results → inject ALWAYS → let LLM ignore if not needed.
+
+### Tasks
+
+#### 1. Create Working Memory Module (2-3 hours)
+
+**1.1 Create Module Structure**
+
+```bash
+mkdir -p server/services/working-memory/__tests__
+touch server/services/working-memory/{index.ts,entity-extractor.ts,working-context.ts,types.ts}
+```
+
+**1.2 Define Types (`types.ts`)**
+
+```typescript
+export interface Entity {
+  type: string;        // 'page' | 'section' | 'collection' | 'media' | 'entry' | 'task'
+  id: string;
+  name: string;
+  slug?: string;
+  timestamp: Date;
+}
+
+export interface WorkingContextState {
+  entities: Entity[];
+}
+```
+
+**1.3 Implement Entity Extractor (`entity-extractor.ts`)**
+
+```typescript
+import { Entity } from './types';
+
+export class EntityExtractor {
+  /**
+   * Extract entities from any tool result
+   * Universal patterns: single resource, search results, list results
+   */
+  extract(toolName: string, toolResult: any): Entity[] {
+    if (!toolResult) return [];
+    
+    const entities: Entity[] = [];
+    const type = this.inferType(toolName);
+    
+    // Pattern 1: Single resource (cms_getPage, cms_getSection, etc.)
+    if (toolResult.id && toolResult.name) {
+      entities.push(this.createEntity(type, toolResult));
+    }
+    
+    // Pattern 2: Search results (cms_findResource)
+    if (toolResult.matches && Array.isArray(toolResult.matches)) {
+      for (const match of toolResult.matches.slice(0, 3)) {
+        entities.push(this.createEntity(match.type || type, match));
+      }
+    }
+    
+    // Pattern 3: List results (cms_listPages, etc.)
+    if (Array.isArray(toolResult)) {
+      for (const item of toolResult.slice(0, 5)) {
+        if (item?.id) {
+          entities.push(this.createEntity(type, item));
+        }
+      }
+    }
+    
+    return entities;
+  }
+  
+  private inferType(toolName: string): string {
+    // cms_getPage → page
+    const match = toolName.match(/cms_(get|find|list|create|update|delete)([A-Z]\w+)/);
+    return match?.[2]?.toLowerCase() || 'resource';
+  }
+  
+  private createEntity(type: string, data: any): Entity {
+    return {
+      type,
+      id: data.id,
+      name: data.name || data.slug || data.title || 'Unnamed',
+      slug: data.slug,
+      timestamp: new Date()
+    };
+  }
+}
+```
+
+**1.4 Implement Working Context (`working-context.ts`)**
+
+```typescript
+import { Entity, WorkingContextState } from './types';
+
+export class WorkingContext {
+  private entities: Entity[] = [];
+  private readonly MAX_ENTITIES = 10; // Sliding window
+  
+  add(entity: Entity): void {
+    // Add to front, keep only recent N
+    this.entities.unshift(entity);
+    this.entities = this.entities.slice(0, this.MAX_ENTITIES);
+  }
+  
+  addMany(entities: Entity[]): void {
+    entities.forEach(e => this.add(e));
+  }
+  
+  getRecent(count: number = 5): Entity[] {
+    return this.entities.slice(0, count);
+  }
+  
+  toContextString(): string {
+    if (this.entities.length === 0) return '';
+    
+    // Group by type for readability
+    const grouped: Record<string, Entity[]> = {};
+    for (const entity of this.entities) {
+      if (!grouped[entity.type]) grouped[entity.type] = [];
+      grouped[entity.type].push(entity);
+    }
+    
+    const lines: string[] = ['[WORKING MEMORY]'];
+    for (const [type, items] of Object.entries(grouped)) {
+      lines.push(`${type}s:`);
+      for (const item of items.slice(0, 3)) { // Max 3 per type
+        lines.push(`  - "${item.name}" (${item.id})`);
+      }
+    }
+    
+    return lines.join('\n');
+  }
+  
+  toJSON(): WorkingContextState {
+    return { entities: this.entities };
+  }
+  
+  static fromJSON(state: WorkingContextState): WorkingContext {
+    const context = new WorkingContext();
+    context.entities = state.entities.map(e => ({
+      ...e,
+      timestamp: new Date(e.timestamp)
+    }));
+    return context;
+  }
+  
+  clear(): void {
+    this.entities = [];
+  }
+}
+```
+
+**1.5 Create Public API (`index.ts`)**
+
+```typescript
+export { EntityExtractor } from './entity-extractor';
+export { WorkingContext } from './working-context';
+export type { Entity, WorkingContextState } from './types';
+```
+
+#### 2. Write Unit Tests (1 hour)
+
+**2.1 Test Entity Extractor (`__tests__/entity-extractor.test.ts`)**
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { EntityExtractor } from '../entity-extractor';
+
+describe('EntityExtractor', () => {
+  const extractor = new EntityExtractor();
+  
+  it('extracts single resource', () => {
+    const result = { id: 'abc', name: 'About Page', slug: 'about' };
+    const entities = extractor.extract('cms_getPage', result);
+    
+    expect(entities).toHaveLength(1);
+    expect(entities[0]).toMatchObject({
+      type: 'page',
+      id: 'abc',
+      name: 'About Page',
+      slug: 'about'
+    });
+  });
+  
+  it('extracts search results', () => {
+    const result = {
+      matches: [
+        { id: '1', name: 'Page 1', slug: 'page-1', type: 'page' },
+        { id: '2', name: 'Page 2', slug: 'page-2', type: 'page' }
+      ]
+    };
+    const entities = extractor.extract('cms_findResource', result);
+    
+    expect(entities).toHaveLength(2);
+  });
+  
+  it('limits list results to 5', () => {
+    const result = Array.from({ length: 10 }, (_, i) => ({
+      id: `${i}`,
+      name: `Item ${i}`
+    }));
+    const entities = extractor.extract('cms_listPages', result);
+    
+    expect(entities).toHaveLength(5);
+  });
+  
+  it('handles empty results', () => {
+    expect(extractor.extract('cms_getPage', null)).toEqual([]);
+    expect(extractor.extract('cms_getPage', {})).toEqual([]);
+  });
+});
+```
+
+**2.2 Test Working Context (`__tests__/working-context.test.ts`)**
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { WorkingContext } from '../working-context';
+
+describe('WorkingContext', () => {
+  it('adds entities to front', () => {
+    const context = new WorkingContext();
+    context.add({ type: 'page', id: '1', name: 'Page 1', timestamp: new Date() });
+    context.add({ type: 'page', id: '2', name: 'Page 2', timestamp: new Date() });
+    
+    const recent = context.getRecent(2);
+    expect(recent[0].id).toBe('2'); // Most recent first
+    expect(recent[1].id).toBe('1');
+  });
+  
+  it('prunes old entities (sliding window)', () => {
+    const context = new WorkingContext();
+    for (let i = 0; i < 15; i++) {
+      context.add({ type: 'page', id: `${i}`, name: `Page ${i}`, timestamp: new Date() });
+    }
+    
+    const all = context.getRecent(20);
+    expect(all).toHaveLength(10); // Max 10 entities
+  });
+  
+  it('formats context string', () => {
+    const context = new WorkingContext();
+    context.add({ type: 'page', id: '1', name: 'About', timestamp: new Date() });
+    context.add({ type: 'section', id: '2', name: 'Hero', timestamp: new Date() });
+    
+    const str = context.toContextString();
+    expect(str).toContain('[WORKING MEMORY]');
+    expect(str).toContain('pages:');
+    expect(str).toContain('"About" (1)');
+    expect(str).toContain('sections:');
+    expect(str).toContain('"Hero" (2)');
+  });
+  
+  it('serializes/deserializes', () => {
+    const context = new WorkingContext();
+    context.add({ type: 'page', id: '1', name: 'Page', timestamp: new Date() });
+    
+    const json = context.toJSON();
+    const restored = WorkingContext.fromJSON(json);
+    
+    expect(restored.getRecent(1)[0].id).toBe('1');
+  });
+});
+```
+
+#### 3. Integrate with Orchestrator (2-3 hours)
+
+**3.1 Update Orchestrator (`server/agent/orchestrator.ts`)**
+
+```typescript
+import { EntityExtractor, WorkingContext } from '../services/working-memory';
+
+// Store working contexts per session (in-memory for now)
+const workingContexts = new Map<string, WorkingContext>();
+
+function getWorkingContext(sessionId: string): WorkingContext {
+  if (!workingContexts.has(sessionId)) {
+    workingContexts.set(sessionId, new WorkingContext());
+  }
+  return workingContexts.get(sessionId)!;
+}
+
+// Update getSystemPrompt to accept workingContext
+function getSystemPrompt(context: {
+  toolsList: string[];
+  toolCount: number;
+  sessionId: string;
+  currentDate: string;
+  workingMemory?: string;  // NEW
+}): string {
+  const promptPath = path.join(__dirname, '../prompts/react.xml');
+  const template = fs.readFileSync(promptPath, 'utf-8');
+  
+  const compiled = Handlebars.compile(template);
+  return compiled({
+    ...context,
+    toolsFormatted: context.toolsList.map((t) => `- ${t}`).join('\n'),
+    workingMemory: context.workingMemory || '', // NEW
+  });
+}
+
+// In streamAgentWithApproval function:
+export async function streamAgentWithApproval(...) {
+  const extractor = new EntityExtractor();
+  const workingContext = getWorkingContext(context.sessionId);
+  
+  // Generate system prompt with working memory
+  const systemPrompt = getSystemPrompt({
+    toolsList: Object.keys(ALL_TOOLS),
+    toolCount: Object.keys(ALL_TOOLS).length,
+    sessionId: context.sessionId,
+    currentDate: new Date().toISOString().split("T")[0],
+    workingMemory: workingContext.toContextString(), // NEW
+  });
+  
+  // Process stream chunks
+  for await (const chunk of streamResult.fullStream) {
+    if (chunk.type === 'tool-result') {
+      // Extract entities from tool result
+      const entities = extractor.extract(chunk.toolName, chunk.output);
+      if (entities.length > 0) {
+        workingContext.addMany(entities);
+        
+        context.logger.info('Extracted entities', {
+          toolName: chunk.toolName,
+          entityCount: entities.length,
+          entities: entities.map(e => `${e.type}:${e.name}`)
+        });
+      }
+    }
+    // ... rest of stream processing
+  }
+}
+```
+
+**3.2 Update Session Service (`server/services/session-service.ts`)**
+
+Add working context persistence:
+
+```typescript
+// Add to SessionService
+async saveWorkingContext(sessionId: string, context: WorkingContext): Promise<void> {
+  const state = context.toJSON();
+  await this.db.update(schema.sessions)
+    .set({ workingContext: JSON.stringify(state) })
+    .where(eq(schema.sessions.id, sessionId));
+}
+
+async loadWorkingContext(sessionId: string): Promise<WorkingContext> {
+  const session = await this.db.query.sessions.findFirst({
+    where: eq(schema.sessions.id, sessionId)
+  });
+  
+  if (!session?.workingContext) {
+    return new WorkingContext();
+  }
+  
+  return WorkingContext.fromJSON(JSON.parse(session.workingContext));
+}
+```
+
+**3.3 Update Database Schema**
+
+```bash
+# Add migration
+pnpm db:generate
+pnpm db:push
+```
+
+Or manually add column:
+```typescript
+// In server/db/schema.ts
+export const sessions = sqliteTable("sessions", {
+  // ... existing fields
+  workingContext: text("working_context", { mode: "json" }),
+});
+```
+
+#### 4. Update System Prompt (30 min)
+
+**4.1 Update `server/prompts/react.xml`**
+
+```xml
+<agent>
+You are an autonomous AI assistant using the ReAct (Reasoning and Acting) pattern.
+
+{{{workingMemory}}}
+
+**CORE LOOP:**
+Think → Act → Observe → Repeat until completion
+
+**REFERENCE RESOLUTION:**
+- When user mentions "this page", "that section", "it", "them", or similar references, check WORKING MEMORY above
+- WORKING MEMORY shows recently accessed resources - these are likely what user is referring to
+- If user's reference is ambiguous, use the MOST RECENT resource from WORKING MEMORY of the appropriate type
+- Example: User says "what sections are on this page?" → Check WORKING MEMORY for most recent page
+
+<!-- rest of prompt -->
+</agent>
+```
+
+#### 5. Test End-to-End (1 hour)
+
+**5.1 Test Scenario: Original Bug**
+
+```bash
+# Start servers
+pnpm dev
+
+# In browser: http://localhost:3000/assistant
+
+# User: "delete all sections from about page"
+# Expected: Agent confirms deletion, extracts "About page" entity
+
+# User: "zes" (typo for yes)
+# Expected: Deletion proceeds
+
+# User: "what sections are on this page?"
+# Expected: Agent resolves "this page" → "About page" ✅
+```
+
+**5.2 Verify Logs**
+
+Look for:
+```
+[INFO] Extracted entities: toolName=cms_getPage, entityCount=1, entities=["page:About"]
+[INFO] Working memory injected: "[WORKING MEMORY]\npages:\n  - \"About\" (abc-123)"
+```
+
+**5.3 Test Other Scenarios**
+
+```
+# Test collections
+User: "show me blog posts"
+# → Extracts collection entities
+
+User: "how many entries in this collection?"
+# → Resolves "this collection" ✅
+
+# Test media
+User: "list images"
+# → Extracts media entities
+
+User: "delete that image"
+# → Resolves "that image" ✅
+```
+
+#### 6. Add Feature Flag (15 min)
+
+**6.1 Environment Variable**
+
+```bash
+# .env
+ENABLE_WORKING_MEMORY=true
+```
+
+**6.2 Conditional Logic**
+
+```typescript
+// In orchestrator.ts
+const workingMemoryEnabled = process.env.ENABLE_WORKING_MEMORY === 'true';
+
+if (workingMemoryEnabled) {
+  const workingContext = getWorkingContext(context.sessionId);
+  // ... extract entities and inject context
+}
+```
+
+### Deliverables
+
+✅ **Universal Working Memory System**:
+- Entity extractor (universal patterns for ANY resource type)
+- Working context (sliding window, max 10 entities)
+- Orchestrator integration (onStepFinish + getSystemPrompt)
+- Session persistence (save/load working context)
+- Unit tests (90%+ coverage)
+
+✅ **Documentation**:
+- WORKING_MEMORY_PLAN.md (research-based design)
+- Updated QUICK_REFERENCE.md (usage guide)
+- Integration tests (end-to-end scenarios)
+
+✅ **Acceptance Criteria**:
+- ✅ Agent resolves "this page" → "About page" after context break
+- ✅ Works for all entity types (pages, sections, collections, media, tasks)
+- ✅ Language-agnostic (no hardcoded English patterns)
+- ✅ No extra LLM calls (always inject, let agent ignore)
+- ✅ 70%+ token reduction in input context
+- ✅ Feature flag allows easy disable
+- ✅ Zero breaking changes to existing code
+
+### Success Metrics
+
+**Performance**:
+- Token reduction: Before: ~2000 tokens → After: ~600 tokens (70% reduction)
+- Latency overhead: <10ms for entity extraction + context injection
+- Reference resolution accuracy: 95%+ (test with 20 scenarios)
+
+**Code Quality**:
+- Test coverage: 90%+ for working-memory module
+- Zero TypeScript errors
+- Clean module boundaries (self-contained)
+
+**User Experience**:
+- Agent understands "this/that/it" references in all languages
+- Works across all entity types (universal)
+- Graceful degradation when disabled
+
+---
+
 ## ⚠️ MAJOR REFACTORS
 
 ### Sprint 12: Native AI SDK v6 Refactor (November 2025)
