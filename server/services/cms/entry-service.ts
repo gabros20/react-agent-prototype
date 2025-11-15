@@ -266,6 +266,98 @@ export class EntryService {
     await this.vectorIndex.delete(id);
   }
 
+  /**
+   * Get all entries for a collection (granular fetching)
+   * @param collectionId - Collection ID
+   * @param includeContent - Include full content (default: false for token efficiency)
+   * @param localeCode - Locale for content (default: 'en')
+   */
+  async getCollectionEntries(collectionId: string, includeContent = false, localeCode = 'en') {
+    // Verify collection exists
+    const collection = await this.db.query.collectionDefinitions.findFirst({
+      where: eq(schema.collectionDefinitions.id, collectionId),
+    });
+
+    if (!collection) {
+      throw new Error(`Collection with id '${collectionId}' not found`);
+    }
+
+    // Fetch entries with optional content
+    if (includeContent) {
+      const entries = await this.db.query.collectionEntries.findMany({
+        where: eq(schema.collectionEntries.collectionId, collectionId),
+        with: {
+          contents: true,
+        },
+      });
+
+      // Format response with content for requested locale
+      return entries.map((entry: any) => {
+        const content = entry.contents?.find((c: any) => c.localeCode === localeCode);
+        return {
+          id: entry.id,
+          slug: entry.slug,
+          title: entry.title,
+          collectionId: entry.collectionId,
+          content: content?.content || {},
+        };
+      });
+    } else {
+      // Lightweight - only metadata
+      const entries = await this.db.query.collectionEntries.findMany({
+        where: eq(schema.collectionEntries.collectionId, collectionId),
+      });
+
+      return entries.map((entry: any) => ({
+        id: entry.id,
+        slug: entry.slug,
+        title: entry.title,
+        collectionId: entry.collectionId,
+      }));
+    }
+  }
+
+  /**
+   * Get content for a specific entry (granular fetching)
+   * @param entryId - Entry ID
+   * @param localeCode - Locale code (default: 'en')
+   */
+  async getEntryContent(entryId: string, localeCode = 'en') {
+    // Verify entry exists
+    const entry = await this.db.query.collectionEntries.findFirst({
+      where: eq(schema.collectionEntries.id, entryId),
+    });
+
+    if (!entry) {
+      throw new Error(`Entry with id '${entryId}' not found`);
+    }
+
+    // Get content for locale
+    const content = await this.db.query.entryContents.findFirst({
+      where: (ec, { and, eq }) =>
+        and(eq(ec.entryId, entryId), eq(ec.localeCode, localeCode)),
+    });
+
+    if (!content) {
+      return {
+        entryId,
+        slug: entry.slug,
+        title: entry.title,
+        localeCode,
+        content: {},
+        message: 'No content found for this locale',
+      };
+    }
+
+    return {
+      entryId,
+      slug: entry.slug,
+      title: entry.title,
+      localeCode,
+      content: content.content,
+    };
+  }
+
   private validateSlug(slug: string): void {
     if (!/^[a-z0-9-]{2,64}$/.test(slug)) {
       throw new Error(

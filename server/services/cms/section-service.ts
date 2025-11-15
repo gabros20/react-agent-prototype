@@ -263,6 +263,102 @@ export class SectionService {
     }
   }
 
+  /**
+   * Get all sections for a page (granular fetching)
+   * @param pageId - Page ID
+   * @param includeContent - Include full content (default: false for token efficiency)
+   * @param localeCode - Locale for content (default: 'en')
+   */
+  async getPageSections(pageId: string, includeContent = false, localeCode = 'en') {
+    // Verify page exists
+    const page = await this.db.query.pages.findFirst({
+      where: eq(schema.pages.id, pageId),
+    });
+
+    if (!page) {
+      throw new Error(`Page with id '${pageId}' not found`);
+    }
+
+    // Fetch sections with optional content
+    const sections = await this.db.query.pageSections.findMany({
+      where: eq(schema.pageSections.pageId, pageId),
+      with: includeContent ? {
+        sectionDefinition: true,
+        contents: true,
+      } : {
+        sectionDefinition: true,
+      },
+      orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
+    });
+
+    // Format response
+    return sections.map((section: any) => {
+      const base = {
+        id: section.id,
+        sectionDefId: section.sectionDefId,
+        sectionKey: section.sectionDefinition?.key,
+        sectionName: section.sectionDefinition?.name,
+        sortOrder: section.sortOrder,
+        status: section.status,
+      };
+
+      if (includeContent && section.contents) {
+        // Find content for requested locale
+        const content = section.contents.find((c: any) => c.localeCode === localeCode);
+        return {
+          ...base,
+          content: content?.content || {},
+        };
+      }
+
+      return base;
+    });
+  }
+
+  /**
+   * Get content for a specific section (granular fetching)
+   * @param pageSectionId - Page section ID
+   * @param localeCode - Locale code (default: 'en')
+   */
+  async getSectionContent(pageSectionId: string, localeCode = 'en') {
+    // Verify page section exists
+    const pageSection = await this.db.query.pageSections.findFirst({
+      where: eq(schema.pageSections.id, pageSectionId),
+      with: {
+        sectionDefinition: true,
+      },
+    });
+
+    if (!pageSection) {
+      throw new Error(`Page section with id '${pageSectionId}' not found`);
+    }
+
+    // Get content for locale
+    const content = await this.db.query.pageSectionContents.findFirst({
+      where: (psc, { and, eq }) =>
+        and(eq(psc.pageSectionId, pageSectionId), eq(psc.localeCode, localeCode)),
+    });
+
+    if (!content) {
+      return {
+        pageSectionId,
+        sectionKey: (pageSection as any).sectionDefinition?.key,
+        sectionName: (pageSection as any).sectionDefinition?.name,
+        localeCode,
+        content: {},
+        message: 'No content found for this locale',
+      };
+    }
+
+    return {
+      pageSectionId,
+      sectionKey: (pageSection as any).sectionDefinition?.key,
+      sectionName: (pageSection as any).sectionDefinition?.name,
+      localeCode,
+      content: content.content,
+    };
+  }
+
   private validateKey(key: string): void {
     if (!/^[a-z0-9-]{2,64}$/.test(key)) {
       throw new Error(

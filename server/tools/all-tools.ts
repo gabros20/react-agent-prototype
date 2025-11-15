@@ -14,10 +14,12 @@ import type { AgentContext } from './types'
 // ============================================================================
 
 export const cmsGetPage = tool({
-  description: 'Get a page by slug or ID with all sections and localized content. Returns page structure with sorted sections.',
+  description: 'Get a page by slug or ID. By default returns lightweight response (metadata + section IDs). Use includeContent: true for full content (high token cost).',
   inputSchema: z.object({
     slug: z.string().optional().describe('Page slug (e.g., "home")'),
-    id: z.string().optional().describe('Page ID (UUID)')
+    id: z.string().optional().describe('Page ID (UUID)'),
+    includeContent: z.boolean().optional().default(false).describe('Include full section content (default: false for token efficiency). Use cms_getPageSections and cms_getSectionContent for granular fetching.'),
+    localeCode: z.string().optional().default('en').describe('Locale code for content (default: "en")')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
@@ -30,13 +32,32 @@ export const cmsGetPage = tool({
     if (input.id) {
       page = await ctx.services.pageService.getPageById(input.id)
     } else if (input.slug) {
-      page = await ctx.services.pageService.getPageBySlug(input.slug)
+      page = await ctx.services.pageService.getPageBySlug(
+        input.slug, 
+        input.includeContent || false,
+        input.localeCode || 'en'
+      )
     }
 
     if (!page) {
       throw new Error(`Page not found: ${input.slug || input.id}`)
     }
 
+    if (!input.includeContent) {
+      // Lightweight response (default)
+      return {
+        id: page.id,
+        slug: page.slug,
+        name: page.name,
+        indexing: page.indexing,
+        meta: page.meta,
+        sectionIds: (page as any).sectionIds || [],
+        sectionCount: (page as any).sectionCount || 0,
+        message: 'Use cms_getPageSections or cms_getSectionContent to fetch section data'
+      }
+    }
+
+    // Full content response (opt-in)
     return {
       id: page.id,
       slug: page.slug,
@@ -47,8 +68,9 @@ export const cmsGetPage = tool({
         id: ps.id,
         sectionDefId: ps.sectionDefId,
         sectionKey: ps.sectionDefinition?.key,
-        order: ps.order,
-        content: ps.content
+        sectionName: ps.sectionDefinition?.name,
+        sortOrder: ps.sortOrder,
+        content: ps.content || {}
       })) || []
     }
   }
@@ -330,6 +352,94 @@ export const cmsDeletePageSections = tool({
   }
 })
 
+export const cmsGetPageSections = tool({
+  description: 'Get all sections for a page (granular fetching). By default returns lightweight response (section metadata only). Use includeContent: true for full content.',
+  inputSchema: z.object({
+    pageId: z.string().describe('Page ID'),
+    includeContent: z.boolean().optional().default(false).describe('Include full section content (default: false for token efficiency)'),
+    localeCode: z.string().optional().default('en').describe('Locale code for content (default: "en")')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    
+    const sections = await ctx.services.sectionService.getPageSections(
+      input.pageId,
+      input.includeContent || false,
+      input.localeCode || 'en'
+    )
+    
+    return {
+      pageId: input.pageId,
+      count: sections.length,
+      sections
+    }
+  }
+})
+
+export const cmsGetSectionContent = tool({
+  description: 'Get content for a specific section (granular fetching). Use this when you need content for ONE section to avoid fetching entire page.',
+  inputSchema: z.object({
+    pageSectionId: z.string().describe('Page section ID (from cms_getPage sectionIds or cms_getPageSections)'),
+    localeCode: z.string().optional().default('en').describe('Locale code (default: "en")')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    
+    const result = await ctx.services.sectionService.getSectionContent(
+      input.pageSectionId,
+      input.localeCode || 'en'
+    )
+    
+    return result
+  }
+})
+
+// ============================================================================
+// Collection & Entry Tools (Granular Fetching)
+// ============================================================================
+
+export const cmsGetCollectionEntries = tool({
+  description: 'Get all entries for a collection (granular fetching). By default returns lightweight response (entry metadata only). Use includeContent: true for full content.',
+  inputSchema: z.object({
+    collectionId: z.string().describe('Collection ID'),
+    includeContent: z.boolean().optional().default(false).describe('Include full entry content (default: false for token efficiency)'),
+    localeCode: z.string().optional().default('en').describe('Locale code for content (default: "en")')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    
+    const entries = await ctx.services.entryService.getCollectionEntries(
+      input.collectionId,
+      input.includeContent || false,
+      input.localeCode || 'en'
+    )
+    
+    return {
+      collectionId: input.collectionId,
+      count: entries.length,
+      entries
+    }
+  }
+})
+
+export const cmsGetEntryContent = tool({
+  description: 'Get content for a specific entry (granular fetching). Use this when you need content for ONE entry to avoid fetching entire collection.',
+  inputSchema: z.object({
+    entryId: z.string().describe('Entry ID (from cms_getCollectionEntries)'),
+    localeCode: z.string().optional().default('en').describe('Locale code (default: "en")')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    
+    const result = await ctx.services.entryService.getEntryContent(
+      input.entryId,
+      input.localeCode || 'en'
+    )
+    
+    return result
+  }
+})
+
 // ============================================================================
 // Search Tools
 // ============================================================================
@@ -502,6 +612,12 @@ export const ALL_TOOLS = {
   'cms_syncPageContent': cmsSyncPageContent,
   'cms_deletePageSection': cmsDeletePageSection,
   'cms_deletePageSections': cmsDeletePageSections,
+  'cms_getPageSections': cmsGetPageSections,
+  'cms_getSectionContent': cmsGetSectionContent,
+  
+  // Collections & Entries
+  'cms_getCollectionEntries': cmsGetCollectionEntries,
+  'cms_getEntryContent': cmsGetEntryContent,
   
   // Search
   'search_vector': searchVector,
@@ -585,6 +701,30 @@ export const TOOL_METADATA = {
     riskLevel: 'high',
     requiresApproval: false,  // Uses confirmed flag instead
     tags: ['delete', 'section', 'batch', 'dangerous']
+  },
+  'cms_getPageSections': {
+    category: 'cms',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'section', 'granular']
+  },
+  'cms_getSectionContent': {
+    category: 'cms',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'section', 'content', 'granular']
+  },
+  'cms_getCollectionEntries': {
+    category: 'cms',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'collection', 'entry', 'granular']
+  },
+  'cms_getEntryContent': {
+    category: 'cms',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'entry', 'content', 'granular']
   },
   'search_vector': {
     category: 'search',

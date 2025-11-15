@@ -124,9 +124,34 @@ export class PageService {
     });
   }
 
-  async getPageBySlug(slug: string) {
-    // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-    return await this.db.query.pages.findFirst({
+  async getPageBySlug(slug: string, includeContent = false, localeCode = 'en') {
+    if (!includeContent) {
+      // Lightweight - only page metadata and section IDs
+      // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads
+      const page = await this.db.query.pages.findFirst({
+        where: eq(schema.pages.slug, slug),
+        with: {
+          pageSections: {
+            with: {
+              sectionDefinition: true,
+            },
+            orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
+          },
+        },
+      });
+
+      if (!page) return null;
+
+      return {
+        ...page,
+        sectionIds: (page as any).pageSections?.map((ps: any) => ps.id) || [],
+        sectionCount: (page as any).pageSections?.length || 0,
+      };
+    }
+
+    // Full fetch - includes all content (original behavior)
+    // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads
+    const page = await this.db.query.pages.findFirst({
       where: eq(schema.pages.slug, slug),
       with: {
         pageSections: {
@@ -138,6 +163,20 @@ export class PageService {
         },
       },
     });
+
+    if (!page) return null;
+
+    // Format sections with content for requested locale
+    return {
+      ...page,
+      pageSections: (page as any).pageSections?.map((ps: any) => {
+        const content = ps.contents?.find((c: any) => c.localeCode === localeCode);
+        return {
+          ...ps,
+          content: content?.content || {},
+        };
+      }),
+    };
   }
 
   async listPages(query?: string) {

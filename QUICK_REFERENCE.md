@@ -87,6 +87,7 @@ What pages exist?
 Show me the homepage content
 List all section definitions
 Find pages about contact
+What's the link in the Get Started button on About page? (tests granular fetching)
 ```
 
 ### Medium (3-5 steps)
@@ -122,7 +123,7 @@ Add section to non-existent page (watch error recovery)
 | -------------- | ------------------------------ |
 | **Pattern**    | Think → Act → Observe → Repeat |
 | **Max Steps**  | 15 per conversation turn       |
-| **Tools**      | 13 (no filtering)              |
+| **Tools**      | 21 (no filtering)              |
 | **Retries**    | 3 with exponential backoff     |
 | **Model**      | openai/gpt-4o-mini             |
 | **Checkpoint** | Auto-save every 3 steps        |

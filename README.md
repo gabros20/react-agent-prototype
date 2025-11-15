@@ -75,7 +75,7 @@ server/          # Backend Express API
 ├── middleware/  # Express middleware
 ├── agent/       # AI agent orchestrator
 │   └── orchestrator.ts # Unified ReAct agent (native AI SDK v6)
-├── tools/       # Agent tools (13 tools)
+├── tools/       # Agent tools (21 tools)
 │   └── all-tools.ts # All tools with experimental_context
 ├── prompts/     # Single unified prompt
 │   └── react.xml # ReAct pattern prompt
@@ -211,12 +211,38 @@ This project uses a **3-server architecture**:
 ### Unified ReAct Agent
 
 **Native AI SDK v6 pattern** - no custom abstractions:
-- **Single agent** with all 13 tools available always
+- **Single agent** with all 21 tools available always
 - **Think → Act → Observe → Repeat** autonomous loop
 - **Max 15 steps** per conversation turn
 - **Auto-retry** with exponential backoff (3 attempts)
 - **Auto-checkpoint** every 3 steps for crash recovery
 - **Streaming SSE** with execution log events
+
+## Hybrid Content Fetching (Token Optimization)
+
+**Problem**: Fetching entire pages with all content wastes tokens when user asks for one specific field.
+
+**Solution**: Granular fetching with 40-96% token savings:
+
+1. **Lightweight First** (default):
+   ```typescript
+   cms_getPage({ slug: "about" }) // Returns metadata + section IDs (~100 tokens)
+   cms_getSectionContent({ pageSectionId: "s1" }) // Get only needed content (~150 tokens)
+   // Total: ~250 tokens vs ~2000 tokens with full fetch
+   ```
+
+2. **Full Fetch** (opt-in):
+   ```typescript
+   cms_getPage({ slug: "about", includeContent: true }) // All content (~2000 tokens)
+   ```
+
+**New Tools**:
+- `cms_getPageSections` - Get all sections for a page (metadata or full content)
+- `cms_getSectionContent` - Get content for one specific section
+- `cms_getCollectionEntries` - Get all entries for a collection (metadata or full content)
+- `cms_getEntryContent` - Get content for one specific entry
+
+**Agent learns optimal strategy**: ReAct pattern naturally prefers efficient granular fetching for targeted queries.
 
 ## Unified ReAct Prompt
 

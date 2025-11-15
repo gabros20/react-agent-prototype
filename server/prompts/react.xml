@@ -26,12 +26,37 @@ Think step-by-step:
 - **CONFIRMATION RECOGNITION**: Recognize these as NO: "no", "n", "cancel", "stop", "abort", "don't"
 - **REMEMBER CONTEXT**: When you ask for confirmation, remember WHAT you're confirming in the next turn
 
+**CONTENT RETRIEVAL STRATEGIES:**
+
+This CMS uses **granular content fetching** for token efficiency:
+
+1. **Lightweight First** (DEFAULT - saves 40-96% tokens):
+   - Use `cms_getPage` WITHOUT `includeContent` flag → Get page metadata + section IDs
+   - Then use `cms_getSectionContent` for specific section → Get only what you need
+   - Best for: "What's the link?", "Show me one section", "Delete section X"
+
+2. **Full Fetch** (when needed):
+   - Use `cms_getPage` WITH `includeContent: true` → Get everything at once
+   - Best for: "Show me all content", "Export page", "Duplicate page"
+
+3. **Granular Pattern** (most common):
+   ```
+   Step 1: cms_getPage(slug="about") → {id, sectionIds: ["s1", "s2"]}
+   Step 2: cms_getSectionContent(pageSectionId="s1") → {buttonLink: "/contact"}
+   ```
+
+**OPTIMIZATION RULES:**
+- If user asks about ONE specific field → Use granular (2-3 tools, ~500 tokens)
+- If user asks about ENTIRE page → Use includeContent: true (1 tool, ~2000 tokens)
+- DEFAULT to lightweight, fetch more only when needed
+- Same pattern for collections: Use `cms_getCollectionEntries` + `cms_getEntryContent`
+
 **EXAMPLE SESSION:**
 
 User: "Add a hero section to the about page with dummy content"
 
 Thought: I need to find the about page first using fuzzy search.
-Action: cms.findResource
+Action: cms_findResource
 Action Input: {"query": "about", "resourceType": "page"}
 Observation: Found page-abc123 (slug: about-us, name: "About Us")
 
@@ -96,6 +121,27 @@ Action Input: {"pageSectionIds": ["abc123", "def456"], "confirmed": true}
 Observation: {success: true, deletedCount: 2}
 
 FINAL_ANSWER: ✅ Deleted 2 sections from About page.
+
+**GRANULAR FETCHING EXAMPLE:**
+
+User: "What's the link in the Get Started button on the About page?"
+
+Thought: User wants a specific field value. I'll use the granular pattern for token efficiency.
+Action: cms_getPage
+Action Input: {"slug": "about"}
+Observation: {id: "page-123", sectionIds: ["s1", "s2", "s3"], sectionCount: 3, message: "Use cms_getPageSections or cms_getSectionContent to fetch section data"}
+
+Thought: I have the page ID and section IDs. Now I need to find which section has the "Get Started" button. Let me get section metadata first.
+Action: cms_getPageSections
+Action Input: {"pageId": "page-123"}
+Observation: {sections: [{id: "s1", sectionKey: "hero", sectionName: "Hero Section"}, {id: "s2", sectionKey: "feature"}, {id: "s3", sectionKey: "cta", sectionName: "Call-to-Action"}]}
+
+Thought: The CTA (Call-to-Action) section likely has the "Get Started" button. Let me fetch its content.
+Action: cms_getSectionContent
+Action Input: {"pageSectionId": "s3"}
+Observation: {sectionKey: "cta", content: {heading: "Ready to begin?", buttonText: "Get Started", buttonLink: "/contact"}}
+
+FINAL_ANSWER: The "Get Started" button on the About page links to `/contact`.
 
 ---
 
