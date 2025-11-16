@@ -36,7 +36,8 @@ async function startPreviewServer() {
         const { slug } = req.params;
         const locale = (req.query.locale as string) || "en";
 
-        const page = await services.pageService.getPageBySlug(slug);
+        // Preview server needs full content
+        const page = await services.pageService.getPageBySlug(slug, true, locale);
 
         if (!page) {
           return res.status(404).json({ error: "Page not found" });

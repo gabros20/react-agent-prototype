@@ -293,13 +293,26 @@ export class EntryService {
 
       // Format response with content for requested locale
       return entries.map((entry: any) => {
-        const content = entry.contents?.find((c: any) => c.localeCode === localeCode);
+        const contentRecord = entry.contents?.find((c: any) => c.localeCode === localeCode);
+        
+        // Parse content if it's a JSON string
+        let parsedContent = {};
+        if (contentRecord?.content) {
+          try {
+            parsedContent = typeof contentRecord.content === 'string'
+              ? JSON.parse(contentRecord.content)
+              : contentRecord.content;
+          } catch (error) {
+            console.error(`Failed to parse content for entry ${entry.id}:`, error);
+          }
+        }
+        
         return {
           id: entry.id,
           slug: entry.slug,
           title: entry.title,
           collectionId: entry.collectionId,
-          content: content?.content || {},
+          content: parsedContent,
         };
       });
     } else {
@@ -349,12 +362,24 @@ export class EntryService {
       };
     }
 
+    // Parse content if it's a JSON string
+    let parsedContent = {};
+    if (content.content) {
+      try {
+        parsedContent = typeof content.content === 'string'
+          ? JSON.parse(content.content)
+          : content.content;
+      } catch (error) {
+        console.error(`Failed to parse content for entry ${entryId}:`, error);
+      }
+    }
+
     return {
       entryId,
       slug: entry.slug,
       title: entry.title,
       localeCode,
-      content: content.content,
+      content: parsedContent,
     };
   }
 

@@ -170,10 +170,23 @@ export class PageService {
     return {
       ...page,
       pageSections: (page as any).pageSections?.map((ps: any) => {
-        const content = ps.contents?.find((c: any) => c.localeCode === localeCode);
+        const contentRecord = ps.contents?.find((c: any) => c.localeCode === localeCode);
+        
+        // Parse content if it's a JSON string
+        let parsedContent = {};
+        if (contentRecord?.content) {
+          try {
+            parsedContent = typeof contentRecord.content === 'string' 
+              ? JSON.parse(contentRecord.content) 
+              : contentRecord.content;
+          } catch (error) {
+            console.error(`Failed to parse content for section ${ps.id}:`, error);
+          }
+        }
+        
         return {
           ...ps,
-          content: content?.content || {},
+          content: parsedContent,
         };
       }),
     };

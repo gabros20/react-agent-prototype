@@ -304,10 +304,23 @@ export class SectionService {
 
       if (includeContent && section.contents) {
         // Find content for requested locale
-        const content = section.contents.find((c: any) => c.localeCode === localeCode);
+        const contentRecord = section.contents.find((c: any) => c.localeCode === localeCode);
+        
+        // Parse content if it's a JSON string
+        let parsedContent = {};
+        if (contentRecord?.content) {
+          try {
+            parsedContent = typeof contentRecord.content === 'string'
+              ? JSON.parse(contentRecord.content)
+              : contentRecord.content;
+          } catch (error) {
+            console.error(`Failed to parse content for section ${section.id}:`, error);
+          }
+        }
+        
         return {
           ...base,
-          content: content?.content || {},
+          content: parsedContent,
         };
       }
 
@@ -350,12 +363,24 @@ export class SectionService {
       };
     }
 
+    // Parse content if it's a JSON string
+    let parsedContent = {};
+    if (content.content) {
+      try {
+        parsedContent = typeof content.content === 'string'
+          ? JSON.parse(content.content)
+          : content.content;
+      } catch (error) {
+        console.error(`Failed to parse content for section ${pageSectionId}:`, error);
+      }
+    }
+
     return {
       pageSectionId,
       sectionKey: (pageSection as any).sectionDefinition?.key,
       sectionName: (pageSection as any).sectionDefinition?.name,
       localeCode,
-      content: content.content,
+      content: parsedContent,
     };
   }
 

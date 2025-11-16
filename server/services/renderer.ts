@@ -66,7 +66,8 @@ export class RendererService {
   }
 
   async renderPage(pageSlug: string, locale: string, pageService: PageService): Promise<string> {
-    const page = await pageService.getPageBySlug(pageSlug);
+    // Preview server always needs full content
+    const page = await pageService.getPageBySlug(pageSlug, true, locale);
 
     if (!page) {
       throw new Error(`Page not found: ${pageSlug}`);
@@ -82,25 +83,10 @@ export class RendererService {
         const templateKey = sectionDef.templateKey;
         const variant = sectionDef.defaultVariant || "default";
 
-        const content = pageSection.contents.find(
-          (c: { localeCode: string }) => c.localeCode === locale,
-        );
-
-        if (!content) {
-          console.warn(`No content found for section ${pageSection.id} in locale ${locale}`);
-          continue;
-        }
+        // After hybrid content fetching, content is directly on pageSection
+        const contentData = pageSection.content || {};
 
         const templatePath = this.resolveTemplate(templateKey, variant);
-
-        let contentData: Record<string, unknown>;
-        try {
-          contentData =
-            typeof content.content === "string" ? JSON.parse(content.content) : content.content;
-        } catch (error) {
-          console.error(`Failed to parse content for section ${pageSection.id}:`, error);
-          contentData = {};
-        }
 
         const sectionHtml = this.env.render(templatePath, {
           ...contentData,
