@@ -2157,4 +2157,58 @@ The agent now intelligently chooses between lightweight, granular, and full fetc
 **Code Quality**: Production-ready  
 **Impact**: High (major cost optimization)
 
+### Critical Bug Fix: Preview Server Broken
+
+**Date**: 2025-11-15  
+**Issue**: Preview server crashed after hybrid content fetching implementation
+
+**Root Cause**:
+1. `PageService.getPageBySlug()` signature changed to accept `includeContent` and `localeCode` parameters
+2. Preview server and renderer were calling old signature without parameters
+3. Database stores content as JSON strings, but services weren't parsing them consistently
+4. Renderer tried to access `pageSection.contents.find()` but structure changed to `pageSection.content`
+
+**Fixes Applied**:
+
+1. **Preview Server** (`server/preview.ts`):
+   - Updated `/pages/:slug` route to call `getPageBySlug(slug, true, locale)`
+   - Updated `/pages/:slug/raw` route with full content flag
+   - Preview server always needs full content for rendering
+
+2. **Renderer Service** (`server/services/renderer.ts`):
+   - Updated to call `pageService.getPageBySlug(slug, true, locale)`
+   - Simplified content access: `pageSection.content` (direct access)
+   - Removed redundant `contents.find()` logic (now handled in service layer)
+
+3. **JSON Parsing** (All Services):
+   - **PageService** (`page-service.ts`): Parse content in `getPageBySlug()` when `includeContent: true`
+   - **SectionService** (`section-service.ts`): Parse in `getPageSections()` and `getSectionContent()`
+   - **EntryService** (`entry-service.ts`): Parse in `getCollectionEntries()` and `getEntryContent()`
+   - Pattern: Safe parsing with try/catch, handles both string and object formats
+
+**Files Modified** (6 files):
+- `server/preview.ts` (+2 lines)
+- `server/services/renderer.ts` (+5, -20 lines)
+- `server/services/cms/page-service.ts` (+13 lines)
+- `server/services/cms/section-service.ts` (+26 lines)
+- `server/services/cms/entry-service.ts` (+26 lines)
+- `tsconfig.tsbuildinfo` (updated)
+
+**Total Changes**: +78 lines added, -28 lines removed
+
+**Verification**:
+```bash
+curl http://localhost:4000/pages/home?locale=en
+→ ✅ Full HTML with "Welcome to Our CMS", "Get Started" button
+→ ✅ All sections rendering correctly
+
+curl http://localhost:4000/health
+→ ✅ Status: ok, templateRegistry: 3 templates
+```
+
+**Git Commit**: `c419a73` - "fix: preview server broken after hybrid content fetching"
+
+**Resolution Time**: 15 minutes  
+**TypeScript Status**: ✅ Zero errors
+
 **Status**: 🚀 **PRODUCTION READY WITH TOKEN OPTIMIZATION**
