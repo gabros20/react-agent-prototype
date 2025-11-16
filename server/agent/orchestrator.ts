@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AgentContext } from "../tools/types";
+import { EntityExtractor, WorkingContext } from "../services/working-memory";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +36,16 @@ const AGENT_CONFIG = {
 	baseDelay: 1000, // Base delay for exponential backoff (ms)
 };
 
+// Working memory: Store per session (in-memory for now)
+const workingContexts = new Map<string, WorkingContext>();
+
+function getWorkingContext(sessionId: string): WorkingContext {
+	if (!workingContexts.has(sessionId)) {
+		workingContexts.set(sessionId, new WorkingContext());
+	}
+	return workingContexts.get(sessionId)!;
+}
+
 /**
  * Load and compile system prompt
  */
@@ -43,6 +54,7 @@ function getSystemPrompt(context: {
 	toolCount: number;
 	sessionId: string;
 	currentDate: string;
+	workingMemory?: string;  // NEW: Working memory context string
 }): string {
 	const promptPath = path.join(__dirname, '../prompts/react.xml');
 	const template = fs.readFileSync(promptPath, 'utf-8');
@@ -52,18 +64,20 @@ function getSystemPrompt(context: {
 	return compiled({
 		...context,
 		toolsFormatted: context.toolsList.map((t) => `- ${t}`).join('\n'),
+		workingMemory: context.workingMemory || '', // NEW: Inject working memory
 	});
 }
 
 /**
  * Create ToolLoopAgent - All tools available
  */
-export function createAgent(context: AgentContext): any {
+export function createAgent(context: AgentContext, workingMemory?: string): any {
 	const systemPrompt = getSystemPrompt({
 		toolsList: Object.keys(ALL_TOOLS),
 		toolCount: Object.keys(ALL_TOOLS).length,
 		sessionId: context.sessionId,
 		currentDate: new Date().toISOString().split("T")[0],
+		workingMemory, // NEW: Inject working memory
 	});
 
 	context.logger.info("Creating agent", {
@@ -190,8 +204,11 @@ export async function executeAgentWithRetry(
 				retryCount,
 			});
 
-			// Create agent
-			const agent = createAgent(context);
+			// Get working context for this session
+			const workingContext = getWorkingContext(context.sessionId);
+			
+			// Create agent with working memory injected
+			const agent = createAgent(context, workingContext.toContextString());
 
 			// Build messages array (AI SDK v6 pattern)
 			const messages: CoreMessage[] = [
@@ -323,12 +340,17 @@ export async function streamAgentWithApproval(
 				}
 			}
 
-			// Get system prompt
+			// Get working context for this session
+			const workingContext = getWorkingContext(context.sessionId);
+			const extractor = new EntityExtractor();
+			
+			// Get system prompt with working memory injected
 			const systemPrompt = getSystemPrompt({
 				toolsList: Object.keys(ALL_TOOLS),
 				toolCount: Object.keys(ALL_TOOLS).length,
 				sessionId: context.sessionId,
 				currentDate: new Date().toISOString().split("T")[0],
+				workingMemory: workingContext.toContextString(), // NEW: Inject working memory
 			});
 
 			// Use streamText directly (more reliable than ToolLoopAgent.stream())
@@ -389,6 +411,7 @@ export async function streamAgentWithApproval(
 					case "tool-result":
 						context.logger.info("Tool result received", {
 							toolCallId: chunk.toolCallId,
+							toolName: chunk.toolName,
 						});
 
 						toolResults.push({
@@ -396,6 +419,19 @@ export async function streamAgentWithApproval(
 							toolName: chunk.toolName,
 							result: chunk.output,
 						});
+
+						// NEW: Extract entities from tool result
+						const entities = extractor.extract(chunk.toolName, chunk.output);
+						if (entities.length > 0) {
+							workingContext.addMany(entities);
+							
+							context.logger.info('Extracted entities to working memory', {
+								toolName: chunk.toolName,
+								entityCount: entities.length,
+								entities: entities.map(e => `${e.type}:${e.name}`),
+								workingMemorySize: workingContext.size()
+							});
+						}
 
 						if (context.stream) {
 							context.stream.write({

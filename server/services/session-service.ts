@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import type { DrizzleDB } from "../db/client";
 import * as schema from "../db/schema";
+import { WorkingContext, type WorkingContextState } from "./working-memory";
 
 export interface CreateSessionInput {
   title?: string;
@@ -315,5 +316,36 @@ export class SessionService {
       .trim();
 
     return title.length < content.length ? `${title}...` : title;
+  }
+
+  /**
+   * Save working context to session
+   */
+  async saveWorkingContext(sessionId: string, context: WorkingContext): Promise<void> {
+    const state = context.toJSON();
+    await this.db.update(schema.sessions)
+      .set({ workingContext: JSON.stringify(state) })
+      .where(eq(schema.sessions.id, sessionId));
+  }
+
+  /**
+   * Load working context from session
+   */
+  async loadWorkingContext(sessionId: string): Promise<WorkingContext> {
+    const session = await this.db.query.sessions.findFirst({
+      where: eq(schema.sessions.id, sessionId),
+    });
+
+    if (!session?.workingContext || typeof session.workingContext !== 'string') {
+      return new WorkingContext();
+    }
+
+    try {
+      const state = JSON.parse(session.workingContext) as WorkingContextState;
+      return WorkingContext.fromJSON(state);
+    } catch (error) {
+      // If parsing fails, return empty context
+      return new WorkingContext();
+    }
   }
 }
