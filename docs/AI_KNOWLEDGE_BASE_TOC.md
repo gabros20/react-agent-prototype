@@ -4,7 +4,7 @@
 **Organization**: 12 layers (Foundation → Advanced) with 72 topics total  
 **Grounding**: Research papers, production systems, proven implementations from this codebase
 
-**Last Updated**: 2025-11-16  
+**Last Updated**: 2025-11-18  
 **Status**: 🚧 In Progress
 
 ---
@@ -75,7 +75,7 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 40/72 topics (56%)
+**Completion**: 45/72 topics (63%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
@@ -83,7 +83,7 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 1: Prompt Engineering          | 3      | ✅ Complete    | 14/14 (100%) |
 | Layer 2: Context Engineering         | 3      | ✅ Complete    | 12/12 (100%) |
 | Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 2/20 (10%)   |
-| Layer 4: Memory & State              | 4      | ⏳ Pending     | 0/20         |
+| Layer 4: Memory & State              | 4      | 🚧 In Progress | 15/20 (75%)  |
 | Layer 5: Retrieval & RAG             | 4      | ⏳ Pending     | 0/20         |
 | Layer 6: Planning & Orchestration    | 4      | ⏳ Pending     | 0/20         |
 | Layer 7: Error Recovery & Resilience | 5      | ⏳ Pending     | 0/20         |
@@ -93,33 +93,47 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
-**Latest Updates** (2025-11-17):
+**Latest Updates** (2025-11-18):
+
+**Layer 4: Memory & State** (15/20 topics - 🚧 75% COMPLETE):
+
+_Long-Term Memory (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 4.3.1 Vector Databases - **NEW!** Comprehensive comparison of LanceDB, Pinecone, Weaviate for production (29KB, 15+ sources)
+-   ✅ 4.3.2 Semantic Search - **NEW!** Embedding models, similarity metrics, hybrid search (25KB, 10+ sources)
+-   ✅ 4.3.3 Fact Extraction & Storage - **NEW!** Mem0 architecture, entity recognition, knowledge graphs (27KB, 15+ sources)
+-   ✅ 4.3.4 Cross-Session Retrieval - **NEW!** Persistent memory across conversations (24KB, 9+ sources)
+-   ✅ 4.3.5 When to Use vs Working Memory - **NEW!** Decision framework, cost-benefit analysis, ROI calculations (22KB)
 
 **Layer 3: Agent Architecture** (2/20 topics - 🚧 10% COMPLETE):
 
 _Core Patterns_ (2/5):
-- ✅ 3.1.1 ReAct Pattern - Analysis of your `server/prompts/react.xml`, Think→Act→Observe loop, 2024-2025 research (ReSpAct, A3T, Plan-and-Execute), 5 enhancement recommendations
-- ✅ 3.1.2 Tool Design Patterns - **NEW!** Deep analysis of your `server/tools/all-tools.ts` (20+ CMS tools), schema design, parameter validation, error handling, HITL confirmations, granular fetching (40-96% savings), 4-phase enhancement roadmap
+
+-   ✅ 3.1.1 ReAct Pattern - Analysis of your `server/prompts/react.xml`, Think→Act→Observe loop, 2024-2025 research (ReSpAct, A3T, Plan-and-Execute), 5 enhancement recommendations
+-   ✅ 3.1.2 Tool Design Patterns - **NEW!** Deep analysis of your `server/tools/all-tools.ts` (20+ CMS tools), schema design, parameter validation, error handling, HITL confirmations, granular fetching (40-96% savings), 4-phase enhancement roadmap
 
 **Layer 2: Context Engineering** (12/12 topics - ✅ 100% COMPLETE):
 
 _Token Optimization_ (4/4 - ✅ COMPLETE):
-- ✅ 2.1.1 Compression Techniques - LongLLMLingua, LLMLingua-2, 60-90% reduction maintaining 95%+ accuracy
-- ✅ 2.1.2 Importance Scoring - RankRAG (+18% accuracy), 5 scoring strategies, production integration
-- ✅ 2.1.3 Lazy Loading - Your `cms_getPage(fetchMode)` validated, 90%+ token reduction
-- ✅ 2.1.4 Hybrid Content Fetching - Deep analysis of your CMS pattern, three-tier enhancement
+
+-   ✅ 2.1.1 Compression Techniques - LongLLMLingua, LLMLingua-2, 60-90% reduction maintaining 95%+ accuracy
+-   ✅ 2.1.2 Importance Scoring - RankRAG (+18% accuracy), 5 scoring strategies, production integration
+-   ✅ 2.1.3 Lazy Loading - Your `cms_getPage(fetchMode)` validated, 90%+ token reduction
+-   ✅ 2.1.4 Hybrid Content Fetching - Deep analysis of your CMS pattern, three-tier enhancement
 
 _Context Management Patterns_ (4/4 - ✅ COMPLETE):
-- ✅ 2.2.1 Sliding Window - StreamingLLM (22.2× speedup), attention sinks, 4M token capability
-- ✅ 2.2.2 Hierarchical Memory - HiAgent (2× success rate), 10:1 compression, ACL 2025
-- ✅ 2.2.3 Context Pruning - LazyLLM, TokenSelect (23.84× speedup), AgentDiet (39.9-59.7% reduction)
-- ✅ 2.2.4 KV-Cache Optimization - RocketKV (400× compression), FastKV, EpiCache, production frameworks
+
+-   ✅ 2.2.1 Sliding Window - StreamingLLM (22.2× speedup), attention sinks, 4M token capability
+-   ✅ 2.2.2 Hierarchical Memory - HiAgent (2× success rate), 10:1 compression, ACL 2025
+-   ✅ 2.2.3 Context Pruning - LazyLLM, TokenSelect (23.84× speedup), AgentDiet (39.9-59.7% reduction)
+-   ✅ 2.2.4 KV-Cache Optimization - RocketKV (400× compression), FastKV, EpiCache, production frameworks
 
 _Injection Strategies_ (3/4 - 🚧 IN PROGRESS):
-- ✅ 2.3.1 Injection Location - ACE framework (+10.6%), RAT (+13-43%), system/user/assistant placement
-- ✅ 2.3.2 Injection Timing - "When to Retrieve" (95%+ accuracy), DeepRAG (+26.4%), 30-50% cost reduction
-- ✅ 2.3.3 Injection Format - **NEW!** XML/JSON/Markdown comparison, 15-40% performance impact, RAG formatting strategies
-- ✅ 2.3.4 Working Memory Pattern - **NEW!** Analysis of your `server/services/working-memory/` implementation, enhancement recommendations
+
+-   ✅ 2.3.1 Injection Location - ACE framework (+10.6%), RAT (+13-43%), system/user/assistant placement
+-   ✅ 2.3.2 Injection Timing - "When to Retrieve" (95%+ accuracy), DeepRAG (+26.4%), 30-50% cost reduction
+-   ✅ 2.3.3 Injection Format - **NEW!** XML/JSON/Markdown comparison, 15-40% performance impact, RAG formatting strategies
+-   ✅ 2.3.4 Working Memory Pattern - **NEW!** Analysis of your `server/services/working-memory/` implementation, enhancement recommendations
 
 **Layer 1: Prompt Engineering** (14/14 topics - ✅ COMPLETE):
 
@@ -350,12 +364,22 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 4.3 Long-Term Memory (Persistent)
 
--   [4.3.1 Vector Databases (LanceDB, Pinecone, Weaviate)](./kb/4-memory/4.3.1-vector-databases.md) ⏳
+-   [4.3.1 Vector Databases (LanceDB, Pinecone, Weaviate)](./kb/4-memory/4.3.1-vector-databases.md) ✅
+    -   **Status**: Complete - Comprehensive comparison of LanceDB, Pinecone, Weaviate for production (29KB, 15+ sources)
     -   **Codebase Example**: `server/services/vector-index.ts`
--   [4.3.2 Semantic Search](./kb/4-memory/4.3.2-semantic-search.md) ⏳
--   [4.3.3 Fact Extraction & Storage](./kb/4-memory/4.3.3-fact-extraction.md) ⏳
--   [4.3.4 Cross-Session Retrieval](./kb/4-memory/4.3.4-cross-session.md) ⏳
--   [4.3.5 When to Use vs Working Memory](./kb/4-memory/4.3.5-when-to-use.md) ⏳
+    -   **Includes**: TypeScript implementations, cost comparisons, performance benchmarks, multi-tenancy patterns
+-   [4.3.2 Semantic Search](./kb/4-memory/4.3.2-semantic-search.md) ✅
+    -   **Status**: Complete - Embedding models, similarity metrics, hybrid search (25KB, 10+ sources)
+    -   **Includes**: Cosine similarity, dot product, Euclidean distance, reranking, query optimization
+-   [4.3.3 Fact Extraction & Storage](./kb/4-memory/4.3.3-fact-extraction.md) ✅
+    -   **Status**: Complete - Mem0 architecture, entity recognition, knowledge graphs (27KB, 15+ sources)
+    -   **Includes**: LLM-based extraction, NER, graph storage, conflict resolution, temporal facts
+-   [4.3.4 Cross-Session Retrieval](./kb/4-memory/4.3.4-cross-session.md) ✅
+    -   **Status**: Complete - Persistent memory across conversations (24KB, 9+ sources)
+    -   **Includes**: Session management, recency-weighted retrieval, multi-hop queries, memory decay
+-   [4.3.5 When to Use vs Working Memory](./kb/4-memory/4.3.5-when-to-use.md) ✅
+    -   **Status**: Complete - Decision framework for memory types (22KB, 1 source)
+    -   **Includes**: Cost-benefit analysis, use case matrix, hybrid strategies, ROI calculations
 
 #### 4.4 State Persistence & Checkpointing
 
