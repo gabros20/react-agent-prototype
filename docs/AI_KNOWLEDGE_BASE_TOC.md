@@ -100,20 +100,20 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 _State Persistence & Checkpointing (5/5 - ✅ COMPLETE)_:
 
 -   ✅ 4.4.1 Why Checkpoint - **NEW!** Crash recovery, resume conversations, fault tolerance (21KB, 13+ sources)
-    - LangGraph + Restate examples, ByteCheckpoint benchmarks (529× faster saves)
-    - Real-world ROI: $1.14M/year savings, 99% recovery time improvement
+    -   LangGraph + Restate examples, ByteCheckpoint benchmarks (529× faster saves)
+    -   Real-world ROI: $1.14M/year savings, 99% recovery time improvement
 -   ✅ 4.4.2 What to Save - **NEW!** State components, serialization strategies (22KB, 6 sources)
-    - Messages, execution state, working memory, subgoals, metadata
-    - Size optimization: compression, delta encoding, reference external data
+    -   Messages, execution state, working memory, subgoals, metadata
+    -   Size optimization: compression, delta encoding, reference external data
 -   ✅ 4.4.3 When to Checkpoint - **NEW!** Optimal timing strategies (20KB, 4 sources)
-    - √N rule, phase transitions, before expensive operations, HITL pauses
-    - Overhead analysis: 0.5-1% overhead with every 5-10 steps
+    -   √N rule, phase transitions, before expensive operations, HITL pauses
+    -   Overhead analysis: 0.5-1% overhead with every 5-10 steps
 -   ✅ 4.4.4 How to Resume - **NEW!** Loading and continuing execution (17KB, 3 sources)
-    - Three-phase recovery: load, reconstruct, continue
-    - Handling edge cases: missing checkpoints, corruption, external state mismatch
+    -   Three-phase recovery: load, reconstruct, continue
+    -   Handling edge cases: missing checkpoints, corruption, external state mismatch
 -   ✅ 4.4.5 Implementation - **NEW!** Database storage, JSON serialization (21KB, 3 sources)
-    - PostgreSQL, Redis, SQLite comparison with performance benchmarks
-    - Production patterns: connection pooling, batch operations, multi-backend strategy
+    -   PostgreSQL, Redis, SQLite comparison with performance benchmarks
+    -   Production patterns: connection pooling, batch operations, multi-backend strategy
 
 _Long-Term Memory (5/5 - ✅ COMPLETE)_:
 
