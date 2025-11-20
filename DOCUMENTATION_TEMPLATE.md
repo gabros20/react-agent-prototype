@@ -11,7 +11,9 @@
 ````markdown
 # [Layer].[Section].[Topic] - [Title]
 
-> **TL;DR**: [One sentence capturing the essence - what problem this solves and the key benefit]
+## TL;DR
+
+[1-3 sentence capturing the essence of the topi but in an understandable, easy to read way - what problem this solves and the key benefit]
 
 **Status**: [✅ Complete | 🚧 In Progress | ⏳ Pending]
 **Last Updated**: YYYY-MM-DD
@@ -113,47 +115,11 @@
 **Flowchart** (processes, decision trees, agent loops):
 
 ```mermaid
-%%{init: {
-  'theme': 'dark',
-  'themeVariables': {
-    'primaryColor': '#282828',
-    'primaryTextColor': '#FFF',
-    'primaryBorderColor': '#505050',
-    'lineColor': '#A0A0A0',
-    'secondaryColor': '#282828',
-    'tertiaryColor': '#282828',
-    'background': '#161616',
-    'mainBkg': '#282828',
-    'secondBkg': '#282828',
-    'tertiaryBkg': '#282828',
-    'quaternaryBkg': '#282828',
-    'darkMode': true,
-    'fontFamily': 'monospace',
-    'fontSize': '14px',
-    'nodeBkg': '#282828',
-    'clusterBkg': '#161616'
-  }
-}}%%
-
 flowchart LR
-    %% Start/End nodes: #99FFE4 (mint/cyan)
-    %% Process/Action nodes: #FFC799 (warm orange/peach)
-    %% Decision nodes: #FF8080 (soft red/pink)
-    %% Default nodes: #282828 (medium dark gray)
-
     Start([Start]) --> Process[Process]
     Process --> Decision{Decision?}
     Decision -- Yes --> End([End])
     Decision -- No --> Process
-
-    classDef default fill:#282828,stroke:#A0A0A0,stroke-width:1px,color:#FFF
-    classDef startEnd fill:#99FFE4,stroke:#A0A0A0,stroke-width:2px,color:#161616
-    classDef process fill:#FFC799,stroke:#A0A0A0,stroke-width:1px,color:#161616
-    classDef decision fill:#FF8080,stroke:#A0A0A0,stroke-width:1px,color:#161616
-
-    class Start,End startEnd
-    class Process process
-    class Decision decision
 ```
 
 **Sequence Diagram** (interactions over time, API calls, agent-tool communication):
