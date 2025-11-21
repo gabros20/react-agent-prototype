@@ -44,6 +44,38 @@ export class SectionService {
     private vectorIndex: VectorIndexService,
   ) {}
 
+  /**
+   * Normalize link fields in content to standard object structure
+   * Converts string links to {href: "...", type: "url"} objects
+   */
+  private normalizeLinksInContent(content: Record<string, any>): Record<string, any> {
+    const normalized = { ...content };
+
+    for (const key in normalized) {
+      const value = normalized[key];
+
+      // Check if this field looks like a link field (ends with "Link" or "Href")
+      if ((key.endsWith("Link") || key.endsWith("Href")) && value !== null && value !== undefined) {
+        // If it's a string, convert to object
+        if (typeof value === "string") {
+          normalized[key] = {
+            href: value,
+            type: "url",
+          };
+        }
+        // If it's already an object with href, ensure type is set
+        else if (typeof value === "object" && value.href && !value.type) {
+          normalized[key] = {
+            ...value,
+            type: "url",
+          };
+        }
+      }
+    }
+
+    return normalized;
+  }
+
   async createSectionDef(input: CreateSectionDefInput) {
     // Validate key format
     this.validateKey(input.key);
@@ -229,6 +261,9 @@ export class SectionService {
       throw new Error(`Locale with code '${input.localeCode}' not found`);
     }
 
+    // Normalize link fields in content (convert strings to objects)
+    const normalizedContent = this.normalizeLinksInContent(input.content);
+
     // Check if content already exists
     const existing = await this.db.query.pageSectionContents.findFirst({
       where: (psc, { and, eq }) =>
@@ -240,19 +275,19 @@ export class SectionService {
       await this.db
         .update(schema.pageSectionContents)
         .set({
-          content: JSON.stringify(input.content),
+          content: JSON.stringify(normalizedContent),
           updatedAt: new Date(),
         })
         .where(eq(schema.pageSectionContents.id, existing.id));
 
-      return { ...existing, content: JSON.stringify(input.content), updatedAt: new Date() };
+      return { ...existing, content: JSON.stringify(normalizedContent), updatedAt: new Date() };
     } else {
       // Create new
       const newContent = {
         id: randomUUID(),
         pageSectionId: input.pageSectionId,
         localeCode: input.localeCode,
-        content: JSON.stringify(input.content),
+        content: JSON.stringify(normalizedContent),
         createdAt: new Date(),
         updatedAt: new Date(),
       };

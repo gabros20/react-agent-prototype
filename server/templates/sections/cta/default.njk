@@ -7,7 +7,10 @@
     <p class="cta__description">{{ description }}</p>
     {% endif %}
     {% if buttonText and buttonLink %}
-    <a href="{{ buttonLink.href }}" class="cta__button">{{ buttonText }}</a>
+    {% set normalizedLink = buttonLink | normalizeLink %}
+    {% if normalizedLink %}
+    <a href="{{ normalizedLink.href }}" class="cta__button">{{ buttonText }}</a>
+    {% endif %}
     {% endif %}
   </div>
 </section>

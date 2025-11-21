@@ -33,6 +33,23 @@ export class RendererService {
       return `/assets/${assetPath}`;
     });
 
+    this.env.addFilter("normalizeLink", (link: any) => {
+      // Handle null/undefined
+      if (!link) return null;
+
+      // If already an object with href, return as-is
+      if (typeof link === "object" && link.href) {
+        return link;
+      }
+
+      // If string, wrap in object structure
+      if (typeof link === "string") {
+        return { href: link, type: "url" };
+      }
+
+      return null;
+    });
+
     this.buildRegistry();
   }
 

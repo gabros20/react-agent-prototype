@@ -10,7 +10,10 @@
     <img src="{{ image.url }}" alt="{{ image.alt or '' }}" class="hero__image">
     {% endif %}
     {% if ctaText and ctaLink %}
-    <a href="{{ ctaLink.href }}" class="hero__cta">{{ ctaText }}</a>
+    {% set normalizedLink = ctaLink | normalizeLink %}
+    {% if normalizedLink %}
+    <a href="{{ normalizedLink.href }}" class="hero__cta">{{ ctaText }}</a>
+    {% endif %}
     {% endif %}
   </div>
 </section>

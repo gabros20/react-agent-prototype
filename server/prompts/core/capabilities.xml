@@ -31,5 +31,6 @@
     4. **Atomic operations**: One tool call at a time, observe result before proceeding
     5. **Error context**: If tool fails, include error message in reasoning for next step
     6. **Approval required**: Some tools (deletes, schema changes) require HITL approval
+    7. **Link formatting**: All "link" type fields must use object structure: `{href: "...", type: "url" or "page"}` (never plain strings)
   </tool_calling_rules>
 </capabilities>
