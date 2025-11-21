@@ -13,11 +13,11 @@
 
 ## TL;DR
 
-[1-3 sentence capturing the essence of the topi but in an understandable, easy to read way - what problem this solves and the key benefit]
+[1-3 sentence capturing the essence of the topic but in an understandable, easy to read way - what problem this solves and the key benefit]
 
 **Status**: [✅ Complete | 🚧 In Progress | ⏳ Pending]
 **Last Updated**: YYYY-MM-DD
-**Versions**: [e.g. Next.js 15, AI SDK 6.0, Node 20]
+**Versions**: [OPTIONAL - Only include if doc is framework/library-specific with version-dependent behavior. Examples: "AI SDK 6.0+", "Next.js 15 App Router". Skip for conceptual topics.]
 **Prerequisites**: [[Link to prerequisite doc 1], [Link to prerequisite doc 2]]
 **Grounded In**: [Key research papers/production systems, 2024-2025]
 
@@ -72,9 +72,15 @@
 
 [Concrete scenario showing the problem]
 
+**CODE EXAMPLE RULE**: Only include code if the problem is fundamentally about implementation. For conceptual/architectural issues, describe the problem in plain English instead.
+
 ```typescript
 // ❌ BAD: [What goes wrong]
-[Code example showing the problem]
+// ONLY include this code block if:
+// - The problem is subtle/hidden in code
+// - Showing code makes the issue instantly clear
+// - Text alone would be confusing
+[Code example - use only when necessary]
 ```
 
 **Problems**:
@@ -99,79 +105,76 @@
 
 ### Visual Representation
 
-**Choose based on complexity:**
+**CRITICAL: Use ASCII diagrams exclusively for all visualizations.**
 
-**For simple textual/data transformations** (use ASCII):
+**Design Philosophy**: Keep diagrams simple, clean, and scannable. Focus on clarity over detail.
+
+**Common Patterns:**
+
+**Simple Flow (linear process):**
+
+```
+Input → Process → Output
+```
+
+**Decision Flow (branching):**
+
+```
+Input
+  ↓
+Decision Point
+  ├─── Option A → Result A
+  └─── Option B → Result B
+```
+
+**Loop Flow (iteration):**
+
+```
+  ┌──────── LOOP ────────┐
+  ↓                      │
+Step 1 → Step 2 → Step 3 │
+  │                      │
+  └── Continue? ─────────┘
+       │
+       ↓ Stop
+     Result
+```
+
+**System Architecture (boxes with relationships):**
+
+```
+┌─────────────┐      ┌─────────────┐
+│  Component  │─────▶│  Component  │
+│      A      │      │      B      │
+└─────────────┘      └─────────────┘
+       │                    │
+       ↓                    ↓
+┌─────────────┐      ┌─────────────┐
+│  Component  │      │  Component  │
+│      C      │      │      D      │
+└─────────────┘      └─────────────┘
+```
+
+**Data Transformation:**
 
 ```
 "The quick brown fox jumps over the lazy dog."
-
-→ 10 words
-→ ~13 tokens (including punctuation and spaces)
+    ↓
+Tokenization
+    ↓
+[825, 318, 262, 3139, 286, 4881, 30]
+    ↓
+10 words → ~13 tokens (including punctuation)
 ```
 
-**For complex workflows/architecture** (use Mermaid - choose the right chart type):
+**Guidelines for ASCII Diagrams:**
 
-**Flowchart** (processes, decision trees, agent loops):
-
-```mermaid
-flowchart LR
-    Start([Start]) --> Process[Process]
-    Process --> Decision{Decision?}
-    Decision -- Yes --> End([End])
-    Decision -- No --> Process
-```
-
-**Sequence Diagram** (interactions over time, API calls, agent-tool communication):
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Agent
-    participant Tool
-
-    User->>Agent: Request
-    Agent->>Tool: Execute
-    Tool-->>Agent: Result
-    Agent-->>User: Response
-```
-
-**State Diagram** (state machines, lifecycle, transitions):
-
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle --> Processing: Start
-    Processing --> Success: Complete
-    Processing --> Error: Fail
-    Success --> [*]
-    Error --> [*]
-```
-
-**Class Diagram** (relationships, inheritance, composition):
-
-```mermaid
-classDiagram
-    class Agent {
-        +execute()
-        +think()
-    }
-    class Tool {
-        +call()
-    }
-    Agent --> Tool: uses
-```
-
-**Choose the chart type that best fits your explanation:**
-
--   **Flowchart**: Step-by-step processes, decision trees, agent loops (Think → Act → Observe)
--   **Sequence Diagram**: Time-based interactions, API calls, multi-party communication
--   **State Diagram**: State machines, lifecycle management, status transitions
--   **Class Diagram**: Object relationships, architecture, component structure
--   **ER Diagram**: Database schemas, data relationships
--   **Gantt Chart**: Timelines, project planning, scheduling
--   **Mindmap**: Hierarchical concepts, knowledge organization
--   **Timeline**: Chronological events, history, evolution
+-   Keep diagrams under 15 lines for readability
+-   Use Unicode box-drawing characters: ┌ ┐ └ ┘ ├ ┤ ─ │ ↓ →
+-   Align elements consistently
+-   Add brief labels inside boxes or next to arrows
+-   Test that your diagram renders correctly in monospace font
+-   If diagram gets complex (>20 boxes), break into multiple simpler diagrams
 
 ### Key Principles
 
@@ -187,9 +190,24 @@ classDiagram
 
 **Use Case**: [When to use this variant]
 
+**CRITICAL: Only include code examples when they:**
+
+-   Demonstrate non-obvious implementation details
+-   Show critical error handling or edge cases
+-   Reveal performance-critical patterns
+-   Clarify complex abstractions
+
+**DO NOT include code for:**
+
+-   Simple API calls engineers already know
+-   Basic CRUD operations
+-   Standard framework patterns (Next.js routes, NestJS controllers)
+-   Obvious type definitions
+
 ```typescript
-// [Pattern implementation with comments]
-[Code example]
+// Include ONLY if this code teaches something unique
+// Focus on the "aha moment" - what's different/critical here?
+[Code example - use sparingly, only when adds real value]
 ```
 
 **Pros**:
@@ -216,31 +234,237 @@ classDiagram
 
 ## Framework Integration
 
-### Next.js (App Router)
+**MANDATORY FOR IMPLEMENTATION PATTERNS**: Show how to implement this pattern in our stack.
+
+**When to INCLUDE this section:**
+
+-   Pattern involves code implementation (agents, tools, RAG, memory systems)
+-   Developer needs to know where/how to integrate with our frameworks
+-   There are framework-specific APIs or patterns to follow
+
+**When to SKIP this section:**
+
+-   Purely conceptual topics (LLM theory, training vs inference)
+-   Pattern has no code implementation
+-   Already covered sufficiently in "Implementation Patterns"
+
+**RESEARCH REQUIREMENT**: Before writing framework integration, you MUST:
+
+1. **Search official docs** for current APIs and best practices
+2. **Use web search** to find latest patterns and examples
+3. **Verify versions** - APIs change, don't rely on outdated knowledge
+
+**Required Documentation Sources:**
+
+-   [Vercel AI SDK 6 Docs](https://ai-sdk.dev/docs/announcing-ai-sdk-6-beta) - Agent patterns, tools, streaming
+-   [AI Elements](https://ai-sdk.dev/elements) - UI components for AI features
+-   [Next.js Docs](https://nextjs.org/docs) - App Router, Server Actions, streaming
+-   [NestJS Docs](https://docs.nestjs.com/) - Backend architecture, modules, services
+
+### Our Tech Stack
+
+**Frontend**: Next.js 15 (App Router) + AI SDK 6 + AI Elements
+**Backend**: NestJS + AI SDK 6
+**Agents**: Vercel AI SDK 6 `ToolLoopAgent` abstraction
+
+---
+
+### AI SDK 6 Agent Implementation
+
+**When to include**: Any pattern involving agents, tools, or autonomous behavior.
 
 ```typescript
-// app/[feature]/[component].tsx
-[Next.js specific implementation]
+// Example: ToolLoopAgent with our patterns
+import { ToolLoopAgent } from "ai";
+import { openrouter } from "@openrouter/ai-sdk-provider";
+
+const agent = new ToolLoopAgent({
+	model: openrouter.languageModel("google/gemini-2.5-flash"),
+	instructions: "[Your system prompt]",
+	tools: {
+		// Your tools here
+	},
+});
 ```
 
-### NestJS (Backend)
+**Key AI SDK 6 Concepts** (research before using):
+
+-   `ToolLoopAgent` - Default agent implementation
+-   `callOptionsSchema` - Runtime configuration with Zod
+-   `prepareCall` - Dynamic prompt/tool injection
+-   Tool approval with `needsApproval`
+-   Structured output with `Output.object()`
+
+**Research**: [AI SDK 6 Agent Docs](https://ai-sdk.dev/docs/announcing-ai-sdk-6-beta#agent-abstraction)
+
+---
+
+### Next.js Frontend Integration
+
+**When to include**: Patterns that need UI, streaming, or client-side interaction.
+
+**App Router Structure**:
+
+```
+app/
+  [feature]/
+    page.tsx              # Client component with useChat/useAgent
+    _components/          # Feature-specific components
+    _actions/             # Server Actions
+  api/
+    [feature]/route.ts    # API route for streaming
+```
+
+**Example: Streaming Agent Response**
 
 ```typescript
-// src/[module]/[service].ts
-[NestJS specific implementation]
-```
+// app/api/agent/route.ts (Server)
+import { createAgentUIStreamResponse } from "ai";
+import { myAgent } from "@/server/agents/my-agent";
 
-### Vercel AI SDK 6
+export async function POST(request: Request) {
+	const { messages } = await request.json();
+
+	return createAgentUIStreamResponse({
+		agent: myAgent,
+		messages,
+	});
+}
+```
 
 ```typescript
-// [AI SDK specific implementation]
-[Code with AI SDK v6]
+// app/chat/page.tsx (Client)
+"use client";
+import { useChat } from "@ai-sdk/react";
+
+export default function ChatPage() {
+	const { messages, input, handleSubmit, handleInputChange } = useChat({
+		api: "/api/agent",
+	});
+
+	return (
+		<form onSubmit={handleSubmit}>
+			{messages.map((m) => (
+				<div key={m.id}>{m.content}</div>
+			))}
+			<input value={input} onChange={handleInputChange} />
+		</form>
+	);
+}
 ```
 
-**[Optional: Your Codebase Example]**
+**Key Next.js Patterns** (research before using):
+
+-   Server Actions vs API Routes for AI streaming
+-   `useChat` / `useAgent` / `useCompletion` hooks
+-   Server/Client component boundaries
+-   Streaming with Suspense
+
+**Research**: [Next.js App Router Docs](https://nextjs.org/docs)
+
+---
+
+### AI Elements (UI Components)
+
+**When to include**: Patterns that need specialized AI UI (streaming text, artifacts, suggestions).
+
+AI Elements provides pre-built components for common AI UX patterns. Research available components before building custom UI.
+
+**Available Components** (verify latest):
+
+-   `<Message>` - Chat message display
+-   `<Artifact>` - Generated content preview
+-   `<StreamingText>` - Animated text reveal
+-   `<Suggestion>` - Quick action buttons
+-   `<ToolInvocation>` - Tool call visualization
+
+**Research**: [AI Elements Docs](https://ai-sdk.dev/elements)
+
+---
+
+### NestJS Backend Integration
+
+**When to include**: Backend services, API orchestration, business logic.
+
+**Module Structure**:
+
+```
+src/
+  [feature]/
+    [feature].module.ts      # Feature module
+    [feature].service.ts     # Business logic
+    [feature].controller.ts  # API endpoints
+  agents/
+    [agent-name].agent.ts    # Agent definitions
+```
+
+**Example: Agent Service**
+
+```typescript
+// src/agents/support.agent.ts
+import { ToolLoopAgent } from "ai";
+import { openrouter } from "@openrouter/ai-sdk-provider";
+
+export const supportAgent = new ToolLoopAgent({
+	model: openrouter.languageModel("google/gemini-2.5-flash"),
+	instructions: "You are a support agent.",
+	tools: {
+		// Define tools
+	},
+});
+```
+
+```typescript
+// src/support/support.service.ts
+import { Injectable } from "@nestjs/common";
+import { supportAgent } from "@/agents/support.agent";
+
+@Injectable()
+export class SupportService {
+	async handleQuery(messages: any[]) {
+		const result = await supportAgent.generate({
+			messages,
+		});
+		return result;
+	}
+}
+```
+
+**Key NestJS Patterns** (research before using):
+
+-   Dependency injection for agents
+-   Guards for authentication
+-   Interceptors for logging/telemetry
+-   Exception filters for error handling
+
+**Research**: [NestJS Docs](https://docs.nestjs.com/)
+
+---
+
+### Integration Tips
+
+**Agent + Next.js**:
+
+-   Use API routes for streaming (`createAgentUIStreamResponse`)
+-   Use Server Actions for simple, non-streaming agent calls
+-   Always handle loading/error states in UI
+
+**Agent + NestJS**:
+
+-   Define agents in dedicated `/agents` directory
+-   Inject agent configuration via `ConfigService`
+-   Use services to wrap agent execution with business logic
+
+**Memory Patterns**:
+
+-   **Short-term**: Pass conversation history to agent
+-   **Long-term**: Use vector stores (see RAG patterns)
+-   **Working memory**: Session-based state in backend service
+
+**Codebase Example**:
 
 -   **File**: `[path/to/file.ts]`
--   **Description**: [How it implements this pattern]
+-   **Description**: [How this codebase implements the pattern]
 
 ---
 
@@ -309,9 +533,16 @@ classDiagram
 
 ### 1. [Best Practice Category]
 
+**CODE GUIDANCE**: Most best practices can be explained with prose + ASCII diagrams. Reserve code for:
+
+-   Performance-critical implementations
+-   Non-obvious error handling
+-   Subtle bugs that bite in production
+
 ```typescript
-// Production-ready implementation
-[Code example]
+// ONLY show code if the best practice is fundamentally about implementation
+// Focus on the critical 2-3 lines that matter, not boilerplate
+[Minimal code example - use sparingly]
 ```
 
 **Why**: [Rationale]
@@ -323,23 +554,29 @@ classDiagram
 
 ### 3. Common Pitfalls
 
+**PRINCIPLE**: Show pitfalls through impact/consequences, not just code comparison.
+
 #### ❌ Pitfall 1: [What not to do]
 
+Describe the problem and its consequences. Code optional unless the issue is hidden in implementation.
+
 ```typescript
-// BAD
-[Anti-pattern code]
+// BAD - only include if code makes the issue obvious
+[Anti-pattern code - use only when necessary]
 ```
 
-**Problem**: [Why this fails]
+**Problem**: [Why this fails, with real-world impact]
 
 #### ✅ Solution: [Correct approach]
 
+Explain the solution conceptually first. Code optional unless showing a non-obvious fix.
+
 ```typescript
-// GOOD
-[Correct code]
+// GOOD - only include if solution has subtle implementation details
+[Correct code - use only when adds value]
 ```
 
-**Benefit**: [Why this works]
+**Benefit**: [Why this works, with measurable improvement]
 
 ---
 
@@ -349,33 +586,22 @@ classDiagram
 
 ### Logging Strategy
 
+**Key Principle**: Log agent decisions, not just data flow. Capture reasoning traces.
+
+**What to Log**:
+
+-   Agent step type (think/act/observe)
+-   Tool calls with parameters
+-   Token usage per step
+-   Execution time per step
+-   Error context (what agent was trying to do)
+
+**CODE NOTE**: Skip showing logger implementation - engineers know how to log. Focus on WHAT to log (the strategy), not HOW (the syntax).
+
 ```typescript
-// Log agent steps, tool calls, and reasoning traces
-import { logger } from "@/lib/logger";
-
-async function executeAgent(input: string) {
-	logger.info("Agent started", { input, timestamp: Date.now() });
-
-	const result = await agent.execute({
-		input,
-		onStep: (step) => {
-			logger.debug("Agent step", {
-				step: step.type,
-				tool: step.toolName,
-				input: step.input,
-				output: step.output,
-			});
-		},
-	});
-
-	logger.info("Agent completed", {
-		output: result.output,
-		steps: result.steps.length,
-		tokens: result.usage.totalTokens,
-	});
-
-	return result;
-}
+// ONLY include code if showing non-obvious logging pattern
+// Example: "Log token usage incrementally to detect runaway costs"
+[Minimal example showing the unique logging strategy - optional]
 ```
 
 **Why**: Agent failures are non-deterministic. Comprehensive logging enables debugging production issues.
@@ -384,35 +610,21 @@ async function executeAgent(input: string) {
 
 ### Testing Approach
 
+**Key Principle**: Test agent behavior patterns, not exact outputs. LLM responses are non-deterministic.
+
+**What to Test**:
+
+-   Tool selection (did agent call the right tool?)
+-   Error recovery (does agent handle failures gracefully?)
+-   Loop prevention (does agent stop after max steps?)
+-   Output structure (is format correct, even if content varies?)
+
+**CODE NOTE**: Testing agents is fundamentally different. Include code ONLY to show testing strategy, not syntax.
+
 ```typescript
-// Test non-deterministic agent behavior
-describe("Agent Tool Calling", () => {
-	it("should call correct tool for user query", async () => {
-		const result = await agent.execute({
-			input: "What's the weather in Paris?",
-		});
-
-		// Assert tool was called (not exact output)
-		expect(result.steps).toContainEqual(
-			expect.objectContaining({
-				type: "tool-call",
-				toolName: "getWeather",
-			})
-		);
-
-		// Assert final output structure
-		expect(result.output).toMatch(/temperature|weather|degrees/i);
-	});
-
-	it("should handle tool errors gracefully", async () => {
-		const result = await agent.execute({
-			input: "Get weather for invalid location",
-		});
-
-		expect(result.output).toContain("error");
-		expect(result.steps.length).toBeLessThan(10); // Prevents infinite loops
-	});
-});
+// ONLY include if showing unique testing pattern for LLMs
+// Example: "Assert tool was called, not exact output text"
+[Minimal test example showing the pattern - optional]
 ```
 
 **Why**: Traditional unit tests fail with LLMs. Test for behavior patterns, not exact outputs.
@@ -445,30 +657,11 @@ describe("Agent Tool Calling", () => {
 | **Latency (p95)**         | <5s    | >10s            |
 | **Cost per Conversation** | <$0.10 | >$0.50          |
 
-**Implementation**:
+**Implementation Strategy**:
 
-```typescript
-// Track agent metrics
-import { metrics } from "@/lib/metrics";
+Track these metrics at the orchestration layer. Key insight: Monitor step count and token usage incrementally to detect runaway agents before they burn budget.
 
-async function executeWithMetrics(input: string) {
-	const startTime = Date.now();
-
-	try {
-		const result = await agent.execute({ input });
-
-		metrics.increment("agent.success");
-		metrics.histogram("agent.steps", result.steps.length);
-		metrics.histogram("agent.tokens", result.usage.totalTokens);
-		metrics.histogram("agent.latency", Date.now() - startTime);
-
-		return result;
-	} catch (error) {
-		metrics.increment("agent.failure");
-		throw error;
-	}
-}
-```
+**CODE NOTE**: Engineers know how to call `metrics.increment()`. Skip implementation unless showing unique monitoring pattern (e.g., "Track token usage per step, not just total").
 
 ---
 
@@ -500,78 +693,52 @@ With compression:
 
 #### 1. Context Compression
 
-```typescript
-// Compress retrieved context before injection
-import { compressContext } from "@/lib/context-compression";
+**Strategy**: Compress retrieved documents before sending to LLM. Most RAG results contain redundant information.
 
-async function retrieveAndCompress(query: string, topK: number = 5) {
-	const docs = await vectorSearch(query, topK);
+**Approach**:
 
-	// Compress if total tokens exceed limit
-	const totalTokens = estimateTokens(docs.map((d) => d.content).join("\n"));
-
-	if (totalTokens > MAX_CONTEXT_TOKENS) {
-		const compressed = await compressContext(docs, {
-			targetTokens: MAX_CONTEXT_TOKENS,
-			preserveKeyFacts: true,
-		});
-
-		return compressed;
-	}
-
-	return docs;
-}
+```
+Retrieved: 8,000 tokens → Compress → 2,000 tokens (75% reduction)
 ```
 
-**Why**: Most retrieved documents contain redundant information. Compression preserves key facts while reducing tokens.
+**Implementation**: Use summarization to condense documents while preserving key facts. Set target token budget based on context window.
+
+**CODE NOTE**: Skip showing compression implementation. Focus on the strategy (when/why to compress) and savings (50-70% reduction).
 
 **Savings**: 50-70% token reduction with <5% accuracy loss.
 
 #### 2. Lazy Context Loading
 
-```typescript
-// Load context only when needed
-async function agentWithLazyContext(input: string) {
-  const agent = new ToolLoopAgent({
-    model: openrouter.languageModel("google/gemini-2.0-flash"),
-    tools: {
-      // Don't load full context upfront
-      searchDocs: {
-        description: "Search documentation when needed",
-        execute: async ({ query }) => {
-          // Load only relevant docs on-demand
-          return await vectorSearch(query, topK: 3);
-        },
-      },
-    },
-  });
+**Strategy**: Don't load full context upfront. Give agents tools to fetch data on-demand.
 
-  return await agent.execute({ input });
-}
+**Pattern**:
+
+```
+Traditional: Load all 10,000 docs → Send to agent (expensive)
+Lazy:        Agent requests specific docs via tool (cheap)
 ```
 
-**Why**: Many agent tasks don't need full context. Load only what's required per step.
+**Key Insight**: Most tasks only need 10-20% of available context. Let agent decide what to load.
+
+**CODE NOTE**: Engineers understand tool calling. Skip code unless showing unique lazy-loading pattern.
 
 **Savings**: 40-60% token reduction for multi-step tasks.
 
 #### 3. Prompt Template Optimization
 
-```typescript
-// ❌ BAD: Verbose prompts
-const prompt = `
-You are a helpful assistant. 
-Your job is to answer questions accurately.
-Please be thorough and detailed.
-Always cite your sources.
-Make sure to provide context.
-Answer the following question: ${query}
-`;
+**Strategy**: Remove filler words from prompts. Every word costs money at scale.
 
-// ✅ GOOD: Concise prompts
-const prompt = `Answer accurately with citations: ${query}`;
+**Example**:
+
+```
+❌ Verbose (72 tokens):
+"You are a highly capable and helpful AI assistant designed to provide accurate information. Your primary objective is to answer user questions thoroughly..."
+
+✅ Concise (8 tokens):
+"Answer accurately with citations: ${query}"
 ```
 
-**Why**: Every token costs money. Remove unnecessary words.
+**Why**: Every token costs money. Remove unnecessary words. Engineers can figure out the syntax - focus on the principle.
 
 **Savings**: 20-30% token reduction per request.
 
@@ -711,12 +878,20 @@ const prompt = `Answer accurately with citations: ${query}`;
 **⚡ Optional Sections** (include when relevant):
 
 -   **Table of Contents** (recommended for documents >500 lines, helps navigation)
--   Framework Integration (if you have framework-specific code)
+-   **Framework Integration** (ONLY if framework has special requirements - skip if pattern is framework-agnostic)
 -   Research & Benchmarks (if heavily research-based topics)
 -   Production Best Practices (for implementation-focused topics)
 -   Integration with Your Codebase (when you have direct examples)
 -   **Observability & Debugging** (for agent/autonomous patterns, ReAct loops, tool orchestration, multi-agent systems)
 -   **Token Efficiency** (for prompt/context-heavy patterns, RAG, long-context management, prompt engineering)
+
+**CODE USAGE PHILOSOPHY**:
+
+-   Assume your reader is a senior engineer who knows basic patterns
+-   Code examples should teach something unique, not demonstrate syntax
+-   When tempted to add code, ask: "Does this show something they couldn't figure out in 30 seconds?"
+-   Prefer ASCII diagrams + prose over code for architectural concepts
+-   Use code to show gotchas, edge cases, and performance-critical details
 
 **🔄 Flexible Sections** (adapt to content):
 
@@ -779,76 +954,94 @@ Use these liberally:
 
 **Code Formatting:**
 
+**PRINCIPLE: Code is expensive to read. Use sparingly.**
+
 ```typescript
-// Use TypeScript as default
-// Mark with comments: BAD vs GOOD
-// Include realistic examples from your stack
+// Only include code that:
+// 1. Shows non-obvious implementation
+// 2. Demonstrates critical error handling
+// 3. Reveals performance patterns
+//
+// Skip code for:
+// - Basic API calls
+// - Standard CRUD
+// - Obvious patterns
+//
+// When you do include code:
+// - Keep it under 20 lines
+// - Focus on the critical 2-3 lines
+// - Mark with comments: BAD vs GOOD
 ```
 
-**Visual Diagrams - Choose Based on Complexity:**
+**Visual Diagrams:**
 
-**ASCII Diagrams** (use for simple textual/data transformations):
+**CRITICAL: Use ASCII diagrams ONLY. Never use Mermaid.**
 
--   Quick, scannable examples
--   Tokenization, data flow, simple transformations
--   No rendering overhead, works everywhere
+**ASCII Diagram Library** (copy these patterns):
+
+**Linear Flow:**
 
 ```
-"The quick brown fox jumps over the lazy dog."
-
-→ 10 words
-→ ~13 tokens (including punctuation and spaces)
+Input → Process → Output
 ```
 
-**Mermaid Diagrams** (use for complex workflows/architecture - choose the right chart type):
+**Branching:**
 
-**Don't default to flowcharts** - select the chart type that best fits your explanation:
-
--   **Flowchart**: Processes, decision trees, agent loops (Think → Act → Observe)
--   **Sequence Diagram**: Time-based interactions, API calls, agent-tool communication
--   **State Diagram**: State machines, lifecycle management, status transitions
--   **Class Diagram**: Object relationships, architecture, component structure
--   **ER Diagram**: Database schemas, data relationships
--   **Gantt Chart**: Timelines, scheduling, project planning
--   **Mindmap**: Hierarchical concepts, knowledge organization
--   **Timeline**: Chronological events, history, evolution
-
-**Examples:**
-
-```mermaid
-%% Flowchart for processes
-flowchart LR
-    A[Input] --> B{Processing}
-    B -->|Success| C[Output]
-    B -->|Error| D[Retry]
+```
+     Input
+       ↓
+   Decision
+   ├─ Path A → Result A
+   └─ Path B → Result B
 ```
 
-```mermaid
-%% Sequence diagram for interactions
-sequenceDiagram
-    participant Agent
-    participant Tool
-    Agent->>Tool: Execute
-    Tool-->>Agent: Result
+**Loop:**
+
+```
+  ┌───── LOOP ─────┐
+  ↓                │
+Start → Step → End │
+  │                │
+  └─ Continue? ────┘
+     ↓ Stop
+   Result
 ```
 
-```mermaid
-%% State diagram for lifecycles
-stateDiagram-v2
-    [*] --> Idle
-    Idle --> Processing
-    Processing --> Success
-    Processing --> Error
+**Hierarchy:**
+
+```
+      Root
+       ├── Child A
+       │    ├── Grandchild 1
+       │    └── Grandchild 2
+       └── Child B
 ```
 
-**Decision Rule**:
+**System/Components:**
 
-1. **Textual/simple data** → ASCII (tokenization, quick examples)
-2. **Processes/flows** → Flowchart
-3. **Time-based interactions** → Sequence Diagram
-4. **State changes** → State Diagram
-5. **Relationships/structure** → Class/ER Diagram
-6. **Choose the chart type that best visualizes your concept**
+```
+┌──────────┐      ┌──────────┐
+│ Module A │─────▶│ Module B │
+└──────────┘      └──────────┘
+     │                  │
+     ↓                  ↓
+┌──────────┐      ┌──────────┐
+│ Module C │      │ Module D │
+└──────────┘      └──────────┘
+```
+
+**Data Transformation:**
+
+```
+"raw text" → [tokens] → [embeddings] → output
+```
+
+**Decision Rule:**
+
+-   Keep diagrams under 15 lines
+-   Use boxes for components, arrows for flow
+-   Break complex diagrams into multiple simple ones
+-   Test in monospace font before finalizing
 
 **Tables:**
 Use for comparisons, benchmarks, decision matrices
@@ -873,11 +1066,13 @@ More text with another citation[^2].
 ### Writing Style
 
 1. **Start broad, go deep**: TL;DR → Overview → Problem → Solution → Details
-2. **Be concrete**: Use real examples, metrics, and code
-3. **Cite heavily**: Ground in 2024-2025 research
-4. **Stay practical**: Focus on production-ready patterns
-5. **Keep it scannable**: Use headers, bullets, and visual elements
-6. **Enable navigation**: Include Table of Contents for documents >500 lines (many editors can auto-generate)
+2. **Be concrete**: Use real examples, metrics, and ASCII diagrams
+3. **Minimize code**: Only show code for non-obvious implementations, gotchas, or performance-critical patterns
+4. **Cite heavily**: Ground in 2024-2025 research
+5. **Stay practical**: Focus on production-ready patterns
+6. **Keep it scannable**: Use headers, bullets, and visual elements
+7. **Enable navigation**: Include Table of Contents for documents >500 lines (many editors can auto-generate)
+8. **Respect engineer time**: Assume senior engineers - don't explain basic syntax, show unique insights only
 
 ### Quality Checklist
 
@@ -885,15 +1080,18 @@ Before marking a doc as "Complete", ensure:
 
 -   [ ] TL;DR is one sentence and captures the essence
 -   [ ] Problem is clearly stated with concrete example
--   [ ] At least one implementation pattern with code
+-   [ ] At least one implementation pattern (code optional - only if adds unique value)
 -   [ ] "When to Use" section with ✅ and ❌ scenarios
 -   [ ] Minimum 3 research citations from 2024-2025
 -   [ ] Key Takeaways summarize in 3-5 bullets
 -   [ ] Related topics linked at bottom
--   [ ] Code examples use TypeScript
+-   [ ] **ASCII diagrams used exclusively (no Mermaid)**
+-   [ ] **Code included only when teaching non-obvious patterns** (not for syntax examples)
+-   [ ] Code examples use TypeScript (when included)
 -   [ ] Metrics included where applicable (%, time, cost)
 -   [ ] Proofread for consistency and clarity
 -   [ ] Versions pinned in header
 -   [ ] Table of Contents included (if document >500 lines)
+-   [ ] **Document respects engineer time - no unnecessary boilerplate code**
 
 ---
