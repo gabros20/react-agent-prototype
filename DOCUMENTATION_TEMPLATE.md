@@ -1,10 +1,16 @@
-# Universal Documentation Template
+## Critical: Standalone Knowledge Base
 
-**Purpose**: Standard structure for all knowledge base documents
-**Last Updated**: 2025-11-20
-**Usage**: Copy this template when creating new docs in `/docs/kb/`
+**This is a general engineering knowledge base, NOT project-specific documentation.**
 
----
+When writing or updating documentation using this template:
+
+-   **DO NOT** reference the current codebase, project structure, or implementation details
+-   **DO NOT** include examples like "our implementation in `/server/agent/orchestrator.ts`"
+-   **DO** focus on general concepts, patterns, and best practices applicable to any project
+-   **DO** provide framework-agnostic examples that engineers can adapt to their own projects
+-   **REMOVE** any existing references to specific project files, directories, or implementations when updating docs
+
+**Purpose**: This knowledge base is designed to be a standalone educational resource that can live independently of any specific project repository. Think of it as a textbook or comprehensive guide, not internal project documentation.
 
 ## Template Structure
 
@@ -15,13 +21,11 @@
 
 [1-3 sentence capturing the essence of the topic but in an understandable, easy to read way - what problem this solves and the key benefit]
 
-**Status**: [✅ Complete | 🚧 In Progress | ⏳ Pending]
-**Last Updated**: YYYY-MM-DD
-**Versions**: [OPTIONAL - Only include if doc is framework/library-specific with version-dependent behavior. Examples: "AI SDK 6.0+", "Next.js 15 App Router". Skip for conceptual topics.]
-**Prerequisites**: [[Link to prerequisite doc 1], [Link to prerequisite doc 2]]
-**Grounded In**: [Key research papers/production systems, 2024-2025]
-
----
+-   **Status**: [✅ Complete | 🚧 In Progress | ⏳ Pending]
+-   **Last Updated**: YYYY-MM-DD
+-   **Versions**: [OPTIONAL - Only include if doc is framework/library-specific with version-dependent behavior. Examples: "AI SDK 6.0+", "Next.js 15 App Router". Skip for conceptual topics.]
+-   **Prerequisites**: [[Link to prerequisite doc 1], [Link to prerequisite doc 2]]
+-   **Grounded In**: [Key research papers/production systems, 2024-2025]
 
 ## Table of Contents
 
@@ -38,13 +42,10 @@
 -   [Observability & Debugging](#observability--debugging) _(if applicable)_
 -   [Token Efficiency](#token-efficiency) _(if applicable)_
 -   [Trade-offs & Considerations](#trade-offs--considerations)
--   [Integration with Your Codebase](#integration-with-your-codebase) _(if applicable)_
 -   [Key Takeaways](#key-takeaways)
 -   [References](#references)
 
 **Note**: Update this TOC to match your document's actual sections. Many markdown editors can auto-generate TOCs.
-
----
 
 ## Overview
 
@@ -61,8 +62,6 @@
 -   **[Metric/Finding]**: [Specific improvement with source]
 
 **Date Verified**: [Current date for freshness]
-
----
 
 ## The Problem: [Clear problem statement]
 
@@ -92,8 +91,6 @@
 ### Why This Matters
 
 [Business/technical impact of the problem - costs, failures, user experience]
-
----
 
 ## Core Concept
 
@@ -182,8 +179,6 @@ Tokenization
 2. **[Principle 2]**: [Explanation]
 3. **[Principle 3]**: [Explanation]
 
----
-
 ## Implementation Patterns
 
 ### Pattern 1: [Basic/Simple Pattern Name]
@@ -230,16 +225,14 @@ Tokenization
 
 [Repeat structure above, focus on production-ready]
 
----
-
 ## Framework Integration
 
-**MANDATORY FOR IMPLEMENTATION PATTERNS**: Show how to implement this pattern in our stack.
+**MANDATORY FOR IMPLEMENTATION PATTERNS**: Show how to implement this pattern with common frameworks. Provide general examples that engineers can adapt to their projects.
 
 **When to INCLUDE this section:**
 
 -   Pattern involves code implementation (agents, tools, RAG, memory systems)
--   Developer needs to know where/how to integrate with our frameworks
+-   Developer needs to know how to integrate with popular frameworks
 -   There are framework-specific APIs or patterns to follow
 
 **When to SKIP this section:**
@@ -247,6 +240,8 @@ Tokenization
 -   Purely conceptual topics (LLM theory, training vs inference)
 -   Pattern has no code implementation
 -   Already covered sufficiently in "Implementation Patterns"
+
+**CRITICAL**: Use generic examples demonstrating framework patterns, NOT references to a specific project's file structure or implementation.
 
 **RESEARCH REQUIREMENT**: Before writing framework integration, you MUST:
 
@@ -261,13 +256,13 @@ Tokenization
 -   [Next.js Docs](https://nextjs.org/docs) - App Router, Server Actions, streaming
 -   [NestJS Docs](https://docs.nestjs.com/) - Backend architecture, modules, services
 
-### Our Tech Stack
+### Example Tech Stack
 
 **Frontend**: Next.js 15 (App Router) + AI SDK 6 + AI Elements
 **Backend**: NestJS + AI SDK 6
 **Agents**: Vercel AI SDK 6 `ToolLoopAgent` abstraction
 
----
+**Note**: These examples demonstrate patterns with popular frameworks. Adapt the concepts to your preferred stack.
 
 ### AI SDK 6 Agent Implementation
 
@@ -296,8 +291,6 @@ const agent = new ToolLoopAgent({
 -   Structured output with `Output.object()`
 
 **Research**: [AI SDK 6 Agent Docs](https://ai-sdk.dev/docs/announcing-ai-sdk-6-beta#agent-abstraction)
-
----
 
 ### Next.js Frontend Integration
 
@@ -362,8 +355,6 @@ export default function ChatPage() {
 
 **Research**: [Next.js App Router Docs](https://nextjs.org/docs)
 
----
-
 ### AI Elements (UI Components)
 
 **When to include**: Patterns that need specialized AI UI (streaming text, artifacts, suggestions).
@@ -379,8 +370,6 @@ AI Elements provides pre-built components for common AI UX patterns. Research av
 -   `<ToolInvocation>` - Tool call visualization
 
 **Research**: [AI Elements Docs](https://ai-sdk.dev/elements)
-
----
 
 ### NestJS Backend Integration
 
@@ -439,8 +428,6 @@ export class SupportService {
 
 **Research**: [NestJS Docs](https://docs.nestjs.com/)
 
----
-
 ### Integration Tips
 
 **Agent + Next.js**:
@@ -460,13 +447,6 @@ export class SupportService {
 -   **Short-term**: Pass conversation history to agent
 -   **Long-term**: Use vector stores (see RAG patterns)
 -   **Working memory**: Session-based state in backend service
-
-**Codebase Example**:
-
--   **File**: `[path/to/file.ts]`
--   **Description**: [How this codebase implements the pattern]
-
----
 
 ## Research & Benchmarks
 
@@ -492,8 +472,6 @@ export class SupportService {
 | **[Metric 1]** | [Value]  | [Value]      | **[%]**     |
 | **[Metric 2]** | [Value]  | [Value]      | **[%]**     |
 | **[Metric 3]** | [Value]  | [Value]      | **[%]**     |
-
----
 
 ## When to Use This Pattern
 
@@ -526,8 +504,6 @@ export class SupportService {
 | [Condition 1]  | [Pattern variant]    |
 | [Condition 2]  | [Pattern variant]    |
 | [Condition 3]  | [Alternative]        |
-
----
 
 ## Production Best Practices
 
@@ -577,8 +553,6 @@ Explain the solution conceptually first. Code optional unless showing a non-obvi
 ```
 
 **Benefit**: [Why this works, with measurable improvement]
-
----
 
 ## Observability & Debugging
 
@@ -662,8 +636,6 @@ Explain the solution conceptually first. Code optional unless showing a non-obvi
 Track these metrics at the orchestration layer. Key insight: Monitor step count and token usage incrementally to detect runaway agents before they burn budget.
 
 **CODE NOTE**: Engineers know how to call `metrics.increment()`. Skip implementation unless showing unique monitoring pattern (e.g., "Track token usage per step, not just total").
-
----
 
 ## Token Efficiency
 
@@ -764,8 +736,6 @@ Lazy:        Agent requests specific docs via tool (cheap)
 
 **Break-even**: Optimization implementation takes 2 weeks. ROI positive after 1 month.
 
----
-
 ## Trade-offs & Considerations
 
 ### Advantages
@@ -800,29 +770,6 @@ Lazy:        Agent requests specific docs via tool (cheap)
 - Savings: [Amount] ([%])
 ```
 
----
-
-## Integration with Your Codebase
-
-[This section is OPTIONAL - only include if you have direct examples]
-
-### Current Implementation
-
-**File**: `[path/to/file.ts]`
-
-[Brief description of how your codebase uses this pattern]
-
-### Enhancement Opportunities
-
-1. **[Enhancement 1]**: [What could be improved]
-    - **Current**: [Current approach]
-    - **Recommended**: [Better approach]
-    - **Benefit**: [Why it's better]
-
-[Optional: Code examples showing before/after]
-
----
-
 ## Key Takeaways
 
 1. **[Core Insight 1]** - [One sentence]
@@ -837,8 +784,6 @@ Lazy:        Agent requests specific docs via tool (cheap)
 -   [ ] [Third step]
 -   [ ] [Fourth step]
 
----
-
 ## References
 
 1. **[Paper/Framework 1]**: [Authors], "[Title]", [Venue/Date], [URL]
@@ -847,8 +792,6 @@ Lazy:        Agent requests specific docs via tool (cheap)
 
 [Continue numbered list]
 
----
-
 **Related Topics**:
 
 -   [Link to previous topic in sequence]
@@ -856,8 +799,6 @@ Lazy:        Agent requests specific docs via tool (cheap)
 -   [Link to related topic in different layer]
 
 **Layer Index**: [Layer N: Layer Name](docs/AI_KNOWLEDGE_BASE_TOC.md#layer-n)
-
----
 ````
 
 ## Usage Guidelines
@@ -881,7 +822,6 @@ Lazy:        Agent requests specific docs via tool (cheap)
 -   **Framework Integration** (ONLY if framework has special requirements - skip if pattern is framework-agnostic)
 -   Research & Benchmarks (if heavily research-based topics)
 -   Production Best Practices (for implementation-focused topics)
--   Integration with Your Codebase (when you have direct examples)
 -   **Observability & Debugging** (for agent/autonomous patterns, ReAct loops, tool orchestration, multi-agent systems)
 -   **Token Efficiency** (for prompt/context-heavy patterns, RAG, long-context management, prompt engineering)
 
@@ -940,6 +880,10 @@ Lazy:        Agent requests specific docs via tool (cheap)
 -   Examples: RAG, long-context management, prompt engineering
 
 ### Visual Elements
+
+**CRITICAL: DO NOT USE `---` HORIZONTAL RULE SEPARATORS**
+
+GitHub Flavored Markdown automatically renders underlines beneath all headers. Adding `---` separators between sections is redundant and creates unnecessary visual clutter. Simply use headers (`##`, `###`) to structure your document - GitHub will handle the visual separation automatically.
 
 Use these liberally:
 
@@ -1055,8 +999,6 @@ Text with citation[^1].
 
 More text with another citation[^2].
 
----
-
 ## References
 
 1. **Author et al.** (2025). "Title". _Source_. https://url.com
@@ -1085,7 +1027,10 @@ Before marking a doc as "Complete", ensure:
 -   [ ] Minimum 3 research citations from 2024-2025
 -   [ ] Key Takeaways summarize in 3-5 bullets
 -   [ ] Related topics linked at bottom
+-   [ ] **No references to specific project files, directories, or implementations**
+-   [ ] **Documentation is standalone and framework-agnostic** (educational guide, not project docs)
 -   [ ] **ASCII diagrams used exclusively (no Mermaid)**
+-   [ ] **No `---` horizontal rule separators used** (GitHub auto-renders header underlines)
 -   [ ] **Code included only when teaching non-obvious patterns** (not for syntax examples)
 -   [ ] Code examples use TypeScript (when included)
 -   [ ] Metrics included where applicable (%, time, cost)
@@ -1093,5 +1038,3 @@ Before marking a doc as "Complete", ensure:
 -   [ ] Versions pinned in header
 -   [ ] Table of Contents included (if document >500 lines)
 -   [ ] **Document respects engineer time - no unnecessary boilerplate code**
-
----

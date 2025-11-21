@@ -216,14 +216,16 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
     -   **Status**: Complete - Deep dive into context management, token optimization
     -   **Length**: 700+ lines with examples from this codebase
     -   **Includes**: Hierarchical memory, working memory, hybrid fetching patterns
--   [0.1.4 Temperature, Top-P, and Sampling](./kb/0-foundations/0.1.4-sampling-parameters.md) ✅
-    -   **Status**: Complete - Master guide to controlling LLM output
-    -   **Length**: 650+ lines with API examples, debugging tips
-    -   **Includes**: Temperature, top-p, top-k, greedy decoding, penalties, agent configuration
+-   [0.1.4 Sampling Parameters: Temperature, Top-P, Top-K](./kb/0-foundations/0.1.4-sampling-parameters.md) ✅
+    -   **Status**: ✅ Complete - Restructured with 2024-2025 research (Min-P, Monte Carlo Temperature)
+    -   **Length**: 1050+ lines with comprehensive template structure
+    -   **Includes**: Min-p sampling (ICLR 2025), multi-temperature scaling (+7.3 points), capability-specific effects, production best practices, observability patterns
+    -   **Updated**: 2025-11-21 with latest research grounding
 -   [0.1.5 Model Selection Guide](./kb/0-foundations/0.1.5-model-selection.md) ✅
-    -   **Status**: Complete - Comprehensive model comparison and decision frameworks
-    -   **Length**: 1100+ lines with benchmarks, pricing, practical recommendations
-    -   **Includes**: GPT-4/Claude/Gemini/Llama comparison, cost-performance analysis, your GPT-4o-mini validation, decision matrices
+    -   **Status**: ✅ Complete - Restructured to template format (Nov 2025)
+    -   **Length**: 1070 lines with TL;DR, Core Concept, 3 Implementation Patterns, Benchmarks
+    -   **Updated**: Gemini 3 Pro (41% reasoning), GPT-5.1 ($1.25/$10), Claude 4.5 models with Nov 2025 benchmarks
+    -   **Includes**: Decision matrix, agentic comparison table, framework integration (AI SDK 6), production best practices, cost-reliability analysis
 
 #### 0.2 Thinking vs Non-Thinking Models
 
