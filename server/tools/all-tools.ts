@@ -8,6 +8,16 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import type { AgentContext } from './types'
+import {
+  findImageTool,
+  searchImagesTool,
+  listConversationImagesTool,
+  addImageToSectionTool,
+  replaceImageTool,
+  deleteImageTool,
+  listAllImagesTool,
+  updateSectionImageTool
+} from './image-tools'
 
 // ============================================================================
 // CMS - Page Tools
@@ -622,11 +632,21 @@ export const ALL_TOOLS = {
   // Search
   'search_vector': searchVector,
   'cms_findResource': cmsFindResource,
-  
+
+  // Images
+  'cms_findImage': findImageTool,
+  'cms_searchImages': searchImagesTool,
+  'cms_listConversationImages': listConversationImagesTool,
+  'cms_listAllImages': listAllImagesTool,
+  'cms_addImageToSection': addImageToSectionTool,
+  'cms_updateSectionImage': updateSectionImageTool,
+  'cms_replaceImage': replaceImageTool,
+  'cms_deleteImage': deleteImageTool,
+
   // HTTP
   'http_get': httpGet,
   'http_post': httpPost,
-  
+
   // Planning
   'plan_analyzeTask': planAnalyzeTask
 }
@@ -755,5 +775,53 @@ export const TOOL_METADATA = {
     riskLevel: 'safe',
     requiresApproval: false,
     tags: ['planning', 'analysis']
+  },
+  'cms_findImage': {
+    category: 'images',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'image', 'search']
+  },
+  'cms_searchImages': {
+    category: 'images',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'image', 'search']
+  },
+  'cms_listConversationImages': {
+    category: 'images',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'image']
+  },
+  'cms_listAllImages': {
+    category: 'images',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'image', 'list']
+  },
+  'cms_addImageToSection': {
+    category: 'images',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'image', 'section']
+  },
+  'cms_updateSectionImage': {
+    category: 'images',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'update', 'image', 'section']
+  },
+  'cms_replaceImage': {
+    category: 'images',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'image']
+  },
+  'cms_deleteImage': {
+    category: 'images',
+    riskLevel: 'high',
+    requiresApproval: true,
+    tags: ['write', 'image', 'destructive']
   }
 } as const

@@ -1,6 +1,6 @@
-# ReAct AI Agent Prototype - CMS-Focused
+# ReAct AI Agent Prototype - CMS with AI Image Management
 
-AI-powered content management system with unified ReAct agent using native AI SDK v6 patterns.
+AI-powered content management system with unified ReAct agent, semantic image search, and automatic metadata generation using native AI SDK v6 patterns.
 
 ## 🚀 New to the Project?
 
@@ -36,19 +36,43 @@ pnpm seed
 pnpm reindex
 ```
 
-### 4. Start Development Servers
+### 4. Start Redis (Required for Image Processing)
 
 ```bash
-# Start all servers: API (8787), Preview (4000), Next.js (3000)
+# Install Redis (one-time setup)
+brew install redis
+
+# Start Redis
+brew services start redis
+
+# Verify Redis is running
+redis-cli ping  # Should return: PONG
+```
+
+### 5. Start Development Servers
+
+```bash
+# Start all servers: API (8787), Preview (4000), Next.js (3000), Worker
 pnpm dev
 
 # Or start individually:
 pnpm dev:server   # API server on port 8787
 pnpm dev:preview  # Preview server on port 4000
 pnpm dev:web      # Next.js frontend on port 3000
+pnpm dev:worker   # Image processing worker
 ```
 
-### 5. Open the Assistant
+### 6. Seed Sample Images (Optional)
+
+```bash
+# Download and process 3 sample images (mountain, puppy, workspace)
+pnpm seed:images
+
+# Wait 5-10 seconds for processing to complete
+# Check worker logs for: "✅ Job ... completed successfully"
+```
+
+### 7. Open the Assistant
 
 ```bash
 # Visit the AI assistant
@@ -65,18 +89,28 @@ server/          # Backend Express API
 ├── db/          # Database schema & client
 ├── services/    # Business logic layer
 │   ├── cms/     # CMS services (pages, sections, entries)
+│   ├── storage/ # Image processing & storage services
+│   ├── ai/      # AI services (metadata, embeddings)
 │   ├── renderer.ts   # Nunjucks template rendering
 │   ├── vector-index.ts # LanceDB vector search
 │   ├── session-service.ts # Session management
 │   └── approval-queue.ts # HITL approval coordination
 ├── routes/      # API routes
 │   ├── agent.ts # SSE streaming endpoints
-│   └── sessions.ts # Session CRUD routes
+│   ├── sessions.ts # Session CRUD routes
+│   ├── upload.ts # Image upload endpoint
+│   └── images.ts # Image serving endpoints
 ├── middleware/  # Express middleware
+│   └── upload.ts # Multer file upload validation
+├── queues/      # Job queues
+│   └── image-queue.ts # BullMQ image processing queue
+├── workers/     # Background workers
+│   └── image-worker.ts # Image processing worker
 ├── agent/       # AI agent orchestrator
 │   └── orchestrator.ts # Unified ReAct agent (native AI SDK v6)
-├── tools/       # Agent tools (21 tools)
-│   └── all-tools.ts # All tools with experimental_context
+├── tools/       # Agent tools (27 tools)
+│   ├── all-tools.ts # All tools with experimental_context
+│   └── image-tools.ts # 6 image management tools
 ├── prompts/     # Single unified prompt
 │   └── react.xml # ReAct pattern prompt
 ├── templates/   # Nunjucks templates
@@ -99,7 +133,12 @@ app/             # Next.js frontend
 data/            # Local data (git-ignored)
 ├── sqlite.db    # SQLite database
 ├── lancedb/     # Vector index
-└── uploads/     # Media files
+
+uploads/         # Media files (git-ignored)
+└── images/      # Uploaded images
+    └── YYYY/MM/DD/
+        ├── original/  # Full-size originals
+        └── variants/  # Responsive sizes (WebP/AVIF)
 ```
 
 ## Available Scripts
@@ -110,6 +149,10 @@ data/            # Local data (git-ignored)
 - `pnpm dev:preview` - Start preview server only (port 4000)
 - `pnpm dev:web` - Start Next.js only (port 3000)
 - `pnpm preview` - Open preview in browser
+
+### Image Processing
+- `pnpm worker` - Start image processing worker (production)
+- `pnpm worker:dev` - Start worker with auto-reload (development)
 
 ### Database
 - `pnpm db:push` - Push schema changes to SQLite
@@ -157,6 +200,15 @@ Base URL: `http://localhost:8787/v1/teams/dev-team/sites/local-site/environments
   }
   ```
 
+### Images
+- `POST /api/upload` - Upload images (1-10 files)
+- `GET /api/images/:id/status` - Check processing status
+- `GET /api/images/:id/details` - Full metadata & variants
+- `GET /api/images/:id/thumbnail` - Serve 150x150 WebP thumbnail
+- `GET /api/images/search?q=query` - Semantic image search
+- `POST /api/images/find` - Find best match by description
+- `DELETE /api/images/:id` - Delete image with cascade
+
 ## Preview Server
 
 The preview server renders your CMS pages as a real website using Nunjucks templates.
@@ -199,6 +251,8 @@ Templates are located in `server/templates/`:
 - **AI**: Vercel AI SDK v6 (native patterns), OpenRouter (GPT-4o-mini)
 - **Vector Search**: LanceDB with OpenRouter embeddings
 - **State**: Zustand with localStorage persistence
+- **Image Processing**: Sharp, BullMQ, Redis, CLIP embeddings
+- **Storage**: Filesystem with date-based organization (optional CDN)
 
 ## Architecture
 
@@ -493,6 +547,103 @@ Professional interface with modern color system:
 └──────────┴──────────────────────────────┘
 ```
 
+## AI-Powered Image Handling
+
+Complete image management system with semantic search and agent integration.
+
+### Features
+
+- 🤖 **AI Metadata Generation** - GPT-4o-mini automatically generates descriptions, tags, categories, colors, and mood
+- 🔍 **Semantic Search** - Find images by natural language ("sunset photo", "blue product image")
+- 🎯 **Agent Tools** - 6 dedicated tools for finding, attaching, replacing, and deleting images
+- ♻️ **Deduplication** - SHA256 hash checking prevents duplicate storage
+- 📦 **Async Processing** - BullMQ + Redis queue handles metadata, variants, and embeddings
+- 🖼️ **Modern Formats** - Automatic WebP/AVIF variants in 3 sizes (640w, 1024w, 1920w)
+- 📊 **Status Tracking** - Real-time processing status (processing → completed → failed)
+
+### Quick Start
+
+```bash
+# 1. Start Redis (required for async processing)
+brew services start redis
+redis-cli ping  # Should return: PONG
+
+# 2. Start all servers (includes worker)
+pnpm dev
+
+# 3. Seed sample images (optional - 3 test images)
+pnpm seed:images
+# Downloads: mountain landscape, golden puppy, desk workspace
+# Wait 5-10 seconds for processing
+
+# 4. Upload an image (or use seed:images above)
+curl -X POST http://localhost:8787/api/upload \
+  -F "files=@photo.jpg" \
+  -F "sessionId=test-123"
+
+# 5. Search for images
+curl "http://localhost:8787/api/images/search?q=sunset&limit=5"
+# Or try: "mountain", "puppy", "workspace" if you used seed:images
+
+# 6. Test the complete pipeline
+./scripts/test-image-upload.sh
+```
+
+### Agent Tools
+
+The agent has 6 image operation tools:
+
+- **cms_findImage** - Find single image by natural language description
+- **cms_searchImages** - Search for multiple images
+- **cms_listConversationImages** - List images uploaded in current session
+- **cms_addImageToSection** - Attach image to page section field
+- **cms_replaceImage** - Replace image across all locations
+- **cms_deleteImage** - Safe deletion with confirmation
+
+**Example prompts:**
+```
+"Find the sunset photo and add it to the hero section"
+"What images did I upload in this conversation?"
+"Search for product images with blue backgrounds"
+"Replace the old logo with the new one across all pages"
+```
+
+### Image Architecture: Inline JSON Pattern
+
+Section images use the **Inline JSON Content Pattern** - image data is stored directly in the `page_section_contents.content` JSON field:
+
+**Storage Example**:
+```json
+{
+  "title": "Welcome to Our CMS",
+  "image": {
+    "url": "/uploads/images/2025/11/22/original/uuid.jpg",
+    "alt": "AI-generated description"
+  },
+  "ctaText": "Get Started"
+}
+```
+
+**Why Inline JSON?**
+- ✅ Simpler - Content is self-contained
+- ✅ Faster - No database joins on render
+- ✅ Template-friendly - Direct access to image data
+- ✅ Industry standard - Matches WordPress, Contentful, Strapi
+
+**Agent Tools**:
+- `cms_updateSectionImage` - Update image field in section
+- `cms_addImageToSection` - Add image to section field
+- `cms_replaceImage` - Find and replace images across sections
+
+See **[docs/IMAGE_ARCHITECTURE.md](docs/IMAGE_ARCHITECTURE.md)** for complete architecture guide and decision record.
+
+### Documentation
+
+- **[docs/IMAGE_HANDLING_README.md](docs/IMAGE_HANDLING_README.md)** - Complete API reference and examples
+- **[docs/IMAGE_SETUP_CHECKLIST.md](docs/IMAGE_SETUP_CHECKLIST.md)** - Setup verification checklist
+- **[docs/IMAGE_SYSTEM_COMPLETE.md](docs/IMAGE_SYSTEM_COMPLETE.md)** - Implementation summary
+- **[docs/IMAGE_ARCHITECTURE.md](docs/IMAGE_ARCHITECTURE.md)** - Architecture pattern and decision record
+
 ## Troubleshooting
 
 ### Common Issues
@@ -505,6 +656,10 @@ Professional interface with modern color system:
 | Database locked           | Stop servers, `rm data/sqlite.db`, re-seed       |
 | Vector search no results  | Run `pnpm reindex`                                |
 | Port in use               | `lsof -i :8787 \| grep LISTEN` then `kill -9 PID` |
+| Redis connection refused  | `brew services start redis`, verify with `redis-cli ping` |
+| Worker not processing     | Included in `pnpm dev`, or run `pnpm dev:worker`, verify Redis |
+| Image upload fails        | Check `UPLOADS_DIR` exists, verify file size limits |
+| Image search no results   | Wait for processing, check status shows "completed" |
 
 ### Full Reset
 
@@ -535,4 +690,4 @@ See [docs/PROGRESS.md](docs/PROGRESS.md) for complete sprint-by-sprint details.
 2. [Unified ReAct Agent](docs/UNIFIED_REACT_AGENT_REFACTOR.md) - Removed mode complexity
 3. [UI Overhaul](docs/UI_OVERHAUL_SUMMARY.md) - Modern design with blue bubbles
 
-**Current Status**: Production-ready prototype with 13 tools, unified agent, and modern UI.
+**Current Status**: Production-ready prototype with 27 tools (21 CMS + 6 image operations), unified agent, modern UI, and AI-powered image management.

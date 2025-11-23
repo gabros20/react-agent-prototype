@@ -2,6 +2,7 @@ import express from "express";
 import { z } from "zod";
 import type { ServiceContainer } from "../services/service-container";
 import { getSiteAndEnv } from "../utils/get-context";
+import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 
 const createPageSchema = z.object({
   name: z.string().min(1).max(100),
@@ -71,7 +72,7 @@ export function createCMSRoutes(services: ServiceContainer) {
 
       const results = await services.vectorIndex.search(query, type, limit);
 
-      res.json({ data: results, statusCode: 200 });
+      res.json(ApiResponse.success(results));
     } catch (error) {
       next(error);
     }
@@ -86,7 +87,7 @@ export function createCMSRoutes(services: ServiceContainer) {
     try {
       const { q } = req.query;
       const pages = await services.pageService.listPages(q as string);
-      res.json({ data: pages, statusCode: 200 });
+      res.json(ApiResponse.success(pages));
     } catch (error) {
       next(error);
     }
@@ -109,7 +110,7 @@ export function createCMSRoutes(services: ServiceContainer) {
         siteId,
         environmentId,
       });
-      res.status(201).json({ data: page, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(page));
     } catch (error) {
       next(error);
     }
@@ -120,12 +121,11 @@ export function createCMSRoutes(services: ServiceContainer) {
     try {
       const page = await services.pageService.getPageById(req.params.page);
       if (!page) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Page not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Page not found")
+        );
       }
-      res.json({ data: page, statusCode: 200 });
+      res.json(ApiResponse.success(page));
     } catch (error) {
       next(error);
     }
@@ -137,12 +137,11 @@ export function createCMSRoutes(services: ServiceContainer) {
       const input = updatePageSchema.parse(req.body);
       const page = await services.pageService.updatePage(req.params.page, input);
       if (!page) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Page not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Page not found")
+        );
       }
-      res.json({ data: page, statusCode: 200 });
+      res.json(ApiResponse.success(page));
     } catch (error) {
       next(error);
     }
@@ -152,7 +151,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   router.delete("/pages/:page", async (req, res, next) => {
     try {
       await services.pageService.deletePage(req.params.page);
-      res.json({ data: { success: true }, statusCode: 200 });
+      res.json(ApiResponse.success({ success: true }));
     } catch (error) {
       next(error);
     }
@@ -166,7 +165,7 @@ export function createCMSRoutes(services: ServiceContainer) {
         pageId: req.params.page,
         ...input,
       });
-      res.status(201).json({ data: pageSection, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(pageSection));
     } catch (error) {
       next(error);
     }
@@ -178,12 +177,11 @@ export function createCMSRoutes(services: ServiceContainer) {
       const { locale = "en" } = req.query;
       const page = await services.pageService.getPageBySlug(req.params.page);
       if (!page) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Page not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Page not found")
+        );
       }
-      res.json({ data: page, statusCode: 200 });
+      res.json(ApiResponse.success(page));
     } catch (error) {
       next(error);
     }
@@ -199,7 +197,7 @@ export function createCMSRoutes(services: ServiceContainer) {
         localeCode: locale as string,
         content: input.content,
       });
-      res.status(201).json({ data: content, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(content));
     } catch (error) {
       next(error);
     }
@@ -213,7 +211,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   router.get("/sections", async (_req, res, next) => {
     try {
       const sections = await services.sectionService.listSectionDefs();
-      res.json({ data: sections, statusCode: 200 });
+      res.json(ApiResponse.success(sections));
     } catch (error) {
       next(error);
     }
@@ -224,7 +222,7 @@ export function createCMSRoutes(services: ServiceContainer) {
     try {
       const input = createSectionDefSchema.parse(req.body);
       const section = await services.sectionService.createSectionDef(input);
-      res.status(201).json({ data: section, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(section));
     } catch (error) {
       next(error);
     }
@@ -235,12 +233,11 @@ export function createCMSRoutes(services: ServiceContainer) {
     try {
       const section = await services.sectionService.getSectionDefById(req.params.section);
       if (!section) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Section definition not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Section definition not found")
+        );
       }
-      res.json({ data: section, statusCode: 200 });
+      res.json(ApiResponse.success(section));
     } catch (error) {
       next(error);
     }
@@ -252,12 +249,11 @@ export function createCMSRoutes(services: ServiceContainer) {
       const input = updateSectionDefSchema.parse(req.body);
       const section = await services.sectionService.updateSectionDef(req.params.section, input);
       if (!section) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Section definition not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Section definition not found")
+        );
       }
-      res.json({ data: section, statusCode: 200 });
+      res.json(ApiResponse.success(section));
     } catch (error) {
       next(error);
     }
@@ -267,7 +263,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   router.delete("/sections/:section", async (req, res, next) => {
     try {
       await services.sectionService.deleteSectionDef(req.params.section);
-      res.json({ data: { success: true }, statusCode: 200 });
+      res.json(ApiResponse.success({ success: true }));
     } catch (error) {
       next(error);
     }
@@ -281,7 +277,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   router.get("/collections", async (_req, res, next) => {
     try {
       const collections = await services.entryService.listCollectionDefs();
-      res.json({ data: collections, statusCode: 200 });
+      res.json(ApiResponse.success(collections));
     } catch (error) {
       next(error);
     }
@@ -292,7 +288,7 @@ export function createCMSRoutes(services: ServiceContainer) {
     try {
       const input = createCollectionDefSchema.parse(req.body);
       const collection = await services.entryService.createCollectionDef(input);
-      res.status(201).json({ data: collection, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(collection));
     } catch (error) {
       next(error);
     }
@@ -303,12 +299,11 @@ export function createCMSRoutes(services: ServiceContainer) {
     try {
       const collection = await services.entryService.getCollectionDefById(req.params.collection);
       if (!collection) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Collection not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Collection not found")
+        );
       }
-      res.json({ data: collection, statusCode: 200 });
+      res.json(ApiResponse.success(collection));
     } catch (error) {
       next(error);
     }
@@ -323,12 +318,11 @@ export function createCMSRoutes(services: ServiceContainer) {
         input,
       );
       if (!collection) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Collection not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Collection not found")
+        );
       }
-      res.json({ data: collection, statusCode: 200 });
+      res.json(ApiResponse.success(collection));
     } catch (error) {
       next(error);
     }
@@ -338,7 +332,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   router.delete("/collections/:collection", async (req, res, next) => {
     try {
       await services.entryService.deleteCollectionDef(req.params.collection);
-      res.json({ data: { success: true }, statusCode: 200 });
+      res.json(ApiResponse.success({ success: true }));
     } catch (error) {
       next(error);
     }
@@ -356,7 +350,7 @@ export function createCMSRoutes(services: ServiceContainer) {
         req.params.collection,
         locale as string,
       );
-      res.json({ data: entries, statusCode: 200 });
+      res.json(ApiResponse.success(entries));
     } catch (error) {
       next(error);
     }
@@ -372,7 +366,7 @@ export function createCMSRoutes(services: ServiceContainer) {
         localeCode: locale as string,
         ...input,
       });
-      res.status(201).json({ data: entry, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(entry));
     } catch (error) {
       next(error);
     }
@@ -384,12 +378,11 @@ export function createCMSRoutes(services: ServiceContainer) {
       const { locale } = req.query;
       const entry = await services.entryService.getEntryById(req.params.entry, locale as string);
       if (!entry) {
-        return res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Entry not found" },
-          statusCode: 404,
-        });
+        return res.status(HttpStatus.NOT_FOUND).json(
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Entry not found")
+        );
       }
-      res.json({ data: entry, statusCode: 200 });
+      res.json(ApiResponse.success(entry));
     } catch (error) {
       next(error);
     }
@@ -399,7 +392,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   router.delete("/collections/:collection/entries/:entry", async (req, res, next) => {
     try {
       await services.entryService.deleteEntry(req.params.entry);
-      res.json({ data: { success: true }, statusCode: 200 });
+      res.json(ApiResponse.success({ success: true }));
     } catch (error) {
       next(error);
     }

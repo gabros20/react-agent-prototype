@@ -1,6 +1,7 @@
 import express from "express";
 import { z } from "zod";
 import type { ServiceContainer } from "../services/service-container";
+import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 
 const createSessionSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -31,7 +32,7 @@ export function createSessionRoutes(services: ServiceContainer) {
       const input = createSessionSchema.parse(req.body);
       const session = await services.sessionService.createSession(input);
 
-      res.status(201).json({ data: session, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(session));
     } catch (error) {
       next(error);
     }
@@ -42,7 +43,7 @@ export function createSessionRoutes(services: ServiceContainer) {
     try {
       const sessions = await services.sessionService.listSessions();
 
-      res.json({ data: sessions, statusCode: 200 });
+      res.json(ApiResponse.success(sessions));
     } catch (error) {
       next(error);
     }
@@ -53,7 +54,7 @@ export function createSessionRoutes(services: ServiceContainer) {
     try {
       const session = await services.sessionService.getSessionById(req.params.id);
 
-      res.json({ data: session, statusCode: 200 });
+      res.json(ApiResponse.success(session));
     } catch (error) {
       next(error);
     }
@@ -65,7 +66,7 @@ export function createSessionRoutes(services: ServiceContainer) {
       const input = updateSessionSchema.parse(req.body);
       const session = await services.sessionService.updateSession(req.params.id, input);
 
-      res.json({ data: session, statusCode: 200 });
+      res.json(ApiResponse.success(session));
     } catch (error) {
       next(error);
     }
@@ -76,7 +77,7 @@ export function createSessionRoutes(services: ServiceContainer) {
     try {
       const result = await services.sessionService.deleteSession(req.params.id);
 
-      res.json({ data: result, statusCode: 200 });
+      res.json(ApiResponse.success(result));
     } catch (error) {
       next(error);
     }
@@ -92,7 +93,7 @@ export function createSessionRoutes(services: ServiceContainer) {
       const input = createMessageSchema.parse(req.body);
       const message = await services.sessionService.addMessage(req.params.id, input);
 
-      res.status(201).json({ data: message, statusCode: 201 });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(message));
     } catch (error) {
       next(error);
     }
@@ -103,7 +104,7 @@ export function createSessionRoutes(services: ServiceContainer) {
     try {
       const result = await services.sessionService.clearMessages(req.params.id);
 
-      res.json({ data: result, statusCode: 200 });
+      res.json(ApiResponse.success(result));
     } catch (error) {
       next(error);
     }
@@ -118,7 +119,7 @@ export function createSessionRoutes(services: ServiceContainer) {
     try {
       const result = await services.sessionService.clearCheckpoint(req.params.id);
 
-      res.json({ data: result, statusCode: 200 });
+      res.json(ApiResponse.success(result));
     } catch (error) {
       next(error);
     }

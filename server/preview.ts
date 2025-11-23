@@ -17,6 +17,26 @@ async function startPreviewServer() {
     const renderer = new RendererService(TEMPLATE_DIR);
     console.log("✓ Renderer initialized");
 
+    // Request logging middleware
+    app.use((req, res, next) => {
+      const start = Date.now();
+      const path = req.path;
+
+      // Skip logging for health checks and static files
+      if (path === '/health' || path.startsWith('/assets') || path.startsWith('/uploads')) {
+        return next();
+      }
+
+      res.on('finish', () => {
+        const duration = Date.now() - start;
+        const status = res.statusCode;
+        const statusEmoji = status >= 500 ? '❌' : status >= 400 ? '⚠️' : '✅';
+        console.log(`${statusEmoji} [Preview] ${req.method} ${path} → ${status} (${duration}ms)`);
+      });
+
+      next();
+    });
+
     app.get("/pages/:slug", async (req, res, next) => {
       try {
         const { slug } = req.params;
@@ -53,7 +73,12 @@ async function startPreviewServer() {
       res.redirect("/pages/home?locale=en");
     });
 
+    // Static files
     app.use("/assets", express.static(path.join(TEMPLATE_DIR, "assets")));
+
+    // Serve uploaded images
+    const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
+    app.use("/uploads", express.static(uploadsDir));
 
     app.get("/health", (_req, res) => {
       res.json({
@@ -81,9 +106,13 @@ async function startPreviewServer() {
     );
 
     app.listen(PORT, () => {
-      console.log(`✅ Preview server running on http://localhost:${PORT}`);
-      console.log(`   Preview pages: http://localhost:${PORT}/pages/home?locale=en`);
-      console.log(`   Health check: http://localhost:${PORT}/health`);
+      console.log(`✅ [Preview] Preview server running on http://localhost:${PORT}`);
+      console.log(`   Pages: http://localhost:${PORT}/pages/home?locale=en`);
+      console.log(`   Raw: http://localhost:${PORT}/pages/home/raw?locale=en`);
+      console.log(`   Health: http://localhost:${PORT}/health`);
+      console.log(`   Uploads: http://localhost:${PORT}/uploads/`);
+      console.log(`   Templates: ${TEMPLATE_DIR}`);
+      console.log(`   Database: ${process.env.DATABASE_URL || 'file:data/sqlite.db'}`);
     });
   } catch (error) {
     console.error("❌ Failed to start preview server:", error);

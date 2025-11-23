@@ -15,6 +15,7 @@ import type { ServiceContainer } from '../services/service-container'
 import type { AgentContext } from '../tools/types'
 import type { CoreMessage } from 'ai'
 import { approvalQueue } from '../services/approval-queue'
+import { ApiResponse, ErrorCodes, HttpStatus } from '../types/api-response'
 
 // Request schema
 const agentRequestSchema = z.object({
@@ -237,9 +238,12 @@ export function createAgentRoutes(services: ServiceContainer) {
       }
     } catch (error) {
       console.error('Route error:', error)
-      res.status(400).json({
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      res.status(HttpStatus.BAD_REQUEST).json(
+        ApiResponse.error(
+          ErrorCodes.VALIDATION_ERROR,
+          error instanceof Error ? error.message : 'Unknown error'
+        )
+      )
     }
   })
 
@@ -332,20 +336,25 @@ export function createAgentRoutes(services: ServiceContainer) {
       }
 
       // Return result
-      res.json({
-        traceId,
-        sessionId,
-        text: result.text,
-        steps: result.steps,
-        usage: result.usage,
-        retries: result.retries
-      })
+      res.json(
+        ApiResponse.success({
+          traceId,
+          sessionId,
+          text: result.text,
+          steps: result.steps,
+          usage: result.usage,
+          retries: result.retries
+        })
+      )
 
     } catch (error) {
       console.error('Route error:', error)
-      res.status(500).json({
-        error: error instanceof Error ? error.message : 'Unknown error'
-      })
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
+        ApiResponse.error(
+          ErrorCodes.INTERNAL_ERROR,
+          error instanceof Error ? error.message : 'Unknown error'
+        )
+      )
     }
   })
 
@@ -373,22 +382,26 @@ export function createAgentRoutes(services: ServiceContainer) {
         approved: response.approved
       })
 
-      res.json({
-        success: true,
-        approvalId,
-        response
-      })
+      res.json(
+        ApiResponse.success({
+          approvalId,
+          response
+        })
+      )
     } catch (error) {
       console.error('[Approval Route] Error processing approval:', {
         approvalId: req.params.approvalId,
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       })
-      
-      res.status(400).json({
-        error: error instanceof Error ? error.message : 'Unknown error',
-        approvalId: req.params.approvalId
-      })
+
+      res.status(HttpStatus.BAD_REQUEST).json(
+        ApiResponse.error(
+          ErrorCodes.VALIDATION_ERROR,
+          error instanceof Error ? error.message : 'Unknown error',
+          { approvalId: req.params.approvalId }
+        )
+      )
     }
   })
 

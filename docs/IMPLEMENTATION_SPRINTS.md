@@ -31,8 +31,12 @@
 | **Sprint 12** | Native AI SDK v6 Refactor     | 8-10 hours  | All          | Native patterns, no abstractions, streaming approval       |
 | **Sprint 13** | Unified ReAct Agent           | 4-6 hours   | Sprint 12    | Single agent, no modes, pure ReAct pattern                 |
 | **Sprint 14** | UI Overhaul & Theme           | 3-4 hours   | Sprint 13    | Modern OKLCH theme, blue bubbles, responsive layout        |
+| **Sprint 15** | Universal Working Memory      | 6-8 hours   | Sprint 13    | Entity extraction, working context injection               |
+| **Sprint 16** | AI Image Management System    | 12-16 hours | Sprint 2     | Upload, processing, metadata, semantic search              |
+| **Sprint 17** | Image System Cleanup          | 3-4 hours   | Sprint 16    | Remove CLIP, standardize APIs, consolidate docs            |
+| **Sprint 18** | Image Architecture Refactor   | 2-3 hours   | Sprint 17    | Inline JSON pattern, tool refactoring, static serving      |
 
-**Total Estimated Time**: 80-100 hours (13-17 days at 6-8 hours/day)
+**Total Estimated Time**: 105-130 hours (17-22 days at 6-8 hours/day)
 
 ---
 
@@ -4140,3 +4144,446 @@ Modern, agent-first UI with professional purple/blue theme, blue chat bubbles fo
 
 ✅ Documentation complete
 ✅ Ready for production deployment
+
+---
+
+## Sprint 18: Image Architecture Standardization (Option B Refactor)
+
+**Goal**: Eliminate architectural inconsistency - standardize on inline JSON pattern for section images
+
+**Duration**: 2-3 hours
+
+**Prerequisites**: Sprint 17 completed (image system cleanup)
+
+**Problem**: Two conflicting systems (junction table vs inline JSON) causing broken functionality
+
+**Solution**: Standardize on inline JSON for single images, reserve junction table for future galleries
+
+### Tasks
+
+#### 1. Analyze Current Architecture (15 min)
+
+**1.1 Identify Conflicting Patterns**
+
+```bash
+# Check junction table usage
+grep -r "pageSectionImages" server/tools/
+
+# Check inline JSON in templates
+grep -r "image.url" server/templates/sections/
+```
+
+**Findings**:
+- Tools write to `page_section_images` table
+- Templates read from `page_section_contents.content.image`
+- Misalignment causes images not to render
+
+**1.2 Choose Pattern**
+
+**Option A**: Junction Table (complex, requires template helpers)
+**Option B**: Inline JSON (simple, template-friendly) ✅ CHOSEN
+
+#### 2. Refactor Image Tools (60-90 min)
+
+**2.1 Update `cms_addImageToSection`** (`server/tools/image-tools.ts:142-225`)
+
+```typescript
+// BEFORE: Junction table approach
+export const addImageToSectionTool: any = tool({
+  execute: async (input) => {
+    await db.insert(pageSectionImages).values({
+      pageSectionId: input.pageSectionId,
+      imageId: input.imageId,
+      fieldName: input.fieldName,
+      sortOrder: 0,
+    });
+  }
+});
+
+// AFTER: Inline JSON approach
+export const addImageToSectionTool: any = tool({
+  description: "Add an uploaded image to a page section field (hero image, background, etc.). Updates section content with image URL and alt text.",
+  inputSchema: z.object({
+    imageId: z.string().describe('Image ID (from findImage or listConversationImages)'),
+    pageSectionId: z.string().describe("Page section ID"),
+    fieldName: z.string().describe('Field name (e.g., "image", "heroImage", "backgroundImage")'),
+    localeCode: z.string().optional().default("en").describe("Locale code"),
+  }),
+  execute: async (input) => {
+    // Get image with metadata
+    const image = await db.query.images.findFirst({
+      where: eq(images.id, input.imageId),
+      with: { metadata: true },
+    });
+    
+    // Get current section content
+    const currentContent = await db.query.pageSectionContents.findFirst({
+      where: and(
+        eq(pageSectionContents.pageSectionId, input.pageSectionId),
+        eq(pageSectionContents.localeCode, input.localeCode)
+      ),
+    });
+    
+    // Parse content
+    let content: Record<string, any> = {};
+    if (currentContent) {
+      content = typeof currentContent.content === 'string'
+        ? JSON.parse(currentContent.content)
+        : currentContent.content as Record<string, any>;
+    }
+    
+    // Add image field
+    content[input.fieldName] = {
+      url: `/uploads/${image.filePath}`,
+      alt: image.metadata?.description || image.originalFilename,
+    };
+    
+    // Sync content
+    const { SectionService } = await import("../services/cms/section-service");
+    const { default: vectorIndex } = await import("../services/vector-index");
+    const service = new SectionService(db, vectorIndex);
+    await service.syncPageContents({
+      pageSectionId: input.pageSectionId,
+      localeCode: input.localeCode,
+      content,
+    });
+    
+    return {
+      success: true,
+      message: `Added ${image.originalFilename} to ${input.fieldName}`,
+      imageUrl: `/uploads/${image.filePath}`,
+      altText: image.metadata?.description || image.originalFilename,
+    };
+  },
+});
+```
+
+**2.2 Create NEW `cms_updateSectionImage`** (`server/tools/image-tools.ts:258-335`)
+
+```typescript
+export const updateSectionImageTool: any = tool({
+  description: "Update a section's image field with an uploaded image. Use this to change hero images, feature images, etc.",
+  inputSchema: z.object({
+    pageSectionId: z.string().describe("Page section ID to update"),
+    imageField: z.string().describe("Image field name (e.g., 'image', 'heroImage')"),
+    imageId: z.string().describe("ID of uploaded image to use"),
+    localeCode: z.string().optional().default("en").describe("Locale code"),
+  }),
+  execute: async (input) => {
+    // Similar implementation to addImageToSection
+    // Updates section content JSON with new image URL and alt text
+  },
+});
+```
+
+**2.3 Update `cms_replaceImage`** (`server/tools/image-tools.ts:230-329`)
+
+```typescript
+export const replaceImageTool: any = tool({
+  description: "Replace one image with another across all page sections. Searches section content and replaces image URLs.",
+  execute: async (input) => {
+    // Get all section contents
+    const allContents = await db.query.pageSectionContents.findMany();
+    
+    const oldImageUrl = `/uploads/${oldImage.filePath}`;
+    const newImageUrl = `/uploads/${newImage.filePath}`;
+    
+    // Recursive replace in JSON
+    const replaceInObject = (obj: any): void => {
+      for (const key in obj) {
+        const value = obj[key];
+        if (value && typeof value === 'object' && value.url === oldImageUrl) {
+          obj[key] = { url: newImageUrl, alt: newAltText };
+          modified = true;
+          replacementCount++;
+        } else if (value && typeof value === 'object') {
+          replaceInObject(value); // Recurse
+        }
+      }
+    };
+    
+    replaceInObject(content);
+    
+    if (modified) {
+      await db.update(pageSectionContents)
+        .set({ content: JSON.stringify(content), updatedAt: new Date() })
+        .where(eq(pageSectionContents.id, contentRecord.id));
+    }
+  },
+});
+```
+
+**2.4 Remove Junction Table Import**
+
+```typescript
+// server/tools/image-tools.ts line 2
+// BEFORE
+import { images, conversationImages, pageSectionImages, pageSectionContents } from "../db/schema";
+
+// AFTER
+import { images, conversationImages, pageSectionContents } from "../db/schema";
+```
+
+**2.5 Register New Tool** (`server/tools/all-tools.ts`)
+
+```typescript
+// Line 18 - Add import
+import { updateSectionImageTool } from './image-tools'
+
+// Line 642 - Register tool
+'cms_updateSectionImage': updateSectionImageTool,
+
+// Lines 809-814 - Add metadata
+'cms_updateSectionImage': {
+  category: 'images',
+  riskLevel: 'moderate',
+  requiresApproval: false,
+  tags: ['write', 'update', 'image', 'section']
+},
+```
+
+#### 3. Add Static File Serving (20 min)
+
+**3.1 API Server** (`server/index.ts`)
+
+```typescript
+// Line 3 - Add import
+import path from "node:path";
+
+// Lines 58-60 - Add static middleware
+const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadsDir));
+
+// Line 23 - Skip logging for uploads
+if (path === '/health' || path.startsWith('/_next') || path.startsWith('/uploads')) {
+  return next();
+}
+
+// Line 88 - Add to startup logs
+console.log(`   Uploads: http://localhost:${PORT}/uploads/`);
+```
+
+**3.2 Preview Server** (`server/preview.ts`)
+
+```typescript
+// Lines 79-81 - Add static middleware
+const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadsDir));
+
+// Line 26 - Skip logging
+if (path === '/health' || path.startsWith('/assets') || path.startsWith('/uploads')) {
+  return next();
+}
+
+// Line 113 - Add to startup logs
+console.log(`   Uploads: http://localhost:${PORT}/uploads/`);
+```
+
+#### 4. Document Architecture Decision (30 min)
+
+**4.1 Create Architecture Doc** (`docs/IMAGE_ARCHITECTURE.md`)
+
+```markdown
+# Image Architecture: Inline JSON Pattern
+
+## Pattern
+
+### ✅ Current Pattern: Inline JSON
+
+**Storage:**
+{
+  "title": "Welcome",
+  "image": { "url": "/uploads/...", "alt": "Description" }
+}
+
+**Template:**
+{% if image %}<img src="{{ image.url }}" alt="{{ image.alt }}">{% endif %}
+
+**Tools:**
+- cms_updateSectionImage
+- cms_addImageToSection
+- cms_replaceImage
+
+### ❌ Deprecated: Junction Table
+
+Reserved for future image galleries/carousels.
+
+## Why Inline JSON?
+
+1. Simple - self-contained content
+2. Fast - no joins
+3. Flexible - easy versioning
+4. Standard - matches WordPress, Contentful, Strapi
+5. Template-friendly - direct access
+
+## Architecture Decision Record
+
+**Decision**: Use inline JSON for single image fields
+**Date**: 2025-11-23
+**Status**: Accepted
+```
+
+**4.2 Update Schema Comments** (`server/db/schema.ts:292-312`)
+
+```typescript
+/**
+ * DEPRECATED for single image fields - use inline JSON in page_section_contents instead.
+ * Reserved for future use: image galleries/collections where multiple images need ordering.
+ */
+export const pageSectionImages = sqliteTable("page_section_images", {
+  // ... schema
+});
+```
+
+**4.3 Update IMAGE_SYSTEM.md**
+
+- Add reference to IMAGE_ARCHITECTURE.md
+- Update tool documentation
+- Add `/uploads/` endpoint
+- Show inline JSON examples
+
+**4.4 Update LOGGING.md**
+
+- Add uploads routes to server startup examples
+
+#### 5. Fix Related Issues (15 min)
+
+**5.1 Fix Broken Unsplash URL** (`scripts/seed.ts:345`)
+
+```typescript
+// BEFORE
+url: "https://images.unsplash.com/photo-1516321318423-f06f70d504f0?w=800&q=80", // 404
+
+// AFTER
+url: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&q=80", // Working
+```
+
+**5.2 Fix TypeScript Errors**
+
+```typescript
+// Issue: ImageSearchResult missing properties
+// Fix: Query full image from database
+const searchResult = await vectorIndex.findImageByDescription(description);
+const image = await db.query.images.findFirst({
+  where: eq(images.id, searchResult.id),
+  with: { metadata: true },
+});
+```
+
+#### 6. Testing (15 min)
+
+**6.1 Type Check**
+
+```bash
+pnpm typecheck
+# Should pass with 0 errors
+```
+
+**6.2 Manual Testing**
+
+```bash
+# Start servers
+pnpm dev
+
+# Test image upload
+curl -X POST http://localhost:8787/api/upload -F "files=@photo.jpg"
+
+# Test preview
+curl http://localhost:4000/pages/home?locale=en | grep "hero__image"
+
+# Test uploads route
+curl -I http://localhost:8787/uploads/images/2025/11/22/original/uuid.jpg
+# Should return 200
+
+curl -I http://localhost:4000/uploads/images/2025/11/22/original/uuid.jpg
+# Should return 200
+```
+
+**6.3 Agent Testing**
+
+```
+User: "Change the hero image to the mountain image"
+Agent: [Uses cms_updateSectionImage tool]
+Result: Hero displays mountain image correctly
+```
+
+### Deliverables
+
+**Code Changes**:
+1. ✅ `server/tools/image-tools.ts` - 3 tools refactored, 1 new tool
+2. ✅ `server/tools/all-tools.ts` - New tool registered
+3. ✅ `server/index.ts` - Static file serving
+4. ✅ `server/preview.ts` - Static file serving
+5. ✅ `server/db/schema.ts` - Deprecation comments
+6. ✅ `scripts/seed.ts` - Fixed Unsplash URL
+
+**Documentation**:
+1. ✅ `docs/IMAGE_ARCHITECTURE.md` - NEW comprehensive guide
+2. ✅ `docs/IMAGE_SYSTEM.md` - Updated patterns
+3. ✅ `docs/LOGGING.md` - Updated routes
+4. ✅ `docs/PROGRESS.md` - Sprint 18 summary
+5. ✅ `docs/IMPLEMENTATION_SPRINTS.md` - This sprint guide
+6. ✅ `README.md` - Image architecture section
+
+**Tests Passing**:
+- ✅ TypeScript compilation (0 errors)
+- ✅ Image upload works
+- ✅ Image renders in preview
+- ✅ Agent can update section images
+- ✅ Static files served on both servers
+
+### Architecture Pattern
+
+**Inline JSON for Single Images**:
+```json
+{
+  "image": {
+    "url": "/uploads/images/2025/11/22/original/uuid.jpg",
+    "alt": "AI-generated description"
+  }
+}
+```
+
+**Junction Table Reserved for Galleries** (future):
+```sql
+-- Multiple images with ordering
+INSERT INTO page_section_images VALUES
+  ('id1', 'section-id', 'img1', 'gallery', 1),
+  ('id2', 'section-id', 'img2', 'gallery', 2),
+  ('id3', 'section-id', 'img3', 'gallery', 3);
+```
+
+### Benefits
+
+✅ **Consistency** - One clear pattern for section images
+✅ **Simplicity** - Image data with content, no joins
+✅ **Performance** - Faster rendering
+✅ **Maintainability** - Easier to understand
+✅ **Agent-Friendly** - Clear tools for operations
+✅ **Template-Friendly** - Direct data access
+
+### Trade-offs
+
+**Pros**:
+- Simpler mental model
+- Faster page rendering
+- Easier versioning
+- Industry standard
+
+**Cons**:
+- Cannot track "where is image used" without content scan
+- Bulk replace requires JSON scanning
+
+**Verdict**: Acceptable for CMS use case
+
+### Completion Criteria
+
+- ✅ All tools use inline JSON pattern
+- ✅ Static file serving on both servers
+- ✅ Templates render images correctly
+- ✅ Agent can update section images
+- ✅ Junction table documented as deprecated
+- ✅ TypeScript compilation passes
+- ✅ Documentation complete and accurate
+
+**Sprint 18 Status**: ✅ COMPLETE

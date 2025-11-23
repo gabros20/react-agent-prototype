@@ -1,19 +1,27 @@
 # Quick Reference Card
 
-Quick commands, URLs, and key patterns for daily development with the unified ReAct agent.
+Quick commands, URLs, and key patterns for daily development with the unified ReAct agent and image handling system.
 
 ---
 
 ## 🚀 Start/Stop
 
 ```bash
-# Start everything (recommended)
+# Start Redis (required for image processing)
+brew services start redis  # macOS
+redis-cli ping             # Verify (should return PONG)
+
+# Start everything: API + Preview + Web + Worker (recommended)
 pnpm dev
 
-# Start individually
+# Or start individually
 pnpm dev:server   # API server (8787)
 pnpm dev:preview  # Preview server (4000)
 pnpm dev:web      # Next.js frontend (3000)
+pnpm dev:worker   # Image worker (auto-reload)
+
+# Production worker
+pnpm worker
 
 # Stop all
 Ctrl+C in terminal
@@ -38,9 +46,14 @@ Ctrl+C in terminal
 ```bash
 # Database
 pnpm db:push      # Update schema
-pnpm seed         # Add sample data
+pnpm seed         # Add sample data (CMS)
+pnpm seed:images  # Add sample images (3 test images)
 pnpm reindex      # Rebuild vector index
 pnpm db:studio    # Open Drizzle Studio
+
+# Image Processing
+pnpm dev:worker   # Start worker (dev with reload)
+pnpm worker       # Start worker (production)
 
 # Code Quality
 pnpm typecheck    # TypeScript check
@@ -74,6 +87,17 @@ curl -X POST $BASE/pages \
 curl -X POST http://localhost:8787/v1/cms/search/resources \
   -H "Content-Type: application/json" \
   -d '{"query":"homepage","type":"page"}'
+
+# Image upload
+curl -X POST http://localhost:8787/api/upload \
+  -F "files=@image.jpg" \
+  -F "sessionId=test-123"
+
+# Image search
+curl "http://localhost:8787/api/images/search?q=sunset&limit=5"
+
+# Image status
+curl http://localhost:8787/api/images/{imageId}/status
 ```
 
 ---
@@ -113,6 +137,17 @@ Create a page with slug "home" (already exists - watch retry)
 Add section to non-existent page (watch error recovery)
 ```
 
+### Image Operations
+
+```
+Upload a product image (with file attachment)
+Find the sunset photo and add it to the hero section
+What images did I upload in this conversation?
+Search for images with blue backgrounds
+Replace the old logo with the new one across all pages
+Delete the outdated screenshot
+```
+
 ---
 
 ## 🤖 Unified ReAct Agent
@@ -123,7 +158,7 @@ Add section to non-existent page (watch error recovery)
 | -------------- | ------------------------------ |
 | **Pattern**    | Think → Act → Observe → Repeat |
 | **Max Steps**  | 15 per conversation turn       |
-| **Tools**      | 21 (no filtering)              |
+| **Tools**      | 27 (CMS + image operations)    |
 | **Retries**    | 3 with exponential backoff     |
 | **Model**      | openai/gpt-4o-mini             |
 | **Checkpoint** | Auto-save every 3 steps        |
@@ -150,6 +185,21 @@ kill -9 PID    # Kill it
 # TypeScript errors?
 pnpm typecheck  # Check real errors
 # VS Code: Cmd+Shift+P → "TypeScript: Restart TS Server"
+
+# Redis not running?
+brew services start redis  # macOS
+redis-cli ping             # Should return PONG
+
+# Worker not processing images?
+pnpm dev:worker            # Start individually if needed
+# Or just run: pnpm dev (starts worker automatically)
+# Check worker logs for errors
+# Verify Redis is running
+
+# Image search returns no results?
+curl http://localhost:8787/api/images/{imageId}/status
+# Wait for status: "completed" (5-10 seconds)
+# Verify embeddings job succeeded in worker logs
 ```
 
 ---
@@ -180,6 +230,13 @@ LANCEDB_DIR=data/lancedb
 EXPRESS_PORT=8787
 PREVIEW_PORT=4000
 NEXT_PORT=3000
+
+# Image Processing
+UPLOADS_DIR=./uploads
+MAX_FILE_SIZE=5242880     # 5MB
+MAX_FILES_PER_UPLOAD=10
+REDIS_HOST=localhost
+REDIS_PORT=6379
 ```
 
 ---
@@ -189,13 +246,23 @@ NEXT_PORT=3000
 ```
 server/
 ├── agent/orchestrator.ts       # Unified ReAct agent orchestrator
-├── tools/all-tools.ts          # All 13 tools (native AI SDK v6)
+├── tools/
+│   ├── all-tools.ts            # All 27 tools (CMS + images)
+│   └── image-tools.ts          # 6 image operation tools
 ├── prompts/react.xml           # Single unified prompt
-├── routes/agent.ts             # SSE streaming endpoints
-└── services/
-    ├── cms/*.ts                # Business logic (pages, sections, etc.)
-    ├── session-service.ts      # Session management
-    └── approval-queue.ts       # HITL approval coordination
+├── routes/
+│   ├── agent.ts                # SSE streaming endpoints
+│   ├── upload.ts               # Image upload endpoint
+│   └── images.ts               # Image API endpoints
+├── services/
+│   ├── cms/*.ts                # Business logic (pages, sections, etc.)
+│   ├── storage/                # Image storage & processing
+│   ├── ai/                     # Embeddings & metadata
+│   ├── session-service.ts      # Session management
+│   └── approval-queue.ts       # HITL approval coordination
+├── queues/image-queue.ts       # BullMQ job queue
+├── workers/image-worker.ts     # Async image processing
+└── middleware/upload.ts        # Multer upload handler
 
 app/
 ├── assistant/
@@ -212,6 +279,13 @@ app/
 data/
 ├── sqlite.db                   # SQLite database
 └── lancedb/                    # Vector index (embeddings)
+
+uploads/
+└── images/
+    └── YYYY/MM/DD/             # Date-based organization
+        ├── original/           # Original uploaded images
+        ├── webp/               # WebP variants (3 sizes)
+        └── avif/               # AVIF variants (3 sizes)
 ```
 
 ---
@@ -230,6 +304,10 @@ data/
 | Execution log empty            | Check browser console (F12), verify SSE connection        |
 | TypeScript errors              | Run `pnpm typecheck`, restart TS server (VS Code)         |
 | Tool execution fails           | Check execution log for error details, agent auto-retries |
+| "Redis connection refused"     | `brew services start redis`, verify with `redis-cli ping` |
+| Worker not processing images   | Included in `pnpm dev`, or run `pnpm dev:worker`, check Redis |
+| Image upload fails             | Check `UPLOADS_DIR` exists, check file size limits        |
+| Image search no results        | Wait for processing, check status endpoint shows "completed" |
 
 ### Architecture Pattern: Native AI SDK v6
 
@@ -262,7 +340,8 @@ const agent = new ToolLoopAgent({
 ```
 
 **Key Files**:
-- `server/tools/all-tools.ts` - All 13 tools
+- `server/tools/all-tools.ts` - All 27 tools (CMS + images)
+- `server/tools/image-tools.ts` - 6 image operation tools
 - `server/agent/orchestrator.ts` - Unified agent
 - `server/prompts/react.xml` - Single prompt
 
@@ -274,6 +353,11 @@ const agent = new ToolLoopAgent({
 - [GETTING_STARTED.md](GETTING_STARTED.md) - Complete setup guide with test cases
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - This file (commands & patterns)
 - [README.md](README.md) - Architecture overview and features
+
+**Image Handling**:
+- [docs/IMAGE_HANDLING_README.md](docs/IMAGE_HANDLING_README.md) - Image system API reference
+- [docs/IMAGE_SETUP_CHECKLIST.md](docs/IMAGE_SETUP_CHECKLIST.md) - Complete setup steps
+- [docs/IMAGE_SYSTEM_COMPLETE.md](docs/IMAGE_SYSTEM_COMPLETE.md) - Implementation summary
 
 **Implementation History**:
 - [docs/PROGRESS.md](docs/PROGRESS.md) - Sprint-by-sprint progress
@@ -294,11 +378,12 @@ const agent = new ToolLoopAgent({
 3. **Day 3**: Read [README.md](README.md) - Understand architecture
 4. **Day 4**: Explore code:
    - `server/agent/orchestrator.ts` - Agent logic
-   - `server/tools/all-tools.ts` - All 13 tools
+   - `server/tools/all-tools.ts` - All 27 tools
    - `server/prompts/react.xml` - Unified prompt
-5. **Day 5**: Create your first tool - Add to `all-tools.ts`
-6. **Day 6**: Customize the prompt - Edit `react.xml`
-7. **Day 7**: Build a custom feature - Sessions, UI, etc.
+5. **Day 5**: Test image handling - Upload, search, agent tools
+6. **Day 6**: Create your first tool - Add to `all-tools.ts`
+7. **Day 7**: Customize the prompt - Edit `react.xml`
+8. **Day 8**: Build a custom feature - Sessions, UI, etc.
 
 ---
 
@@ -316,6 +401,9 @@ Before reporting issues, verify:
 - [ ] TypeScript compiles (`pnpm typecheck` shows 0 errors)
 - [ ] Browser console clean (F12 → Console → no red errors)
 - [ ] Execution log shows events (blue/green/purple entries)
+- [ ] Redis is running (`redis-cli ping` returns PONG)
+- [ ] Worker is running if using images (included in `pnpm dev`)
+- [ ] Image uploads work (test with `scripts/test-image-upload.sh`)
 
 ---
 
@@ -341,6 +429,10 @@ pnpm dev (restart)
 lsof -i :3000  # Next.js
 lsof -i :4000  # Preview
 lsof -i :8787  # API server
+lsof -i :6379  # Redis
+
+# Test image upload system
+./scripts/test-image-upload.sh  # Automated test script
 ```
 
 ---

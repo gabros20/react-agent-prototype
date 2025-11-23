@@ -191,6 +191,11 @@ async function seed() {
                 label: "Button Link",
                 dataRules: { linkTargets: ["url", "page"] },
               },
+              {
+                key: "backgroundImage",
+                type: "image",
+                label: "Background Image",
+              },
             ],
           },
         ],
@@ -201,6 +206,50 @@ async function seed() {
       updatedAt: new Date(),
     });
     console.log(`✓ Created section definition: cta (${ctaSectionId})`);
+
+    const gallerySectionId = randomUUID();
+    await db.insert(schema.sectionDefinitions).values({
+      id: gallerySectionId,
+      key: "gallery",
+      name: "Image Gallery",
+      description: "Gallery with title and multiple images",
+      status: "published",
+      elementsStructure: JSON.stringify({
+        version: 1,
+        rows: [
+          {
+            id: "row-1",
+            slots: [
+              {
+                key: "title",
+                type: "text",
+                label: "Gallery Title",
+              },
+              {
+                key: "images",
+                type: "imageArray",
+                label: "Gallery Images",
+                dataRules: { maxImages: 12 },
+              },
+              {
+                key: "layout",
+                type: "select",
+                label: "Layout",
+                dataRules: {
+                  options: ["grid", "masonry", "carousel"],
+                  default: "grid",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      templateKey: "gallery",
+      defaultVariant: "default",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Created section definition: gallery (${gallerySectionId})`);
 
     // ========================================================================
     // 6. Create collection definition: blog
@@ -292,7 +341,10 @@ async function seed() {
       content: JSON.stringify({
         title: "Welcome to Our CMS",
         subtitle: "AI-powered content management",
-        image: null,
+        image: {
+          url: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&q=80",
+          alt: "AI and technology concept"
+        },
         ctaText: "Get Started",
         ctaLink: { type: "url", href: "/contact" },
       }),

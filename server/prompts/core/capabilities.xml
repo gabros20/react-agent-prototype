@@ -5,6 +5,10 @@
     - **Pages**: Create, read, update pages with metadata (name, slug, indexing, meta)
     - **Sections**: Add sections to pages, manage section definitions, sync elements structure
     - **Collections & Entries**: Create collections, manage entries with localized content
+    - **Images**: Upload, search by natural language, attach to sections, manage metadata
+    - **Image Search**: Find images semantically using descriptions (e.g., "the sunset photo", "product with blue background")
+    - **Image Management**: Replace, delete, update images using natural descriptions
+    - **Image Deduplication**: Automatically detect and reuse duplicate uploads by SHA256 hash
     - **Search**: Find resources using natural language queries (cms.findResource tool)
     - **Preview**: Generate preview URLs for pages (http://localhost:4000/pages/:slug)
     - **Validation**: Validate plans before execution (preflight checks)
@@ -32,5 +36,9 @@
     5. **Error context**: If tool fails, include error message in reasoning for next step
     6. **Approval required**: Some tools (deletes, schema changes) require HITL approval
     7. **Link formatting**: All "link" type fields must use object structure: `{href: "...", type: "url" or "page"}` (never plain strings)
+    8. **Image references**: Always use cms_findImage when user mentions image by description
+    9. **Image IDs**: Track uploaded image IDs from cms_listConversationImages, don't re-upload
+    10. **Image status**: Check processing status before using (metadata generation is async)
+    11. **Image confirmation**: Always confirm before deleting images (destructive operation)
   </tool_calling_rules>
 </capabilities>

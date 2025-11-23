@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { blob, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
 // ============================================================================
@@ -180,6 +180,140 @@ export const media = sqliteTable("media", {
 });
 
 // ============================================================================
+// IMAGES (AI-Powered with Metadata & Embeddings)
+// ============================================================================
+
+export const images = sqliteTable("images", {
+  id: text("id").primaryKey(),
+  filename: text("filename").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  mediaType: text("media_type").notNull(),
+
+  // Storage approach
+  storageType: text("storage_type", {
+    enum: ["filesystem", "cdn", "blob"]
+  }).notNull().default("filesystem"),
+  filePath: text("file_path"),
+  cdnUrl: text("cdn_url"),
+
+  // Thumbnail BLOB for fast access
+  thumbnailData: blob("thumbnail_data", { mode: "buffer" }),
+
+  // Technical metadata
+  fileSize: integer("file_size").notNull(), // bytes
+  width: integer("width"),
+  height: integer("height"),
+
+  // Checksums for deduplication
+  md5Hash: text("md5_hash"),
+  sha256Hash: text("sha256_hash").unique(),
+
+  // Processing status
+  status: text("status", {
+    enum: ["processing", "completed", "failed"]
+  }).notNull().default("processing"),
+  error: text("error"),
+
+  // Timestamps
+  uploadedAt: integer("uploaded_at", { mode: "timestamp" }).notNull(),
+  processedAt: integer("processed_at", { mode: "timestamp" }),
+});
+
+export const imageMetadata = sqliteTable("image_metadata", {
+  id: text("id").primaryKey(),
+  imageId: text("image_id")
+    .notNull()
+    .references(() => images.id, { onDelete: "cascade" })
+    .unique(),
+
+  // AI-generated descriptions
+  description: text("description"), // 1-2 sentence summary
+  detailedDescription: text("detailed_description"), // Longer description
+
+  // Keywords and categorization
+  tags: text("tags", { mode: "json" }), // Array of string tags
+  categories: text("categories", { mode: "json" }), // Array of categories
+  objects: text("objects", { mode: "json" }), // Array of {name, confidence}
+
+  // Visual properties
+  colors: text("colors", { mode: "json" }), // {dominant: [], palette: []}
+  mood: text("mood"), // e.g., "cheerful", "professional"
+  style: text("style"), // e.g., "minimalist", "vintage"
+  composition: text("composition", { mode: "json" }), // {orientation, subject, background}
+
+  // Searchable text (concatenated for full-text search)
+  searchableText: text("searchable_text"),
+
+  // Alt text (user-editable)
+  altText: text("alt_text"),
+  caption: text("caption"),
+
+  // Metadata about metadata
+  generatedAt: integer("generated_at", { mode: "timestamp" }),
+  model: text("model"), // e.g., "gpt-4o-mini"
+});
+
+export const imageVariants = sqliteTable("image_variants", {
+  id: text("id").primaryKey(),
+  imageId: text("image_id")
+    .notNull()
+    .references(() => images.id, { onDelete: "cascade" }),
+
+  variantType: text("variant_type", {
+    enum: ["thumbnail", "small", "medium", "large", "original"]
+  }).notNull(),
+
+  format: text("format", {
+    enum: ["jpeg", "png", "webp", "avif"]
+  }).notNull(),
+
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  fileSize: integer("file_size").notNull(),
+  filePath: text("file_path").notNull(),
+  cdnUrl: text("cdn_url"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const conversationImages = sqliteTable("conversation_images", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id")
+    .notNull()
+    .references(() => sessions.id, { onDelete: "cascade" }),
+  imageId: text("image_id")
+    .notNull()
+    .references(() => images.id, { onDelete: "cascade" }),
+  messageId: text("message_id"), // Optional: link to specific message
+  uploadedAt: integer("uploaded_at", { mode: "timestamp" }).notNull(),
+  orderIndex: integer("order_index"), // For maintaining order
+});
+
+/**
+ * DEPRECATED for single image fields - use inline JSON in page_section_contents instead.
+ * Reserved for future use: image galleries/collections where multiple images need ordering.
+ *
+ * Current Pattern:
+ * - Single images (hero, background) → Stored as {url, alt} in page_section_contents.content JSON
+ * - Multiple images (future: galleries) → Can use this junction table with sortOrder
+ */
+export const pageSectionImages = sqliteTable("page_section_images", {
+  id: text("id").primaryKey(),
+  pageSectionId: text("page_section_id")
+    .notNull()
+    .references(() => pageSections.id, { onDelete: "cascade" }),
+  imageId: text("image_id")
+    .notNull()
+    .references(() => images.id, { onDelete: "cascade" }),
+  fieldName: text("field_name").notNull(), // e.g., "gallery", "carousel"
+  sortOrder: integer("sort_order"), // For ordering multiple images in galleries
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }),
+});
+
+// imageProcessingQueue table removed - BullMQ handles job tracking in Redis
+
+// ============================================================================
 // NAVIGATIONS
 // ============================================================================
 
@@ -322,6 +456,54 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   session: one(sessions, { fields: [messages.sessionId], references: [sessions.id] }),
 }));
 
+export const imagesRelations = relations(images, ({ one, many }) => ({
+  metadata: one(imageMetadata, {
+    fields: [images.id],
+    references: [imageMetadata.imageId],
+  }),
+  variants: many(imageVariants),
+  conversationImages: many(conversationImages),
+  pageSectionImages: many(pageSectionImages),
+}));
+
+export const imageMetadataRelations = relations(imageMetadata, ({ one }) => ({
+  image: one(images, {
+    fields: [imageMetadata.imageId],
+    references: [images.id],
+  }),
+}));
+
+export const imageVariantsRelations = relations(imageVariants, ({ one }) => ({
+  image: one(images, {
+    fields: [imageVariants.imageId],
+    references: [images.id],
+  }),
+}));
+
+export const conversationImagesRelations = relations(conversationImages, ({ one }) => ({
+  session: one(sessions, {
+    fields: [conversationImages.sessionId],
+    references: [sessions.id],
+  }),
+  image: one(images, {
+    fields: [conversationImages.imageId],
+    references: [images.id],
+  }),
+}));
+
+export const pageSectionImagesRelations = relations(pageSectionImages, ({ one }) => ({
+  pageSection: one(pageSections, {
+    fields: [pageSectionImages.pageSectionId],
+    references: [pageSections.id],
+  }),
+  image: one(images, {
+    fields: [pageSectionImages.imageId],
+    references: [images.id],
+  }),
+}));
+
+// imageProcessingQueueRelations removed - table no longer exists
+
 // ============================================================================
 // ZOD SCHEMAS FOR VALIDATION
 // ============================================================================
@@ -373,3 +555,20 @@ export const selectSessionSchema = createSelectSchema(sessions);
 
 export const insertMessageSchema = createInsertSchema(messages);
 export const selectMessageSchema = createSelectSchema(messages);
+
+export const insertImageSchema = createInsertSchema(images);
+export const selectImageSchema = createSelectSchema(images);
+
+export const insertImageMetadataSchema = createInsertSchema(imageMetadata);
+export const selectImageMetadataSchema = createSelectSchema(imageMetadata);
+
+export const insertImageVariantSchema = createInsertSchema(imageVariants);
+export const selectImageVariantSchema = createSelectSchema(imageVariants);
+
+export const insertConversationImageSchema = createInsertSchema(conversationImages);
+export const selectConversationImageSchema = createSelectSchema(conversationImages);
+
+export const insertPageSectionImageSchema = createInsertSchema(pageSectionImages);
+export const selectPageSectionImageSchema = createSelectSchema(pageSectionImages);
+
+// imageProcessingQueue schemas removed - table no longer exists

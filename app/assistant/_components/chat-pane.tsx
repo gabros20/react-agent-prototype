@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
+import { Markdown } from "@/components/markdown";
 import { useAgent } from "../_hooks/use-agent";
 import { useChatStore } from "../_stores/chat-store";
 import { useSessionStore } from "../_stores/session-store";
@@ -91,7 +92,7 @@ export function ChatPane() {
 							messages.map((message) => (
 								<Message from={message.role} key={message.id}>
 									<MessageContent>
-										<div className='prose prose-sm max-w-none whitespace-pre-wrap text-xs sm:text-sm'>{message.content}</div>
+										<Markdown className='whitespace-pre-wrap text-xs sm:text-sm'>{message.content}</Markdown>
 									</MessageContent>
 								</Message>
 							))

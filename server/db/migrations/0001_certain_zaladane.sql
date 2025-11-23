@@ -1,0 +1,1 @@
+ALTER TABLE `page_section_images` ADD `updated_at` integer;
