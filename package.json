@@ -5,7 +5,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"pnpm:dev:server\" \"pnpm:dev:preview\" \"pnpm:dev:web\" \"pnpm:dev:worker\"",
+    "start": "concurrently \"pnpm:dev:server\" \"pnpm:dev:preview\" \"pnpm:dev:web\" \"pnpm:dev:worker\"",
+    "start:redis": "tsx scripts/start-redis.ts",
+    "start:all": "tsx scripts/start-all.ts",
+    "stop": "tsx scripts/stop-dev.ts",
+    "stop:redis": "tsx scripts/stop-redis.ts",
+    "stop:all": "tsx scripts/stop-all.ts",
+    "restart": "pnpm stop && pnpm start",
+    "status": "tsx scripts/status.ts",
+    "ps": "tsx scripts/ps.ts",
+    "dev": "pnpm start",
     "dev:server": "tsx watch server/index.ts",
     "dev:preview": "tsx watch server/preview.ts",
     "dev:web": "next dev -p 3000",
@@ -20,12 +29,11 @@
     "reset:system": "tsx scripts/reset-system.ts",
     "reindex": "tsx scripts/reindex-vector.ts",
     "worker": "tsx scripts/start-worker.ts",
-    "worker:dev": "tsx watch scripts/start-worker.ts",
     "format": "biome format --write .",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "build": "next build",
-    "start": "next start"
+    "prod": "next start"
   },
   "keywords": [
     "react",

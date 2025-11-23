@@ -36,31 +36,26 @@ pnpm seed
 pnpm reindex
 ```
 
-### 4. Start Redis (Required for Image Processing)
+### 4. Start Services
 
 ```bash
 # Install Redis (one-time setup)
 brew install redis
 
-# Start Redis
-brew services start redis
+# Start all services (Redis + dev processes)
+pnpm start:all    # Starts Redis, then shows dev command
+pnpm start        # Start dev processes (server, preview, web, worker)
 
-# Verify Redis is running
-redis-cli ping  # Should return: PONG
+# Or use individual commands:
+pnpm start:redis  # Start Redis only
+pnpm dev          # Alias for 'start'
 ```
 
-### 5. Start Development Servers
-
-```bash
-# Start all servers: API (8787), Preview (4000), Next.js (3000), Worker
-pnpm dev
-
-# Or start individually:
-pnpm dev:server   # API server on port 8787
-pnpm dev:preview  # Preview server on port 4000
-pnpm dev:web      # Next.js frontend on port 3000
-pnpm dev:worker   # Image processing worker
-```
+**What runs where:**
+- **API Server**: http://localhost:8787
+- **Preview Server**: http://localhost:4000
+- **Next.js Frontend**: http://localhost:3000
+- **Worker**: Background process (no port)
 
 ### 6. Seed Sample Images (Optional)
 
@@ -143,27 +138,53 @@ uploads/         # Media files (git-ignored)
 
 ## Available Scripts
 
-### Development
-- `pnpm dev` - Start all servers (API + Preview + Next.js)
-- `pnpm dev:server` - Start API server only (port 8787)
-- `pnpm dev:preview` - Start preview server only (port 4000)
-- `pnpm dev:web` - Start Next.js only (port 3000)
-- `pnpm preview` - Open preview in browser
+### Service Management
 
-### Image Processing
-- `pnpm worker` - Start image processing worker (production)
-- `pnpm worker:dev` - Start worker with auto-reload (development)
+**Start Services:**
+```bash
+pnpm start          # Start dev processes (server, preview, web, worker)
+pnpm start:redis    # Start Redis only
+pnpm start:all      # Start Redis + show dev instructions
+pnpm dev            # Alias for 'start'
+```
+
+**Stop Services:**
+```bash
+pnpm stop           # Stop dev processes only
+pnpm stop:redis     # Stop Redis only
+pnpm stop:all       # Stop everything (dev + Redis)
+```
+
+**Utilities:**
+```bash
+pnpm restart        # Restart dev processes
+pnpm status         # Check what's running
+pnpm ps             # Process monitor - shows all services, ports, and duplicates
+```
+
+**Individual Services** (if needed):
+```bash
+pnpm dev:server     # API server only (port 8787)
+pnpm dev:preview    # Preview server only (port 4000)
+pnpm dev:web        # Next.js only (port 3000)
+pnpm dev:worker     # Worker only
+```
 
 ### Database
 - `pnpm db:push` - Push schema changes to SQLite
 - `pnpm db:studio` - Open Drizzle Studio
 - `pnpm seed` - Seed database with sample data
+- `pnpm seed:images` - Download and process 3 sample images
+- `pnpm check:images` - Verify image setup
 - `pnpm reindex` - Populate vector index with existing data
+- `pnpm reset:system` - Clear Redis cache and checkpoint DB
 
 ### Code Quality
 - `pnpm typecheck` - Check TypeScript types
 - `pnpm lint` - Run Biome linter
 - `pnpm format` - Format code with Biome
+- `pnpm build` - Build for production
+- `pnpm prod` - Start production server
 
 ## API Endpoints
 
@@ -256,11 +277,30 @@ Templates are located in `server/templates/`:
 
 ## Architecture
 
+### Service Infrastructure
+
+**What's running:**
+- ✅ **Redis** (brew service) - Job queue for BullMQ worker
+- ✅ **SQLite** (file-based) - Main database (no service needed)
+- ✅ **LanceDB** (file-based) - Vector search index (no service needed)
+- ❌ **Docker** - Not used in this project
+
+**Quick commands:**
+```bash
+pnpm status      # Check what's running (simple)
+pnpm ps          # Process monitor (detailed - shows duplicates!)
+pnpm start:all   # Start everything (Redis + dev)
+pnpm stop:all    # Stop everything
+```
+
+### 3-Server Development Architecture
+
 This project uses a **3-server architecture**:
 
 1. **API Server (port 8787)**: RESTful CRUD operations + AI agent streaming
 2. **Preview Server (port 4000)**: Renders pages as HTML using Nunjucks templates
 3. **Next.js (port 3000)**: AI assistant UI with blue chat bubbles
+4. **Worker** (background): Image processing queue (BullMQ + Redis)
 
 ### Unified ReAct Agent
 
@@ -564,29 +604,33 @@ Complete image management system with semantic search and agent integration.
 ### Quick Start
 
 ```bash
-# 1. Start Redis (required for async processing)
-brew services start redis
-redis-cli ping  # Should return: PONG
+# 1. Start all services (one command)
+pnpm start:all      # Starts Redis + shows dev command
+pnpm start          # Start dev processes
 
-# 2. Start all servers (includes worker)
-pnpm dev
+# Or check status first
+pnpm status         # See what's running
 
-# 3. Seed sample images (optional - 3 test images)
+# 2. Seed sample images (optional - 3 test images)
 pnpm seed:images
 # Downloads: mountain landscape, golden puppy, desk workspace
 # Wait 5-10 seconds for processing
 
-# 4. Upload an image (or use seed:images above)
+# 3. Upload an image (or use seed:images above)
 curl -X POST http://localhost:8787/api/upload \
   -F "files=@photo.jpg" \
   -F "sessionId=test-123"
 
-# 5. Search for images
+# 4. Search for images
 curl "http://localhost:8787/api/images/search?q=sunset&limit=5"
 # Or try: "mountain", "puppy", "workspace" if you used seed:images
 
-# 6. Test the complete pipeline
+# 5. Test the complete pipeline
 ./scripts/test-image-upload.sh
+
+# 6. Stop services when done
+pnpm stop           # Stop dev only (Redis stays running)
+pnpm stop:all       # Stop everything
 ```
 
 ### Agent Tools
@@ -644,6 +688,49 @@ See **[docs/IMAGE_ARCHITECTURE.md](docs/IMAGE_ARCHITECTURE.md)** for complete ar
 - **[docs/IMAGE_SYSTEM_COMPLETE.md](docs/IMAGE_SYSTEM_COMPLETE.md)** - Implementation summary
 - **[docs/IMAGE_ARCHITECTURE.md](docs/IMAGE_ARCHITECTURE.md)** - Architecture pattern and decision record
 
+## Development Workflow
+
+### Recommended Daily Workflow
+
+**Prevent duplicate processes** (avoid resource drain):
+
+```bash
+# 1. ALWAYS check first (make it a habit!)
+pnpm ps             # Shows all services, ports, and duplicates
+
+# 2. If anything running, stop it first
+pnpm stop:all       # Clean slate
+
+# 3. Start fresh
+pnpm start:all      # Start Redis
+pnpm start          # Start dev processes
+
+# 4. When done for the day
+pnpm stop           # Stop dev (leave Redis running)
+```
+
+### Why This Matters
+
+**Duplicate processes happen when:**
+- ❌ Using Ctrl+C (doesn't kill child processes from concurrently)
+- ❌ Terminal crashes (leaves orphaned processes)
+- ❌ Starting without stopping (stacks processes)
+
+**Prevention:**
+- ✅ **Always use `pnpm stop` or `pnpm stop:all`** (never Ctrl+C)
+- ✅ **Check `pnpm ps` before starting** (catch duplicates early)
+- ✅ **Run `pnpm ps` when things feel slow** (likely duplicates)
+- ✅ **Weekly cleanup**: `pnpm stop:all` to fully reset
+
+### Process Monitor Output
+
+`pnpm ps` shows:
+- 🔴 **Redis status** - Running/Stopped
+- 🔌 **Port usage** - What's using 8787, 4000, 3000, 6379
+- 💻 **Project processes** - All tsx/node/pnpm processes with PIDs
+- ⚠️ **Duplicate detection** - Highlights when multiple instances running
+- 👻 **Zombie detection** - Finds old processes from previous sessions
+
 ## Troubleshooting
 
 ### Common Issues
@@ -653,24 +740,35 @@ See **[docs/IMAGE_ARCHITECTURE.md](docs/IMAGE_ARCHITECTURE.md)** for complete ar
 | Agent not responding      | Check API logs, verify OpenRouter API key        |
 | Blue bubbles not showing  | Hard refresh (Cmd+Shift+R), check globals.css    |
 | Tool execution fails      | Check execution log, agent auto-retries 3x       |
-| Database locked           | Stop servers, `rm data/sqlite.db`, re-seed       |
+| Database locked           | `pnpm stop:all`, `rm data/sqlite.db`, re-seed    |
 | Vector search no results  | Run `pnpm reindex`                                |
-| Port in use               | `lsof -i :8787 \| grep LISTEN` then `kill -9 PID` |
-| Redis connection refused  | `brew services start redis`, verify with `redis-cli ping` |
-| Worker not processing     | Included in `pnpm dev`, or run `pnpm dev:worker`, verify Redis |
+| Port in use               | Run `pnpm ps` to see what's using it, then `pnpm stop:all` |
+| Redis connection refused  | `pnpm start:redis`, verify with `redis-cli ping` |
+| Worker not processing     | Check `pnpm ps`, restart with `pnpm restart`     |
 | Image upload fails        | Check `UPLOADS_DIR` exists, verify file size limits |
 | Image search no results   | Wait for processing, check status shows "completed" |
+| Duplicate/zombie processes | Run `pnpm ps` to identify, then `pnpm stop:all`  |
+| System slow/high CPU      | Run `pnpm ps` - likely duplicate processes       |
 
 ### Full Reset
 
 ```bash
-# Nuclear option - complete reset
-rm -rf node_modules data/sqlite.db data/lancedb
+# 1. Stop everything first
+pnpm stop:all
+
+# 2. Nuclear option - complete reset
+rm -rf node_modules data/sqlite.db data/lancedb uploads/
+
+# 3. Reinstall and reseed
 pnpm install
 pnpm db:push
 pnpm seed
+pnpm seed:images  # Optional: seed sample images
 pnpm reindex
-pnpm dev
+
+# 4. Restart
+pnpm start:all    # Starts Redis
+pnpm start        # Start dev
 ```
 
 See [QUICK_REFERENCE.md](QUICK_REFERENCE.md#-common-issues) for detailed troubleshooting.

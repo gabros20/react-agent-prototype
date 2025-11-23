@@ -1,0 +1,57 @@
+{# Image-Text Section - Custom CSS (no Tailwind) #}
+
+{# Normalize layout values #}
+{% set layoutValue = layout if layout in ["image-left", "image-right"] else "image-right" %}
+{% set mobileLayoutValue = mobileLayout if mobileLayout in ["image-first", "text-first"] else "image-first" %}
+{% set bgValue = backgroundColor if backgroundColor in ["none", "white", "gray"] else "none" %}
+
+{# Set fallback content #}
+{% set headingText = heading or "Section Heading" %}
+{% set contentText = content or "Add your content here." %}
+
+{# Set image with fallback #}
+{% if image and image.url %}
+  {% set imageUrl = image.url %}
+  {% set imageAlt = image.alt or "Placeholder image" %}
+{% else %}
+  {% set imageUrl = "https://images.unsplash.com/photo-1557821552-17105176677c?w=800&h=600&fit=crop&q=80" %}
+  {% set imageAlt = "Placeholder image" %}
+{% endif %}
+
+{# Background class #}
+{% set bgClass = "" %}
+{% if bgValue == "white" %}
+  {% set bgClass = "image-text--bg-white" %}
+{% elif bgValue == "gray" %}
+  {% set bgClass = "image-text--bg-gray" %}
+{% endif %}
+
+<section class="image-text {{ bgClass }} image-text--{{ layoutValue }} image-text--mobile-{{ mobileLayoutValue }}">
+  <div class="container">
+    <div class="image-text__grid">
+
+      {# TEXT COLUMN #}
+      <div class="image-text__content">
+        <h2 class="image-text__heading">{{ headingText }}</h2>
+        <div class="image-text__description">
+          {{ contentText | markdown | safe }}
+        </div>
+
+        {% if ctaText and ctaLink %}
+          {% set normalizedLink = ctaLink | normalizeLink %}
+          {% if normalizedLink %}
+            <div class="image-text__cta">
+              <a href="{{ normalizedLink.href }}" class="image-text__button">{{ ctaText }}</a>
+            </div>
+          {% endif %}
+        {% endif %}
+      </div>
+
+      {# IMAGE COLUMN #}
+      <div class="image-text__image">
+        <img src="{{ imageUrl }}" alt="{{ imageAlt }}" loading="lazy">
+      </div>
+
+    </div>
+  </div>
+</section>

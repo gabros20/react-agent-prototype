@@ -251,6 +251,83 @@ async function seed() {
     });
     console.log(`✓ Created section definition: gallery (${gallerySectionId})`);
 
+    const imageTextSectionId = randomUUID();
+    await db.insert(schema.sectionDefinitions).values({
+      id: imageTextSectionId,
+      key: "image-text",
+      name: "Image-Text Section",
+      description: "Flexible two-column layout with text and image, configurable for desktop (LTR/RTL) and mobile (image-first/text-first)",
+      status: "published",
+      elementsStructure: JSON.stringify({
+        version: 1,
+        rows: [
+          {
+            id: "row-1",
+            slots: [
+              {
+                key: "heading",
+                type: "text",
+                label: "Heading",
+              },
+              {
+                key: "content",
+                type: "richText",
+                label: "Content",
+              },
+              {
+                key: "image",
+                type: "image",
+                label: "Image",
+              },
+              {
+                key: "ctaText",
+                type: "text",
+                label: "CTA Button Text",
+              },
+              {
+                key: "ctaLink",
+                type: "link",
+                label: "CTA Button Link",
+                dataRules: { linkTargets: ["url", "page"] },
+              },
+              {
+                key: "layout",
+                type: "select",
+                label: "Desktop Layout",
+                dataRules: {
+                  options: ["image-left", "image-right"],
+                  default: "image-right",
+                },
+              },
+              {
+                key: "mobileLayout",
+                type: "select",
+                label: "Mobile Layout",
+                dataRules: {
+                  options: ["image-first", "text-first"],
+                  default: "image-first",
+                },
+              },
+              {
+                key: "backgroundColor",
+                type: "select",
+                label: "Background Color",
+                dataRules: {
+                  options: ["none", "white", "gray", "primary"],
+                  default: "none",
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      templateKey: "image-text",
+      defaultVariant: "default",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Created section definition: image-text (${imageTextSectionId})`);
+
     // ========================================================================
     // 6. Create collection definition: blog
     // ========================================================================
