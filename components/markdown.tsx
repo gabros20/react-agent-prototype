@@ -25,12 +25,13 @@ export function Markdown({ children, className = "" }: MarkdownProps) {
 				const rawHtml = await marked.parse(children);
 
 				// Sanitize HTML to prevent XSS (DOMPurify only works in browser)
-				const cleanHtml = typeof window !== 'undefined'
-					? DOMPurify.sanitize(rawHtml, {
-						ADD_ATTR: ['target'], // Allow target attribute for links
-						ADD_TAGS: ['img'], // Ensure images are allowed
-					})
-					: rawHtml; // SSR fallback
+				const cleanHtml =
+					typeof window !== "undefined"
+						? DOMPurify.sanitize(rawHtml, {
+								ADD_ATTR: ["target"], // Allow target attribute for links
+								ADD_TAGS: ["img"], // Ensure images are allowed
+						  })
+						: rawHtml; // SSR fallback
 
 				setHtml(cleanHtml);
 			} catch (error) {
@@ -42,10 +43,5 @@ export function Markdown({ children, className = "" }: MarkdownProps) {
 		parseMarkdown();
 	}, [children]);
 
-	return (
-		<div
-			className={`prose prose-sm max-w-none ${className}`}
-			dangerouslySetInnerHTML={{ __html: html }}
-		/>
-	);
+	return <div className={`prose prose-sm max-w-none ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }

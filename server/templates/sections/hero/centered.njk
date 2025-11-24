@@ -1,19 +1,17 @@
+{% set displayTitle = title or "Welcome to Our Site" %}
+{% set displaySubtitle = subtitle or "Discover amazing experiences and content" %}
+{% set displayImage = image or {url: '/assets/images/placeholders/hero-placeholder.jpg', alt: 'Hero image'} %}
+{% set displayCtaText = ctaText or "Learn More" %}
+{% set displayCtaLink = ctaLink or "#" %}
+
 <section class="hero hero--centered">
   <div class="container">
-    {% if title %}
-    <h1 class="hero__title">{{ title }}</h1>
-    {% endif %}
-    {% if subtitle %}
-    <p class="hero__subtitle">{{ subtitle }}</p>
-    {% endif %}
-    {% if image %}
-    <img src="{{ image.url }}" alt="{{ image.alt or '' }}" class="hero__image">
-    {% endif %}
-    {% if ctaText and ctaLink %}
-    {% set normalizedLink = ctaLink | normalizeLink %}
+    <h1 class="hero__title">{{ displayTitle }}</h1>
+    <p class="hero__subtitle">{{ displaySubtitle }}</p>
+    <img src="{{ displayImage.url }}" alt="{{ displayImage.alt or 'Hero image' }}" class="hero__image">
+    {% set normalizedLink = displayCtaLink | normalizeLink %}
     {% if normalizedLink %}
-    <a href="{{ normalizedLink.href }}" class="hero__cta">{{ ctaText }}</a>
-    {% endif %}
+    <a href="{{ normalizedLink.href }}" class="hero__cta">{{ displayCtaText }}</a>
     {% endif %}
   </div>
 </section>

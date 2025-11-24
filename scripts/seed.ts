@@ -328,6 +328,75 @@ async function seed() {
     });
     console.log(`✓ Created section definition: image-text (${imageTextSectionId})`);
 
+    const headerSectionId = randomUUID();
+    await db.insert(schema.sectionDefinitions).values({
+      id: headerSectionId,
+      key: "header",
+      name: "Header",
+      description: "Site header with logo, navigation, and CTA button",
+      status: "published",
+      elementsStructure: JSON.stringify({
+        version: 1,
+        rows: [
+          {
+            id: "row-1",
+            slots: [
+              {
+                key: "logo",
+                type: "image",
+                label: "Logo",
+              },
+              {
+                key: "ctaText",
+                type: "text",
+                label: "CTA Button Text",
+              },
+              {
+                key: "ctaLink",
+                type: "link",
+                label: "CTA Button Link",
+                dataRules: { linkTargets: ["url", "page"] },
+              },
+            ],
+          },
+        ],
+      }),
+      templateKey: "header",
+      defaultVariant: "default",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Created section definition: header (${headerSectionId})`);
+
+    const footerSectionId = randomUUID();
+    await db.insert(schema.sectionDefinitions).values({
+      id: footerSectionId,
+      key: "footer",
+      name: "Footer",
+      description: "Site footer with navigation and copyright",
+      status: "published",
+      elementsStructure: JSON.stringify({
+        version: 1,
+        rows: [
+          {
+            id: "row-1",
+            slots: [
+              {
+                key: "companyName",
+                type: "text",
+                label: "Company Name",
+              },
+            ],
+          },
+        ],
+      }),
+      templateKey: "footer",
+      defaultVariant: "default",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Created section definition: footer (${footerSectionId})`);
+
     // ========================================================================
     // 6. Create collection definition: blog
     // ========================================================================
@@ -374,7 +443,38 @@ async function seed() {
     console.log(`✓ Created collection definition: blog (${blogCollectionId})`);
 
     // ========================================================================
-    // 7. Create page: home
+    // 7. Initialize global navigation
+    // ========================================================================
+    await db.insert(schema.siteSettings).values({
+      id: randomUUID(),
+      key: "navigation",
+      value: JSON.stringify([
+        {
+          label: "Home",
+          href: "/",
+          location: "both",
+          visible: true,
+        },
+        {
+          label: "About",
+          href: "/about",
+          location: "both",
+          visible: true,
+        },
+        {
+          label: "Contact",
+          href: "/contact",
+          location: "header",
+          visible: true,
+        },
+      ]),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Initialized global navigation");
+
+    // ========================================================================
+    // 8. Create page: home
     // ========================================================================
     const homePageId = randomUUID();
     await db.insert(schema.pages).values({
@@ -394,14 +494,45 @@ async function seed() {
     console.log(`✓ Created page: home (${homePageId})`);
 
     // ========================================================================
-    // 8. Add hero section to home page
+    // 9. Add header section to home page
     // ========================================================================
-    const pageSectionId = randomUUID();
+    const headerPageSectionId = randomUUID();
     await db.insert(schema.pageSections).values({
-      id: pageSectionId,
+      id: headerPageSectionId,
+      pageId: homePageId,
+      sectionDefId: headerSectionId,
+      sortOrder: 0,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Added header section to home page`);
+
+    // ========================================================================
+    // 10. Add header content (English)
+    // ========================================================================
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: headerPageSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        ctaText: "Get Started",
+        ctaLink: { type: "url", href: "/contact" },
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Added header content (English)");
+
+    // ========================================================================
+    // 11. Add hero section to home page
+    // ========================================================================
+    const heroPageSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: heroPageSectionId,
       pageId: homePageId,
       sectionDefId: heroSectionId,
-      sortOrder: 0,
+      sortOrder: 1,
       status: "published",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -409,18 +540,18 @@ async function seed() {
     console.log(`✓ Added hero section to home page`);
 
     // ========================================================================
-    // 9. Add hero content (English)
+    // 12. Add hero content (English) - Using uploaded image
     // ========================================================================
     await db.insert(schema.pageSectionContents).values({
       id: randomUUID(),
-      pageSectionId,
+      pageSectionId: heroPageSectionId,
       localeCode: "en",
       content: JSON.stringify({
         title: "Welcome to Our CMS",
-        subtitle: "AI-powered content management",
+        subtitle: "AI-powered content management with intelligent image handling",
         image: {
-          url: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=800&q=80",
-          alt: "AI and technology concept"
+          url: "/uploads/images/2025/11/23/original/7f27cf0e-0b38-4c24-b6c5-d15528c80ee3.jpg",
+          alt: "Scenic landscape showcasing natural beauty"
         },
         ctaText: "Get Started",
         ctaLink: { type: "url", href: "/contact" },
@@ -431,7 +562,442 @@ async function seed() {
     console.log("✓ Added hero content (English)");
 
     // ========================================================================
-    // 10. Create blog entry
+    // 13. Add feature section to home page
+    // ========================================================================
+    const featurePageSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: featurePageSectionId,
+      pageId: homePageId,
+      sectionDefId: featureSectionId,
+      sortOrder: 2,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Added feature section to home page`);
+
+    // ========================================================================
+    // 14. Add feature content (English)
+    // ========================================================================
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: featurePageSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        heading: "Powerful Features",
+        description: "Discover the capabilities that make our CMS stand out from the rest",
+        items: [
+          {
+            icon: { url: "/assets/images/placeholders/feature-icon-placeholder.svg" },
+            title: "AI-Powered Image Management",
+            description: "Automatically organize, tag, and optimize images with intelligent processing"
+          },
+          {
+            icon: { url: "/assets/images/placeholders/feature-icon-placeholder.svg" },
+            title: "Multi-Language Support",
+            description: "Create content in multiple languages with seamless localization"
+          },
+          {
+            icon: { url: "/assets/images/placeholders/feature-icon-placeholder.svg" },
+            title: "Real-Time Preview",
+            description: "See your changes instantly with our live preview system"
+          },
+          {
+            icon: { url: "/assets/images/placeholders/feature-icon-placeholder.svg" },
+            title: "Flexible Content Sections",
+            description: "Build dynamic pages with modular, reusable content sections"
+          }
+        ]
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Added feature content (English)");
+
+    // ========================================================================
+    // 15. Add image-text section to home page
+    // ========================================================================
+    const imageTextPageSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: imageTextPageSectionId,
+      pageId: homePageId,
+      sectionDefId: imageTextSectionId,
+      sortOrder: 3,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Added image-text section to home page`);
+
+    // ========================================================================
+    // 16. Add image-text content (English)
+    // ========================================================================
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: imageTextPageSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        heading: "Built for Modern Teams",
+        content: "Our CMS combines cutting-edge AI technology with intuitive design to help your team create, manage, and publish content faster than ever before.\n\nWhether you're building a marketing site, a blog, or a complex multi-language platform, we've got you covered with powerful features and seamless workflows.",
+        image: {
+          url: "/uploads/images/2025/11/23/original/8550a4b0-8ba2-4907-b79c-218f59e2d8e6.jpg",
+          alt: "Team collaboration"
+        },
+        layout: "image-right",
+        mobileLayout: "image-first",
+        backgroundColor: "gray",
+        ctaText: "Learn More",
+        ctaLink: { type: "url", href: "/about" }
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Added image-text content (English)");
+
+    // ========================================================================
+    // 17. Add CTA section to home page
+    // ========================================================================
+    const ctaPageSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: ctaPageSectionId,
+      pageId: homePageId,
+      sectionDefId: ctaSectionId,
+      sortOrder: 4,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Added CTA section to home page`);
+
+    // ========================================================================
+    // 18. Add CTA content (English)
+    // ========================================================================
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: ctaPageSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        heading: "Ready to Transform Your Content?",
+        description: "Join thousands of teams already using our platform to create amazing digital experiences",
+        buttonText: "Start Free Trial",
+        buttonLink: { type: "url", href: "/contact" }
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Added CTA content (English)");
+
+    // ========================================================================
+    // 19. Add footer section to home page
+    // ========================================================================
+    const footerPageSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: footerPageSectionId,
+      pageId: homePageId,
+      sectionDefId: footerSectionId,
+      sortOrder: 999,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Added footer section to home page`);
+
+    // ========================================================================
+    // 20. Add footer content (English)
+    // ========================================================================
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: footerPageSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        companyName: "My Company",
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Added footer content (English)");
+
+    // ========================================================================
+    // 21. Create About page
+    // ========================================================================
+    const aboutPageId = randomUUID();
+    await db.insert(schema.pages).values({
+      id: aboutPageId,
+      siteId,
+      environmentId: envId,
+      slug: "about",
+      name: "About Us",
+      indexing: true,
+      meta: JSON.stringify({
+        title: "About Us",
+        description: "Learn more about our team and mission",
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Created page: about (${aboutPageId})`);
+
+    // ========================================================================
+    // 22. Add sections to About page
+    // ========================================================================
+    // Header
+    const aboutHeaderSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: aboutHeaderSectionId,
+      pageId: aboutPageId,
+      sectionDefId: headerSectionId,
+      sortOrder: 0,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: aboutHeaderSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        ctaText: "Get Started",
+        ctaLink: { type: "url", href: "/contact" },
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Hero (centered variant)
+    const aboutHeroSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: aboutHeroSectionId,
+      pageId: aboutPageId,
+      sectionDefId: heroSectionId,
+      sortOrder: 1,
+      status: "published",
+      variant: "centered",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: aboutHeroSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        title: "About Our Team",
+        subtitle: "We're building the future of content management",
+        image: {
+          url: "/uploads/images/2025/11/23/original/3f794a9f-5c90-4934-b48f-02d4fdc1c59f.jpg",
+          alt: "Our team"
+        },
+        ctaText: "Join Us",
+        ctaLink: { type: "url", href: "/contact" },
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Image-Text sections
+    const aboutImageText1Id = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: aboutImageText1Id,
+      pageId: aboutPageId,
+      sectionDefId: imageTextSectionId,
+      sortOrder: 2,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: aboutImageText1Id,
+      localeCode: "en",
+      content: JSON.stringify({
+        heading: "Our Mission",
+        content: "We believe content creation should be intuitive, powerful, and accessible to everyone. That's why we built a CMS that combines the best of AI technology with human creativity.\n\nOur platform empowers teams to focus on what matters most: creating exceptional content that resonates with their audience.",
+        image: {
+          url: "/uploads/images/2025/11/23/original/7f27cf0e-0b38-4c24-b6c5-d15528c80ee3.jpg",
+          alt: "Our mission"
+        },
+        layout: "image-left",
+        mobileLayout: "text-first",
+        backgroundColor: "white"
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const aboutImageText2Id = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: aboutImageText2Id,
+      pageId: aboutPageId,
+      sectionDefId: imageTextSectionId,
+      sortOrder: 3,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: aboutImageText2Id,
+      localeCode: "en",
+      content: JSON.stringify({
+        heading: "Our Values",
+        content: "**Innovation:** We push boundaries and embrace new technologies.\n\n**Simplicity:** Complex problems deserve elegant solutions.\n\n**Collaboration:** Great work happens when teams work together seamlessly.",
+        image: {
+          url: "/uploads/images/2025/11/23/original/8550a4b0-8ba2-4907-b79c-218f59e2d8e6.jpg",
+          alt: "Our values"
+        },
+        layout: "image-right",
+        mobileLayout: "image-first",
+        backgroundColor: "gray"
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Footer
+    const aboutFooterSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: aboutFooterSectionId,
+      pageId: aboutPageId,
+      sectionDefId: footerSectionId,
+      sortOrder: 999,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: aboutFooterSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        companyName: "My Company",
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Created About page with full content");
+
+    // ========================================================================
+    // 23. Create Contact page
+    // ========================================================================
+    const contactPageId = randomUUID();
+    await db.insert(schema.pages).values({
+      id: contactPageId,
+      siteId,
+      environmentId: envId,
+      slug: "contact",
+      name: "Contact Us",
+      indexing: true,
+      meta: JSON.stringify({
+        title: "Contact Us",
+        description: "Get in touch with our team",
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log(`✓ Created page: contact (${contactPageId})`);
+
+    // ========================================================================
+    // 24. Add sections to Contact page
+    // ========================================================================
+    // Header
+    const contactHeaderSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: contactHeaderSectionId,
+      pageId: contactPageId,
+      sectionDefId: headerSectionId,
+      sortOrder: 0,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: contactHeaderSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        ctaText: "Get Started",
+        ctaLink: { type: "url", href: "/contact" },
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Hero
+    const contactHeroSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: contactHeroSectionId,
+      pageId: contactPageId,
+      sectionDefId: heroSectionId,
+      sortOrder: 1,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: contactHeroSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        title: "Get In Touch",
+        subtitle: "We'd love to hear from you and help bring your ideas to life",
+        image: {
+          url: "/uploads/images/2025/11/23/original/3f794a9f-5c90-4934-b48f-02d4fdc1c59f.jpg",
+          alt: "Contact us"
+        }
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // CTA
+    const contactCtaSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: contactCtaSectionId,
+      pageId: contactPageId,
+      sectionDefId: ctaSectionId,
+      sortOrder: 2,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: contactCtaSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        heading: "Let's Start a Conversation",
+        description: "Whether you have a question, feedback, or want to explore how our CMS can help your team, we're here to help",
+        buttonText: "Send Us a Message",
+        buttonLink: { type: "url", href: "mailto:hello@example.com" }
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Footer
+    const contactFooterSectionId = randomUUID();
+    await db.insert(schema.pageSections).values({
+      id: contactFooterSectionId,
+      pageId: contactPageId,
+      sectionDefId: footerSectionId,
+      sortOrder: 999,
+      status: "published",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.pageSectionContents).values({
+      id: randomUUID(),
+      pageSectionId: contactFooterSectionId,
+      localeCode: "en",
+      content: JSON.stringify({
+        companyName: "My Company",
+      }),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    console.log("✓ Created Contact page with full content");
+
+    // ========================================================================
+    // 25. Create blog entry
     // ========================================================================
     const blogEntryId = randomUUID();
     await db.insert(schema.collectionEntries).values({
@@ -445,7 +1011,7 @@ async function seed() {
     console.log(`✓ Created blog entry: hello-world (${blogEntryId})`);
 
     // ========================================================================
-    // 11. Add blog entry content
+    // 26. Add blog entry content
     // ========================================================================
     await db.insert(schema.entryContents).values({
       id: randomUUID(),
@@ -462,7 +1028,7 @@ async function seed() {
     console.log("✓ Added blog entry content (English)");
 
     // ========================================================================
-    // 12. Create default session
+    // 27. Create default session
     // ========================================================================
     const sessionId = randomUUID();
     await db.insert(schema.sessions).values({

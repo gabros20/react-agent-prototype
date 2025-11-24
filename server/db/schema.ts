@@ -46,6 +46,14 @@ export const locales = sqliteTable("locales", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
+export const siteSettings = sqliteTable("site_settings", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value", { mode: "json" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
 // ============================================================================
 // PAGES & PAGE CONTENT
 // ============================================================================
@@ -570,5 +578,8 @@ export const selectConversationImageSchema = createSelectSchema(conversationImag
 
 export const insertPageSectionImageSchema = createInsertSchema(pageSectionImages);
 export const selectPageSectionImageSchema = createSelectSchema(pageSectionImages);
+
+export const insertSiteSettingSchema = createInsertSchema(siteSettings);
+export const selectSiteSettingSchema = createSelectSchema(siteSettings);
 
 // imageProcessingQueue schemas removed - table no longer exists

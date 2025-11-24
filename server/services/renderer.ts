@@ -3,6 +3,8 @@ import path from "node:path";
 import { marked } from "marked";
 import nunjucks from "nunjucks";
 import type { PageService } from "./cms/page-service";
+import { db } from "../db/client";
+import { SiteSettingsService } from "./cms/site-settings-service";
 
 export interface TemplateRegistry {
   [templateKey: string]: { variants: string[]; path: string };
@@ -11,8 +13,10 @@ export interface TemplateRegistry {
 export class RendererService {
   private env: nunjucks.Environment;
   private templateRegistry: TemplateRegistry = {};
+  private siteSettingsService: SiteSettingsService;
 
   constructor(private templateDir: string) {
+    this.siteSettingsService = new SiteSettingsService(db);
     this.env = nunjucks.configure(templateDir, {
       autoescape: true,
       watch: process.env.NODE_ENV === "development",
@@ -90,6 +94,10 @@ export class RendererService {
       throw new Error(`Page not found: ${pageSlug}`);
     }
 
+    // Fetch global navigation items
+    const globalNavItems = await this.siteSettingsService.getNavigationItems();
+    const currentYear = new Date().getFullYear();
+
     const sectionHtmlList: string[] = [];
 
     if (!page.pageSections || page.pageSections.length === 0) {
@@ -109,6 +117,8 @@ export class RendererService {
           ...contentData,
           sectionKey: sectionDef.key,
           locale,
+          globalNavItems,
+          currentYear,
         });
 
         sectionHtmlList.push(sectionHtml);
@@ -119,6 +129,8 @@ export class RendererService {
       page,
       locale,
       content: sectionHtmlList.join("\n"),
+      globalNavItems,
+      currentYear,
     });
 
     return html;

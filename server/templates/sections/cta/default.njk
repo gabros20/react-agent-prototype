@@ -1,16 +1,15 @@
+{% set displayHeading = heading or "Ready to Get Started?" %}
+{% set displayDescription = description or "Join us today and experience the difference" %}
+{% set displayButtonText = buttonText or "Get Started" %}
+{% set displayButtonLink = buttonLink or "#" %}
+
 <section class="cta">
   <div class="container">
-    {% if heading %}
-    <h2 class="cta__heading">{{ heading }}</h2>
-    {% endif %}
-    {% if description %}
-    <p class="cta__description">{{ description }}</p>
-    {% endif %}
-    {% if buttonText and buttonLink %}
-    {% set normalizedLink = buttonLink | normalizeLink %}
+    <h2 class="cta__heading">{{ displayHeading }}</h2>
+    <p class="cta__description">{{ displayDescription }}</p>
+    {% set normalizedLink = displayButtonLink | normalizeLink %}
     {% if normalizedLink %}
-    <a href="{{ normalizedLink.href }}" class="cta__button">{{ buttonText }}</a>
-    {% endif %}
+    <a href="{{ normalizedLink.href }}" class="cta__button">{{ displayButtonText }}</a>
     {% endif %}
   </div>
 </section>

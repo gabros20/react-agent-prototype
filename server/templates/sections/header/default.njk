@@ -1,0 +1,93 @@
+{# Header Section - Sticky navigation with logo, nav items, and CTA #}
+
+{% set displayCtaText = ctaText or "Get Started" %}
+{% set displayCtaLink = ctaLink or "#" %}
+{% set normalizedCtaLink = displayCtaLink | normalizeLink %}
+
+<header class="header" id="main-header">
+  <div class="container">
+    <div class="header__inner">
+      {# Logo #}
+      <div class="header__logo">
+        <a href="/" class="header__logo-link">
+          {% if logo and logo.url %}
+            <img src="{{ logo.url }}" alt="{{ logo.alt or 'Logo' }}" class="header__logo-image">
+          {% else %}
+            <img src="/assets/images/default-logo.svg" alt="Logo" class="header__logo-image">
+          {% endif %}
+        </a>
+      </div>
+
+      {# Desktop Navigation #}
+      <nav class="header__nav header__nav--desktop" aria-label="Main navigation">
+        {% if globalNavItems and globalNavItems.length > 0 %}
+          <ul class="header__nav-list">
+            {% for item in globalNavItems %}
+              {% if item.visible and (item.location == "header" or item.location == "both") %}
+                <li class="header__nav-item">
+                  <a href="{{ item.href }}" class="header__nav-link">{{ item.label }}</a>
+                </li>
+              {% endif %}
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </nav>
+
+      {# CTA Button #}
+      <div class="header__actions">
+        {% if normalizedCtaLink %}
+          <a href="{{ normalizedCtaLink.href }}" class="header__cta">{{ displayCtaText }}</a>
+        {% endif %}
+
+        {# Hamburger Menu Button #}
+        <button
+          class="header__hamburger"
+          aria-label="Toggle menu"
+          aria-expanded="false"
+          aria-controls="mobile-menu">
+          <span class="header__hamburger-line"></span>
+          <span class="header__hamburger-line"></span>
+          <span class="header__hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# Mobile Slide-out Panel #}
+  <div class="header__mobile-panel" id="mobile-menu" aria-hidden="true">
+    <div class="header__mobile-header">
+      <button
+        class="header__mobile-close"
+        aria-label="Close menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <nav class="header__nav header__nav--mobile" aria-label="Mobile navigation">
+      {% if globalNavItems and globalNavItems.length > 0 %}
+        <ul class="header__nav-list">
+          {% for item in globalNavItems %}
+            {% if item.visible and (item.location == "header" or item.location == "both") %}
+              <li class="header__nav-item">
+                <a href="{{ item.href }}" class="header__nav-link">{{ item.label }}</a>
+              </li>
+            {% endif %}
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {# Mobile CTA Button #}
+      {% if normalizedCtaLink %}
+        <div class="header__mobile-cta">
+          <a href="{{ normalizedCtaLink.href }}" class="header__cta">{{ displayCtaText }}</a>
+        </div>
+      {% endif %}
+    </nav>
+  </div>
+
+  {# Mobile Overlay #}
+  <div class="header__overlay" aria-hidden="true"></div>
+</header>

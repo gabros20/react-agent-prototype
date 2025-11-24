@@ -1,0 +1,10 @@
+<svg width="160" height="48" viewBox="0 0 160 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="24" cy="24" r="20" fill="#667EEA"/>
+
+  <!-- Letter C in white -->
+  <path d="M24 10C16.268 10 10 16.268 10 24C10 31.732 16.268 38 24 38" stroke="white" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Company text -->
+  <text x="52" y="32" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#1F2937">Company</text>
+</svg>

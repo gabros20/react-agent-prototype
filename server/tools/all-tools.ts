@@ -18,6 +18,13 @@ import {
   listAllImagesTool,
   updateSectionImageTool
 } from './image-tools'
+import {
+  getNavigationTool,
+  addNavigationItemTool,
+  updateNavigationItemTool,
+  removeNavigationItemTool,
+  toggleNavigationItemTool
+} from './site-settings-tools'
 
 // ============================================================================
 // CMS - Page Tools
@@ -643,6 +650,13 @@ export const ALL_TOOLS = {
   'cms_replaceImage': replaceImageTool,
   'cms_deleteImage': deleteImageTool,
 
+  // Site Settings & Navigation
+  'cms_getNavigation': getNavigationTool,
+  'cms_addNavigationItem': addNavigationItemTool,
+  'cms_updateNavigationItem': updateNavigationItemTool,
+  'cms_removeNavigationItem': removeNavigationItemTool,
+  'cms_toggleNavigationItem': toggleNavigationItemTool,
+
   // HTTP
   'http_get': httpGet,
   'http_post': httpPost,
@@ -823,5 +837,35 @@ export const TOOL_METADATA = {
     riskLevel: 'high',
     requiresApproval: true,
     tags: ['write', 'image', 'destructive']
+  },
+  'cms_getNavigation': {
+    category: 'site-settings',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'navigation']
+  },
+  'cms_addNavigationItem': {
+    category: 'site-settings',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'navigation']
+  },
+  'cms_updateNavigationItem': {
+    category: 'site-settings',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'update', 'navigation']
+  },
+  'cms_removeNavigationItem': {
+    category: 'site-settings',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'navigation', 'destructive']
+  },
+  'cms_toggleNavigationItem': {
+    category: 'site-settings',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['write', 'navigation']
   }
 } as const

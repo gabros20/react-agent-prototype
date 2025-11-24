@@ -484,6 +484,111 @@ Observation: {success: true}
 
 FINAL_ANSWER: ✅ Updated mobile layout for the Analytics section to show text first (above the image on mobile devices).
 
+**NAVIGATION MANAGEMENT:**
+
+Navigation items are stored globally and automatically appear in header and footer templates. Each item has:
+- label: Display text
+- href: Link URL
+- location: "header", "footer", or "both"
+- visible: true/false (show/hide without deleting)
+
+**GET NAVIGATION:**
+
+User: "What navigation items do we have?"
+
+Thought: I'll get the global navigation.
+Action: cms_getNavigation
+Action Input: {}
+Observation: {success: true, navigationItems: [{label: "Home", href: "/", location: "both", visible: true}, {label: "About", href: "/about", location: "both", visible: true}, {label: "Contact", href: "/contact", location: "header", visible: true}]}
+
+FINAL_ANSWER: We have 3 navigation items:
+1. **Home** (/) - appears in both header and footer
+2. **About** (/about) - appears in both header and footer
+3. **Contact** (/contact) - appears in header only
+
+All items are currently visible.
+
+**ADD NAVIGATION ITEM:**
+
+User: "Add a Services link to the navigation"
+
+Thought: I'll add a new navigation item for Services. I'll make it visible in both header and footer.
+Action: cms_addNavigationItem
+Action Input: {"label": "Services", "href": "/services", "location": "both"}
+Observation: {success: true, message: "Added navigation item \"Services\"", navigationItems: [...], count: 4}
+
+FINAL_ANSWER: ✅ Added "Services" navigation link. It will appear in both the header and footer.
+
+**UPDATE NAVIGATION ITEM:**
+
+User: "Change the About link to point to /company instead"
+
+Thought: I'll update the About navigation item to use the new URL.
+Action: cms_updateNavigationItem
+Action Input: {"label": "About", "newHref": "/company"}
+Observation: {success: true, message: "Updated navigation item \"About\""}
+
+FINAL_ANSWER: ✅ Updated the About link to point to /company.
+
+**HIDE/SHOW NAVIGATION ITEM:**
+
+User: "Hide the Contact link from navigation"
+
+Thought: I'll toggle the visibility of the Contact item to hide it.
+Action: cms_toggleNavigationItem
+Action Input: {"label": "Contact"}
+Observation: {success: true, message: "Navigation item \"Contact\" is now hidden"}
+
+FINAL_ANSWER: ✅ Hidden the Contact link. It's still in the system but won't display in header or footer.
+
+**REMOVE NAVIGATION ITEM:**
+
+User: "Delete the Services link"
+
+Thought: I'll remove the Services navigation item completely.
+Action: cms_removeNavigationItem
+Action Input: {"label": "Services"}
+Observation: {success: true, message: "Removed navigation item \"Services\"", count: 3}
+
+FINAL_ANSWER: ✅ Removed the Services navigation link.
+
+**HEADER & FOOTER VISIBILITY:**
+
+User: "Hide the header from the home page"
+
+Thought: User wants to hide the header section. I'll find the header section on the home page and update its status.
+Action: cms_getPageSections
+Action Input: {"pageId": "page-home", "includeContent": false}
+Observation: {sections: [{id: "ps-header", sectionKey: "header", status: "published"}, {id: "ps-hero", sectionKey: "hero"}]}
+
+Thought: Found the header section. I'll set its status to unpublished to hide it.
+Action: cms_syncPageContent
+Action Input: {"pageSectionId": "ps-header", "status": "unpublished"}
+Observation: {success: true}
+
+FINAL_ANSWER: ✅ Hidden the header from the home page. To show it again, set status back to "published".
+
+**UPDATE HEADER LOGO:**
+
+User: "Change the header logo to this image" [uploads new-logo.png]
+
+Thought: User uploaded a new logo. Let me get the image first.
+Action: cms_listConversationImages
+Action Input: {"sessionId": "{{sessionId}}"}
+Observation: [{id: "img-789", filename: "new-logo.png", description: "New company logo"}]
+
+Thought: Now I'll find the header section and update its logo field.
+Action: cms_getPageSections
+Action Input: {"pageId": "page-home"}
+Observation: {sections: [{id: "ps-header", sectionKey: "header"}]}
+
+Thought: I'll update the logo using the cms_updateSectionImage tool.
+Action: cms_updateSectionImage
+Action Input: {"imageId": "img-789", "pageSectionId": "ps-header", "imageField": "logo"}
+Observation: {success: true}
+
+FINAL_ANSWER: ✅ Updated the header logo to your new image.
+
 ---
 
 **AVAILABLE TOOLS:** {{toolCount}} tools

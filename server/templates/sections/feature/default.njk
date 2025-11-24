@@ -1,23 +1,37 @@
+{% set displayHeading = heading or "Our Features" %}
+{% set displayDescription = description or "Explore what makes us unique" %}
+{% set defaultItems = [
+  {
+    icon: {url: '/assets/images/placeholders/feature-icon-placeholder.svg'},
+    title: 'Feature One',
+    description: 'Discover this amazing feature that sets us apart'
+  },
+  {
+    icon: {url: '/assets/images/placeholders/feature-icon-placeholder.svg'},
+    title: 'Feature Two',
+    description: 'Learn about this capability and how it helps you'
+  },
+  {
+    icon: {url: '/assets/images/placeholders/feature-icon-placeholder.svg'},
+    title: 'Feature Three',
+    description: 'Explore this functionality designed for your needs'
+  }
+] %}
+{% set displayItems = items if (items and items.length > 0) else defaultItems %}
+
 <section class="feature">
   <div class="container">
-    {% if heading %}
-    <h2 class="feature__heading">{{ heading }}</h2>
-    {% endif %}
-    {% if description %}
-    <div class="feature__description">{{ description | markdown | safe }}</div>
-    {% endif %}
-    {% if items and items.length > 0 %}
+    <h2 class="feature__heading">{{ displayHeading }}</h2>
+    <div class="feature__description">{{ displayDescription | markdown | safe }}</div>
     <ul class="feature__list">
-      {% for item in items %}
+      {% for item in displayItems %}
       <li class="feature__item">
-        {% if item.icon %}
-        <img src="{{ item.icon.url }}" alt="" class="feature__icon">
-        {% endif %}
-        <h3>{{ item.title }}</h3>
-        <p>{{ item.description }}</p>
+        {% set itemIcon = item.icon or {url: '/assets/images/placeholders/feature-icon-placeholder.svg'} %}
+        <img src="{{ itemIcon.url }}" alt="" class="feature__icon">
+        <h3>{{ item.title or 'Feature Title' }}</h3>
+        <p>{{ item.description or 'Feature description goes here' }}</p>
       </li>
       {% endfor %}
     </ul>
-    {% endif %}
   </div>
 </section>

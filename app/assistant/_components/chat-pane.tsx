@@ -92,7 +92,7 @@ export function ChatPane() {
 							messages.map((message) => (
 								<Message from={message.role} key={message.id}>
 									<MessageContent>
-										<Markdown className='whitespace-pre-wrap text-xs sm:text-sm'>{message.content}</Markdown>
+										<Markdown className='text-xs sm:text-sm'>{message.content}</Markdown>
 									</MessageContent>
 								</Message>
 							))
