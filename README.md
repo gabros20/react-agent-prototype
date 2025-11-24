@@ -177,7 +177,12 @@ pnpm dev:worker     # Worker only
 - `pnpm seed:images` - Download and process 3 sample images
 - `pnpm check:images` - Verify image setup
 - `pnpm reindex` - Populate vector index with existing data
-- `pnpm reset:system` - Clear Redis cache and checkpoint DB
+
+### System Reset & Verification
+- `pnpm reset:system` - Clear Redis cache and checkpoint DB (~2s)
+- `pnpm reset:data` - Truncate tables, reseed data (~15-20s)
+- `pnpm reset:complete` - Nuclear reset with schema recreation (~18-25s)
+- `pnpm verify` - Run 10 health checks (Redis, DB, images, ports)
 
 ### Code Quality
 - `pnpm typecheck` - Check TypeScript types
@@ -750,26 +755,48 @@ pnpm stop           # Stop dev (leave Redis running)
 | Duplicate/zombie processes | Run `pnpm ps` to identify, then `pnpm stop:all`  |
 | System slow/high CPU      | Run `pnpm ps` - likely duplicate processes       |
 
-### Full Reset
+### System Reset Options
+
+**Three-tier reset system** for different scenarios:
 
 ```bash
-# 1. Stop everything first
-pnpm stop:all
+# 1. Cache Reset (fastest - ~2s)
+pnpm reset:system
+# Clears Redis cache, checkpoints DB (WAL files)
+# Kills orphaned processes
+# Use when: Things feel slow or broken
 
-# 2. Nuclear option - complete reset
-rm -rf node_modules data/sqlite.db data/lancedb uploads/
+# 2. Data Reset (fast - ~15-20s)
+pnpm reset:data
+# Truncates all tables (preserves schema)
+# Clears uploads, vector store
+# Reseeds data + processes images
+# Use when: Need fresh data, schema unchanged
 
-# 3. Reinstall and reseed
-pnpm install
-pnpm db:push
-pnpm seed
-pnpm seed:images  # Optional: seed sample images
-pnpm reindex
+# 3. Complete Reset (nuclear - ~18-25s)
+pnpm reset:complete
+# Deletes entire database + schema
+# Clears all caches, uploads, processes
+# Recreates schema + reseeds + processes images
+# Use when: Schema changed or deep corruption
 
-# 4. Restart
-pnpm start:all    # Starts Redis
-pnpm start        # Start dev
+# 4. System Verification
+pnpm verify
+# Runs 10 health checks (Redis, DB, images, ports, etc.)
+# Use after: Any reset to confirm system state
 ```
+
+**When to use each**:
+- **reset:system**: Browser cache issues, stale sessions, slow performance
+- **reset:data**: Testing fresh data, navigation changes, content updates
+- **reset:complete**: Schema migrations, corrupted database, major refactors
+- **verify**: After any reset, before reporting bugs
+
+See scripts:
+- `scripts/reset-system.ts` - Cache + checkpoint reset
+- `scripts/reset-data-only.ts` - Data-only reset
+- `scripts/reset-complete.ts` - Nuclear reset with verification
+- `scripts/verify-system.ts` - 10-point health check
 
 See [QUICK_REFERENCE.md](QUICK_REFERENCE.md#-common-issues) for detailed troubleshooting.
 

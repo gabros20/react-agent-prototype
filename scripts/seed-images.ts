@@ -4,19 +4,23 @@ import * as schema from "../server/db/schema";
 import { ImageProcessingService } from "../server/services/storage/image-processing.service";
 
 // Sample images from Picsum Photos (unsplash quality, free)
+// Fixed UUIDs to match seed.ts expectations
 const SAMPLE_IMAGES = [
   {
-    url: "https://picsum.photos/id/1018/1920/1080", // Landscape - mountains
+    id: "7f27cf0e-0b38-4c24-b6c5-d15528c80ee3", // Mountain - used in home hero
+    url: "https://picsum.photos/id/1018/1920/1080",
     name: "mountain-landscape.jpg",
     description: "Mountain landscape for testing",
   },
   {
-    url: "https://picsum.photos/id/1025/1920/1080", // Portrait - puppy
+    id: "8550a4b0-8ba2-4907-b79c-218f59e2d8e6", // Workspace - used in image-text
+    url: "https://picsum.photos/id/1025/1920/1080",
     name: "golden-puppy.jpg",
     description: "Golden retriever puppy for testing",
   },
   {
-    url: "https://picsum.photos/id/180/1920/1080", // Product - desk setup
+    id: "3f794a9f-5c90-4934-b48f-02d4fdc1c59f", // Puppy - used in about/contact
+    url: "https://picsum.photos/id/180/1920/1080",
     name: "desk-workspace.jpg",
     description: "Modern workspace desk setup for testing",
   },
@@ -59,12 +63,13 @@ async function seedImages() {
       const imageBuffer = await downloadImage(sample.url);
       console.log(`  ✓ Downloaded (${(imageBuffer.length / 1024).toFixed(1)} KB)`);
 
-      // Process through image processing service (handles dedup, storage, DB, queuing)
+      // Process through image processing service with fixed ID
       const result = await imageProcessingService.processImage({
         buffer: imageBuffer,
         filename: sample.name,
         sessionId,
         mediaType: "image/jpeg",
+        fixedId: sample.id, // Use fixed ID to match seed.ts expectations
       });
 
       if (!result.isNew) {

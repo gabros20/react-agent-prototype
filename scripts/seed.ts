@@ -451,19 +451,19 @@ async function seed() {
       value: JSON.stringify([
         {
           label: "Home",
-          href: "/",
+          href: "/pages/home?locale=en",
           location: "both",
           visible: true,
         },
         {
           label: "About",
-          href: "/about",
+          href: "/pages/about?locale=en",
           location: "both",
           visible: true,
         },
         {
           label: "Contact",
-          href: "/contact",
+          href: "/pages/contact?locale=en",
           location: "header",
           visible: true,
         },
@@ -517,7 +517,7 @@ async function seed() {
       localeCode: "en",
       content: JSON.stringify({
         ctaText: "Get Started",
-        ctaLink: { type: "url", href: "/contact" },
+        ctaLink: { type: "url", href: "/pages/contact?locale=en" },
       }),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -554,7 +554,7 @@ async function seed() {
           alt: "Scenic landscape showcasing natural beauty"
         },
         ctaText: "Get Started",
-        ctaLink: { type: "url", href: "/contact" },
+        ctaLink: { type: "url", href: "/pages/contact?locale=en" },
       }),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -647,7 +647,7 @@ async function seed() {
         mobileLayout: "image-first",
         backgroundColor: "gray",
         ctaText: "Learn More",
-        ctaLink: { type: "url", href: "/about" }
+        ctaLink: { type: "url", href: "/pages/about?locale=en" }
       }),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -680,7 +680,7 @@ async function seed() {
         heading: "Ready to Transform Your Content?",
         description: "Join thousands of teams already using our platform to create amazing digital experiences",
         buttonText: "Start Free Trial",
-        buttonLink: { type: "url", href: "/contact" }
+        buttonLink: { type: "url", href: "/pages/contact?locale=en" }
       }),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -757,7 +757,7 @@ async function seed() {
       localeCode: "en",
       content: JSON.stringify({
         ctaText: "Get Started",
-        ctaLink: { type: "url", href: "/contact" },
+        ctaLink: { type: "url", href: "/pages/contact?locale=en" },
       }),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -787,7 +787,7 @@ async function seed() {
           alt: "Our team"
         },
         ctaText: "Join Us",
-        ctaLink: { type: "url", href: "/contact" },
+        ctaLink: { type: "url", href: "/pages/contact?locale=en" },
       }),
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -915,7 +915,7 @@ async function seed() {
       localeCode: "en",
       content: JSON.stringify({
         ctaText: "Get Started",
-        ctaLink: { type: "url", href: "/contact" },
+        ctaLink: { type: "url", href: "/pages/contact?locale=en" },
       }),
       createdAt: new Date(),
       updatedAt: new Date(),

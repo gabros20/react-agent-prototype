@@ -52,6 +52,7 @@ export class ImageProcessingService {
 		filename: string;
 		sessionId: string;
 		mediaType?: string;
+		fixedId?: string; // Optional fixed ID for seeding
 	}): Promise<ImageProcessingResult> {
 		const { buffer, filename, sessionId } = params;
 
@@ -83,6 +84,7 @@ export class ImageProcessingService {
 		const stored = await this.storage.saveImage(buffer, {
 			filename,
 			mediaType: params.mediaType || "image/jpeg",
+			fixedId: params.fixedId, // Pass through fixed ID for seeding
 		});
 
 		const imageId = stored.id;

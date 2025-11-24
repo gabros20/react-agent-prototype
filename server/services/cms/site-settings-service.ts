@@ -170,19 +170,19 @@ export class SiteSettingsService {
     return [
       {
         label: "Home",
-        href: "/",
+        href: "/pages/home?locale=en",
         location: "both",
         visible: true,
       },
       {
         label: "About",
-        href: "/about",
+        href: "/pages/about?locale=en",
         location: "both",
         visible: true,
       },
       {
         label: "Contact",
-        href: "/contact",
+        href: "/pages/contact?locale=en",
         location: "header",
         visible: true,
       },

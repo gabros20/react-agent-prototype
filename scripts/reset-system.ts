@@ -1,46 +1,75 @@
 #!/usr/bin/env tsx
 /**
- * Reset System - Clear all caches and restart fresh
+ * Reset System - Clear caches and restart processes
  *
- * Fixes issues with:
- * - Stale database connections
- * - Stuck Redis jobs
- * - Orphaned worker processes
+ * Lightweight reset that:
+ * - Stops all dev processes
+ * - Clears Redis cache and BullMQ queues
+ * - Checkpoints SQLite WAL files
+ *
+ * ⚠️  DOES NOT delete data or files!
+ *
+ * For complete reset (delete database, uploads, etc):
+ *   Use: pnpm reset:complete
+ *
+ * For data-only reset (keep schema, clear content):
+ *   Use: pnpm reset:data
  *
  * Usage: pnpm reset:system
  */
 
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { Queue } from "bullmq";
 import Redis from "ioredis";
 
 const execAsync = promisify(exec);
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function resetSystem() {
-  console.log("🔄 Resetting system...\n");
+  console.log("🔄 Cache & Process Reset\n");
+  console.log("ℹ️  This only clears caches. Use 'pnpm reset:complete' for full reset.\n");
 
   // 1. Kill all development processes
   console.log("1️⃣  Stopping all dev processes...");
   try {
+    // Kill concurrently orchestrator first
+    await execAsync("pkill -f 'concurrently' || true");
+
+    // Kill development processes
     await execAsync("pkill -f 'tsx watch' || true");
     await execAsync("pkill -f 'next dev' || true");
+
+    // Wait for graceful shutdown
+    await sleep(2000);
+
+    // Force kill stragglers
+    await execAsync("pkill -9 -f 'tsx watch' || true");
+    await execAsync("pkill -9 -f 'next dev' || true");
+
     console.log("   ✅ Processes stopped\n");
   } catch (error) {
     console.log("   ⚠️  Some processes were not running\n");
   }
 
-  // 2. Clear Redis
+  // 2. Clear Redis using queue.obliterate() for cleaner removal
   console.log("2️⃣  Clearing Redis cache...");
   try {
     const redis = new Redis({
       host: process.env.REDIS_HOST || "localhost",
       port: parseInt(process.env.REDIS_PORT || "6379", 10),
+      maxRetriesPerRequest: null,
     });
 
     const keys = await redis.keys("bull:image-processing:*");
     console.log(`   Found ${keys.length} job keys in Redis`);
 
-    await redis.flushall();
+    // Use queue.obliterate() for proper BullMQ cleanup
+    const queue = new Queue("image-processing", { connection: redis });
+    await queue.pause();
+    await queue.obliterate({ force: true });
+    await queue.close();
+
     console.log("   ✅ Redis cleared\n");
 
     await redis.quit();

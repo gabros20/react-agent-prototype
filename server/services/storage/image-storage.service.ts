@@ -29,9 +29,9 @@ export class ImageStorageService {
 	 */
 	async saveImage(
 		file: Buffer,
-		metadata: { filename: string; mediaType: string },
+		metadata: { filename: string; mediaType: string; fixedId?: string },
 	): Promise<SaveImageResult> {
-		const id = randomUUID();
+		const id = metadata.fixedId || randomUUID();
 		const ext = path.extname(metadata.filename);
 		const date = new Date();
 		const datePath = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")}`;

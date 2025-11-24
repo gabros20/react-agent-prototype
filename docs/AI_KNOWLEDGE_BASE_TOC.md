@@ -230,9 +230,11 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 #### 0.2 Thinking vs Non-Thinking Models
 
 -   [0.2.1 Standard Models vs Thinking Models](./kb/0-foundations/0.2.1-standard-models.md) ✅
-    -   **Status**: Complete - Comprehensive comparison of standard vs reasoning models
-    -   **Length**: 600+ lines with benchmarks, cost analysis, use case recommendations
-    -   **Includes**: o1 architecture, chain-of-thought comparison, practical examples
+    -   **Status**: ✅ Complete - Restructured to DOCUMENTATION_TEMPLATE.md format (Nov 2025)
+    -   **Length**: 620+ lines with TL;DR, 3 Implementation Patterns, Production Best Practices
+    -   **Updated**: o3 (87.5% ARC-AGI), DeepSeek-R1 (79.8% AIME), Qwen3-235B (92.3% AIME), latest 2024-2025 research
+    -   **Includes**: AI SDK 6 integration, hybrid routing pattern, cost analysis, 15 authoritative sources
+    -   **Format**: Standalone knowledge base (no project-specific references)
 -   [0.2.2 Reasoning Models Deep Dive](./kb/0-foundations/0.2.2-reasoning-models.md) ⏳
 -   [0.2.3 When to Use Which](./kb/0-foundations/0.2.3-model-comparison.md) ⏳
 -   [0.2.4 Trade-offs (Cost, Latency, Capabilities)](./kb/0-foundations/0.2.4-tradeoffs.md) ⏳

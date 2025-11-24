@@ -51,6 +51,12 @@ pnpm seed:images  # Add sample images (3 test images)
 pnpm reindex      # Rebuild vector index
 pnpm db:studio    # Open Drizzle Studio
 
+# System Reset & Verification
+pnpm reset:system    # Clear cache + checkpoint (~2s)
+pnpm reset:data      # Truncate + reseed (~15-20s)
+pnpm reset:complete  # Nuclear reset (~18-25s)
+pnpm verify          # 10 health checks
+
 # Image Processing
 pnpm dev:worker   # Start worker (dev with reload)
 pnpm worker       # Start worker (production)
@@ -168,7 +174,12 @@ Delete the outdated screenshot
 ## 🔧 Troubleshooting
 
 ```bash
-# Reset database
+# System Reset (RECOMMENDED - use these first!)
+pnpm reset:data      # Fast reset (~15-20s) - preserves schema
+pnpm reset:complete  # Nuclear reset (~18-25s) - recreates everything
+pnpm verify          # Check system health after reset
+
+# Manual Database Reset (if scripts fail)
 rm data/sqlite.db && pnpm db:push && pnpm seed
 
 # Clear vector index
@@ -200,6 +211,10 @@ pnpm dev:worker            # Start individually if needed
 curl http://localhost:8787/api/images/{imageId}/status
 # Wait for status: "completed" (5-10 seconds)
 # Verify embeddings job succeeded in worker logs
+
+# Navigation links broken?
+# Fixed in seed.ts - navigation URLs now use /pages/{slug}?locale=en pattern
+# Run: pnpm reset:data to apply navigation fix
 ```
 
 ---
@@ -297,7 +312,7 @@ uploads/
 | "Cannot GET /" on preview      | Expected - root redirects to `/pages/home`                |
 | "API key not found"            | Check `.env` file has `OPENROUTER_API_KEY=...`            |
 | "Port in use"                  | Kill process: `lsof -i :8787` then `kill -9 PID`          |
-| "Database locked"              | Stop servers, delete `data/sqlite.db`, re-seed            |
+| "Database locked"              | Run `pnpm reset:data` (proper cleanup)                    |
 | "No results in search"         | Run `pnpm reindex`                                        |
 | Agent not responding           | Check API logs, verify API key, try simple prompt         |
 | Blue bubbles not showing       | Hard refresh (Cmd+Shift+R), check `app/globals.css`      |
@@ -308,6 +323,8 @@ uploads/
 | Worker not processing images   | Included in `pnpm dev`, or run `pnpm dev:worker`, check Redis |
 | Image upload fails             | Check `UPLOADS_DIR` exists, check file size limits        |
 | Image search no results        | Wait for processing, check status endpoint shows "completed" |
+| Navigation links 404           | Fixed - run `pnpm reset:data` to apply navigation URL fix |
+| Images broken after reset      | Automatic - reset scripts now update URLs and use fixed IDs |
 
 ### Architecture Pattern: Native AI SDK v6
 
@@ -410,11 +427,17 @@ Before reporting issues, verify:
 ## 🔧 Quick Fixes
 
 ```bash
-# Full reset (nuclear option)
-rm -rf node_modules data/sqlite.db data/lancedb
+# RECOMMENDED: Use reset scripts (faster & safer)
+pnpm reset:data      # Fast reset with auto-reseeding (~15-20s)
+pnpm reset:complete  # Nuclear reset + verification (~18-25s)
+pnpm verify          # Check system health (10 checks)
+
+# Manual full reset (only if scripts fail)
+rm -rf node_modules data/sqlite.db data/lancedb uploads/
 pnpm install
 pnpm db:push
 pnpm seed
+pnpm seed:images
 pnpm reindex
 pnpm dev
 

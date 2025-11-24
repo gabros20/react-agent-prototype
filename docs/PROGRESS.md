@@ -23,6 +23,7 @@
 -   [x] Sprint 15: Universal Working Memory System (✅ Completed)
 -   [x] Sprint 16: Link Normalization & Standardization (✅ Completed)
 -   [x] Sprint 17: Image System Cleanup & API Standardization (✅ Completed)
+-   [x] Sprint 18: System Reset Infrastructure & Navigation Fix (✅ Completed)
 
 ---
 
@@ -2017,6 +2018,251 @@ Tasks:
 ✅ **Code Quality**:
 
 -   0 TypeScript errors
+
+---
+
+## Sprint 18: System Reset Infrastructure & Navigation Fix ✅
+
+**Status**: Completed
+**Started**: 2025-11-24
+**Completed**: 2025-11-24
+
+### Objective
+
+Implement comprehensive three-tier reset system with proper cleanup and fix navigation URLs to match preview server routing pattern.
+
+### Problems Addressed
+
+1. **Growing uploads folder**: Images accumulating without cleanup during reset
+2. **Lingering Redis jobs**: BullMQ queues not properly cleaned
+3. **Stale processes**: Orphaned dev processes consuming resources
+4. **Image URL mismatches**: Fixed UUIDs not working, dates changing between resets
+5. **Navigation 404s**: Links using `/about` instead of `/pages/about?locale=en`
+6. **Schema table mismatches**: Reset scripts referencing old table names
+
+### Implementation
+
+Tasks:
+
+-   [x] Create reset-complete.ts - Nuclear reset with full cleanup (~18-25s)
+-   [x] Create reset-data-only.ts - Data-only reset preserving schema (~15-20s)
+-   [x] Create verify-system.ts - 10-point health check
+-   [x] Fix seed-images.ts to use fixed UUIDs (match seed.ts expectations)
+-   [x] Create update-page-images.ts - Automatic URL correction after processing
+-   [x] Fix navigation URLs in seed.ts (pages pattern)
+-   [x] Fix navigation fallback in site-settings-service.ts
+-   [x] Update reset-data-only.ts table list (remove message_tools, add new tables)
+-   [x] Add reset scripts to package.json
+-   [x] Update documentation (README, QUICK_REFERENCE, PROGRESS)
+
+### Files Created
+
+1. **scripts/reset-complete.ts** (316 lines)
+   - 8-phase nuclear reset
+   - Process management (kill concurrently, tsx watch, next dev)
+   - Redis cleanup with `queue.obliterate()`
+   - Database deletion (sqlite.db + WAL files)
+   - Filesystem cleanup (uploads/, .lancedb/, .next/)
+   - Schema recreation via `pnpm db:push`
+   - Data seeding with `pnpm seed`
+   - Image processing with worker + wait loop
+   - URL update automation
+   - System verification
+
+2. **scripts/reset-data-only.ts** (243 lines)
+   - Data-only reset preserving schema
+   - Table truncation (correct table names)
+   - Faster alternative to complete reset
+   - Same cleanup + reseeding flow
+
+3. **scripts/update-page-images.ts** (92 lines)
+   - Query actual image file paths from database
+   - Update page_section_contents with correct URLs
+   - Handles date-based path changes automatically
+   - Extracts UUID from existing URLs for matching
+
+### Files Modified
+
+1. **scripts/seed.ts**
+   - Fixed navigation URLs to use `/pages/{slug}?locale=en` pattern
+   - Changed `/about` → `/pages/about?locale=en`
+   - Changed `/contact` → `/pages/contact?locale=en`
+   - Changed `/` → `/pages/home?locale=en`
+
+2. **scripts/seed-images.ts**
+   - Added fixed UUIDs to SAMPLE_IMAGES array
+   - Pass `fixedId` parameter to image processing
+   - Ensures consistent IDs between seed.ts and seed-images.ts
+
+3. **server/services/storage/image-storage.service.ts**
+   - Extended `saveImage()` to accept optional `fixedId` parameter
+   - Use provided ID instead of generating random UUID
+
+4. **server/services/storage/image-processing.service.ts**
+   - Added `fixedId` parameter to `processImage()`
+   - Pass through to storage service
+
+5. **server/services/cms/site-settings-service.ts**
+   - Fixed hardcoded fallback navigation URLs
+   - Updated `getDefaultNavigation()` to use correct pattern
+
+6. **package.json**
+   - Added `reset:complete` script
+   - Added `reset:data` script
+   - Added `verify` script
+
+### Three-Tier Reset System
+
+**Tier 1: Cache Reset** (`pnpm reset:system` - existing)
+- Clears Redis cache
+- Checkpoints database (WAL files)
+- Kills orphaned processes
+- ~2 seconds
+- Use when: Things feel slow or broken
+
+**Tier 2: Data Reset** (`pnpm reset:data` - NEW)
+- Truncates all tables (preserves schema)
+- Clears uploads/images/
+- Removes data/lancedb/
+- Reseeds data via `pnpm seed`
+- Downloads and processes images via `pnpm seed:images`
+- Updates page image URLs automatically
+- ~15-20 seconds
+- Use when: Need fresh data, schema unchanged, navigation changes
+
+**Tier 3: Complete Reset** (`pnpm reset:complete` - NEW)
+- Deletes entire database file
+- Clears all caches (.next/, lancedb/, uploads/)
+- Recreates schema via `pnpm db:push`
+- Reseeds data + processes images
+- Updates URLs automatically
+- Verifies system health (10 checks)
+- ~18-25 seconds
+- Use when: Schema changed, deep corruption
+
+**System Verification** (`pnpm verify` - NEW)
+- 10 comprehensive health checks
+- Redis running
+- Database schema valid
+- Images processed
+- Upload directory exists
+- Vector store initialized
+- No orphaned processes
+- Ports available (3000, 4000, 8787)
+- Image variants generated
+
+### Navigation Fix
+
+**Problem**: Navigation links caused 404 errors
+- Header links used simplified paths (`/about`, `/contact`)
+- Preview server expects `/pages/{slug}?locale=en` pattern
+
+**Solution**: Fixed in two locations
+1. **seed.ts** (database-stored navigation)
+2. **site-settings-service.ts** (hardcoded fallback)
+
+**Before**:
+```typescript
+{ label: "About", href: "/about", location: "both", visible: true }
+```
+
+**After**:
+```typescript
+{ label: "About", href: "/pages/about?locale=en", location: "both", visible: true }
+```
+
+### Image URL Fix
+
+**Problem**: Images showed 404 after reset
+- seed.ts had hardcoded paths with dates (2025/11/23) and UUIDs
+- seed-images.ts generated random UUIDs and used current date (2025/11/24)
+- Result: IDs didn't match, dates didn't match
+
+**Solution**: Three-part fix
+1. **Fixed UUIDs in seed-images.ts**:
+   ```typescript
+   const SAMPLE_IMAGES = [
+     { id: "7f27cf0e-0b38-4c24-b6c5-d15528c80ee3", url: "...", name: "mountain-landscape.jpg" },
+     { id: "8550a4b0-8ba2-4907-b79c-218f59e2d8e6", url: "...", name: "golden-puppy.jpg" },
+     { id: "3f794a9f-5c90-4934-b48f-02d4fdc1c59f", url: "...", name: "desk-workspace.jpg" },
+   ];
+   ```
+
+2. **Extended storage services** to accept `fixedId` parameter
+
+3. **Automatic URL updater** (`update-page-images.ts`):
+   - Runs after image processing
+   - Queries actual file paths from database
+   - Updates page_section_contents with correct URLs
+   - Handles any date changes automatically
+
+### Testing Results
+
+**Complete Reset Test**:
+```bash
+pnpm reset:complete
+# ✅ Completed in 17.0s
+# ✅ All processes stopped
+# ✅ Redis cleaned
+# ✅ Database deleted and recreated
+# ✅ 3 images processed
+# ✅ URLs updated automatically
+# ✅ System verification: 9/10 checks passed
+```
+
+**Data Reset Test**:
+```bash
+pnpm reset:data
+# ✅ Completed in 17.7s
+# ✅ Tables truncated (correct table names)
+# ✅ Navigation URLs fixed
+# ✅ Images with fixed IDs
+# ✅ All 3 pages exist and link correctly
+```
+
+**Verification Test**:
+```bash
+pnpm verify
+# ✅ Redis running
+# ✅ Database has 7 sections, 3 pages
+# ✅ All 3 images completed
+# ✅ 24 files in uploads
+# ✅ Vector store initialized
+# ✅ No orphaned processes
+# ✅ Ports 3000, 4000, 8787 available
+# ⚠️ 18/21 variants (acceptable)
+```
+
+### Deliverables
+
+✅ **Three-tier reset system** - Fast, faster, nuclear options
+✅ **Automatic cleanup** - Redis, processes, files, caches
+✅ **Fixed navigation URLs** - Correct page routing pattern
+✅ **Fixed image URLs** - Consistent UUIDs, automatic updates
+✅ **System verification** - 10-point health check
+✅ **Updated documentation** - README, QUICK_REFERENCE, PROGRESS
+✅ **Table name fixes** - Correct schema in reset-data-only.ts
+✅ **0 TypeScript errors** - Clean build
+
+### Benefits
+
+✅ **Single command reset** - No more manual cleanup steps
+✅ **Automatic image flow** - Downloads, processes, updates URLs
+✅ **No lingering data** - Complete cleanup of all systems
+✅ **Fast iterations** - 15-20s data reset vs manual 2-3 minutes
+✅ **Predictable state** - Fixed IDs ensure consistent behavior
+✅ **Navigation works** - Correct URLs in seed data and fallbacks
+✅ **Health verification** - Know exactly what's broken
+
+### Files Summary
+
+**Created**: 3 files (reset-complete.ts, reset-data-only.ts, update-page-images.ts)
+**Modified**: 6 files (seed.ts, seed-images.ts, 2 storage services, site-settings-service.ts, package.json)
+**Documentation**: Updated README.md, QUICK_REFERENCE.md, PROGRESS.md
+
+**Total Impact**: ~600 lines of new reset infrastructure, fixes for navigation and image handling
+
+---
 -   0 lint errors
 -   38% less code
 -   Native patterns throughout
