@@ -147,6 +147,15 @@ export const collectionEntries = sqliteTable("collection_entries", {
     .references(() => collectionDefinitions.id, { onDelete: "cascade" }),
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
+  // Post metadata
+  status: text("status", { enum: ["draft", "published", "archived"] })
+    .notNull()
+    .default("draft"),
+  publishedAt: integer("published_at", { mode: "timestamp" }),
+  author: text("author"),
+  excerpt: text("excerpt"),
+  featuredImage: text("featured_image"), // URL to cover image
+  category: text("category"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });

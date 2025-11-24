@@ -220,7 +220,17 @@ async function resetDataOnly() {
     try {
       await execAsync("tsx scripts/update-page-images.ts");
     } catch (error) {
-      console.error("   ❌ Image URL update failed:", error);
+      console.error("   ❌ Page image URL update failed:", error);
+    }
+
+    // ========================================================================
+    // PHASE 6.6: Update Blog Post Image URLs
+    // ========================================================================
+    console.log("6️⃣.6️⃣  Updating blog post image URLs...");
+    try {
+      await execAsync("tsx scripts/update-blog-images.ts");
+    } catch (error) {
+      console.error("   ❌ Blog image URL update failed:", error);
     }
 
     // ========================================================================

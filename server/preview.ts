@@ -4,6 +4,7 @@ import express from "express";
 import { db } from "./db/client";
 import { RendererService } from "./services/renderer";
 import { ServiceContainer } from "./services/service-container";
+import { createPostsRouter } from "./routes/posts";
 
 const app = express();
 const PORT = process.env.PREVIEW_PORT || 4000;
@@ -72,6 +73,9 @@ async function startPreviewServer() {
     app.get("/", (_req, res) => {
       res.redirect("/pages/home?locale=en");
     });
+
+    // Posts routes
+    app.use("/posts", createPostsRouter(renderer, services.entryService));
 
     // Static files
     app.use("/assets", express.static(path.join(TEMPLATE_DIR, "assets")));

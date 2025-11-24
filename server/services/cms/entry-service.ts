@@ -25,6 +25,19 @@ export interface UpsertEntryInput {
   title: string;
   localeCode: string;
   content: Record<string, any>;
+  // Post metadata (optional)
+  author?: string;
+  excerpt?: string;
+  featuredImage?: string;
+  category?: string;
+}
+
+export interface UpdateEntryMetadataInput {
+  title?: string;
+  author?: string;
+  excerpt?: string;
+  featuredImage?: string;
+  category?: string;
 }
 
 export class EntryService {
@@ -158,6 +171,12 @@ export class EntryService {
         collectionId: input.collectionId,
         slug: input.slug,
         title: input.title,
+        status: "draft" as const,
+        author: input.author ?? null,
+        excerpt: input.excerpt ?? null,
+        featuredImage: input.featuredImage ?? null,
+        category: input.category ?? null,
+        publishedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -166,12 +185,20 @@ export class EntryService {
       entry = newEntry;
     } else {
       // Update existing entry
+      const updateData: any = {
+        title: input.title,
+        updatedAt: new Date(),
+      };
+
+      // Update metadata if provided
+      if (input.author !== undefined) updateData.author = input.author;
+      if (input.excerpt !== undefined) updateData.excerpt = input.excerpt;
+      if (input.featuredImage !== undefined) updateData.featuredImage = input.featuredImage;
+      if (input.category !== undefined) updateData.category = input.category;
+
       await this.db
         .update(schema.collectionEntries)
-        .set({
-          title: input.title,
-          updatedAt: new Date(),
-        })
+        .set(updateData)
         .where(eq(schema.collectionEntries.id, entry.id));
     }
 
@@ -312,6 +339,13 @@ export class EntryService {
           slug: entry.slug,
           title: entry.title,
           collectionId: entry.collectionId,
+          status: entry.status,
+          author: entry.author,
+          excerpt: entry.excerpt,
+          featuredImage: entry.featuredImage,
+          category: entry.category,
+          publishedAt: entry.publishedAt,
+          createdAt: entry.createdAt,
           content: parsedContent,
         };
       });
@@ -326,6 +360,13 @@ export class EntryService {
         slug: entry.slug,
         title: entry.title,
         collectionId: entry.collectionId,
+        status: entry.status,
+        author: entry.author,
+        excerpt: entry.excerpt,
+        featuredImage: entry.featuredImage,
+        category: entry.category,
+        publishedAt: entry.publishedAt,
+        createdAt: entry.createdAt,
       }));
     }
   }
@@ -380,6 +421,245 @@ export class EntryService {
       title: entry.title,
       localeCode,
       content: parsedContent,
+    };
+  }
+
+  /**
+   * Publish an entry (set status to published and set publishedAt timestamp)
+   * @param id - Entry ID
+   */
+  async publishEntry(id: string) {
+    const entry = await this.db.query.collectionEntries.findFirst({
+      where: eq(schema.collectionEntries.id, id),
+    });
+
+    if (!entry) {
+      throw new Error(`Entry with id '${id}' not found`);
+    }
+
+    const updateData: any = {
+      status: "published",
+      updatedAt: new Date(),
+    };
+
+    // Set publishedAt only if not already published
+    if (!entry.publishedAt) {
+      updateData.publishedAt = new Date();
+    }
+
+    await this.db
+      .update(schema.collectionEntries)
+      .set(updateData)
+      .where(eq(schema.collectionEntries.id, id));
+
+    return this.getEntryById(id);
+  }
+
+  /**
+   * Archive an entry (set status to archived)
+   * @param id - Entry ID
+   */
+  async archiveEntry(id: string) {
+    const entry = await this.db.query.collectionEntries.findFirst({
+      where: eq(schema.collectionEntries.id, id),
+    });
+
+    if (!entry) {
+      throw new Error(`Entry with id '${id}' not found`);
+    }
+
+    await this.db
+      .update(schema.collectionEntries)
+      .set({
+        status: "archived",
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.collectionEntries.id, id));
+
+    return this.getEntryById(id);
+  }
+
+  /**
+   * Update entry metadata (title, author, excerpt, featuredImage, category)
+   * @param id - Entry ID
+   * @param metadata - Metadata to update
+   */
+  async updateEntryMetadata(id: string, metadata: UpdateEntryMetadataInput) {
+    const entry = await this.db.query.collectionEntries.findFirst({
+      where: eq(schema.collectionEntries.id, id),
+    });
+
+    if (!entry) {
+      throw new Error(`Entry with id '${id}' not found`);
+    }
+
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (metadata.title !== undefined) updateData.title = metadata.title;
+    if (metadata.author !== undefined) updateData.author = metadata.author;
+    if (metadata.excerpt !== undefined) updateData.excerpt = metadata.excerpt;
+    if (metadata.featuredImage !== undefined) updateData.featuredImage = metadata.featuredImage;
+    if (metadata.category !== undefined) updateData.category = metadata.category;
+
+    await this.db
+      .update(schema.collectionEntries)
+      .set(updateData)
+      .where(eq(schema.collectionEntries.id, id));
+
+    return this.getEntryById(id);
+  }
+
+  /**
+   * List published entries for a collection
+   * @param collectionId - Collection ID
+   * @param localeCode - Locale code (default: 'en')
+   */
+  async listPublishedEntries(collectionId: string, localeCode = 'en') {
+    const entries = await this.db.query.collectionEntries.findMany({
+      where: (ce, { and, eq }) =>
+        and(
+          eq(ce.collectionId, collectionId),
+          eq(ce.status, "published")
+        ),
+      with: {
+        contents: {
+          where: eq(schema.entryContents.localeCode, localeCode),
+        },
+      },
+      orderBy: (ce, { desc }) => [desc(ce.publishedAt)],
+    });
+
+    return entries.map((entry: any) => {
+      const contentRecord = entry.contents?.[0];
+      let parsedContent = {};
+
+      if (contentRecord?.content) {
+        try {
+          parsedContent = typeof contentRecord.content === 'string'
+            ? JSON.parse(contentRecord.content)
+            : contentRecord.content;
+        } catch (error) {
+          console.error(`Failed to parse content for entry ${entry.id}:`, error);
+        }
+      }
+
+      return {
+        id: entry.id,
+        slug: entry.slug,
+        title: entry.title,
+        status: entry.status,
+        author: entry.author,
+        excerpt: entry.excerpt,
+        featuredImage: entry.featuredImage,
+        category: entry.category,
+        publishedAt: entry.publishedAt,
+        createdAt: entry.createdAt,
+        content: parsedContent,
+      };
+    });
+  }
+
+  /**
+   * Get entries by category
+   * @param collectionId - Collection ID
+   * @param category - Category to filter by
+   * @param localeCode - Locale code (default: 'en')
+   */
+  async getEntriesByCategory(collectionId: string, category: string, localeCode = 'en') {
+    const entries = await this.db.query.collectionEntries.findMany({
+      where: (ce, { and, eq }) =>
+        and(
+          eq(ce.collectionId, collectionId),
+          eq(ce.category, category),
+          eq(ce.status, "published")
+        ),
+      with: {
+        contents: {
+          where: eq(schema.entryContents.localeCode, localeCode),
+        },
+      },
+      orderBy: (ce, { desc }) => [desc(ce.publishedAt)],
+    });
+
+    return entries.map((entry: any) => {
+      const contentRecord = entry.contents?.[0];
+      let parsedContent = {};
+
+      if (contentRecord?.content) {
+        try {
+          parsedContent = typeof contentRecord.content === 'string'
+            ? JSON.parse(contentRecord.content)
+            : contentRecord.content;
+        } catch (error) {
+          console.error(`Failed to parse content for entry ${entry.id}:`, error);
+        }
+      }
+
+      return {
+        id: entry.id,
+        slug: entry.slug,
+        title: entry.title,
+        status: entry.status,
+        author: entry.author,
+        excerpt: entry.excerpt,
+        featuredImage: entry.featuredImage,
+        category: entry.category,
+        publishedAt: entry.publishedAt,
+        createdAt: entry.createdAt,
+        content: parsedContent,
+      };
+    });
+  }
+
+  /**
+   * Get entry by slug
+   * @param slug - Entry slug
+   * @param localeCode - Locale code (default: 'en')
+   */
+  async getEntryBySlug(slug: string, localeCode = 'en') {
+    // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads
+    const entry = await this.db.query.collectionEntries.findFirst({
+      where: eq(schema.collectionEntries.slug, slug),
+      with: {
+        contents: {
+          where: eq(schema.entryContents.localeCode, localeCode),
+        },
+        collection: true,
+      },
+    });
+
+    if (!entry) {
+      return null;
+    }
+
+    const contentRecord = entry.contents?.[0];
+    let parsedContent = {};
+
+    if (contentRecord?.content) {
+      try {
+        parsedContent = typeof contentRecord.content === 'string'
+          ? JSON.parse(contentRecord.content)
+          : contentRecord.content;
+      } catch (error) {
+        console.error(`Failed to parse content for entry ${entry.id}:`, error);
+      }
+    }
+
+    return {
+      id: entry.id,
+      slug: entry.slug,
+      title: entry.title,
+      status: entry.status,
+      author: entry.author,
+      excerpt: entry.excerpt,
+      featuredImage: entry.featuredImage,
+      category: entry.category,
+      publishedAt: entry.publishedAt,
+      createdAt: entry.createdAt,
+      content: parsedContent,
+      collection: entry.collection,
     };
   }
 

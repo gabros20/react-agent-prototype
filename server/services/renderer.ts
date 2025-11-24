@@ -54,6 +54,43 @@ export class RendererService {
       return null;
     });
 
+    this.env.addFilter("date", (dateValue: any, format: string) => {
+      if (!dateValue) return "";
+
+      let date: Date;
+
+      // Handle different date formats
+      if (dateValue instanceof Date) {
+        date = dateValue;
+      } else if (typeof dateValue === "string") {
+        date = new Date(dateValue);
+      } else if (typeof dateValue === "number") {
+        date = new Date(dateValue);
+      } else {
+        return "";
+      }
+
+      // Simple date formatting (could use a library like date-fns for more formats)
+      const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const day = date.getDate();
+
+      // Support common formats
+      if (format === "MMMM D, YYYY") {
+        return `${months[month]} ${day}, ${year}`;
+      } else if (format === "MMM D, YYYY") {
+        return `${shortMonths[month]} ${day}, ${year}`;
+      } else if (format === "YYYY-MM-DD") {
+        return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
+
+      // Default format
+      return date.toLocaleDateString();
+    });
+
     this.buildRegistry();
   }
 
@@ -129,6 +166,136 @@ export class RendererService {
       page,
       locale,
       content: sectionHtmlList.join("\n"),
+      globalNavItems,
+      currentYear,
+    });
+
+    return html;
+  }
+
+  /**
+   * Render a single blog post
+   * @param entry - Post entry with content
+   * @param locale - Locale code
+   * @param collectionSlug - Collection slug (e.g., 'blog')
+   */
+  async renderPost(entry: any, locale: string, collectionSlug: string): Promise<string> {
+    // Fetch global navigation items
+    const globalNavItems = await this.siteSettingsService.getNavigationItems();
+    const currentYear = new Date().getFullYear();
+
+    // Render header if exists
+    let headerHtml = "";
+    try {
+      const headerPath = "sections/header/default.njk";
+      headerHtml = this.env.render(headerPath, {
+        globalNavItems,
+        currentYear,
+        locale,
+      });
+    } catch (error) {
+      console.warn("Header template not found, skipping");
+    }
+
+    // Render footer if exists
+    let footerHtml = "";
+    try {
+      const footerPath = "sections/footer/default.njk";
+      footerHtml = this.env.render(footerPath, {
+        globalNavItems,
+        currentYear,
+        locale,
+      });
+    } catch (error) {
+      console.warn("Footer template not found, skipping");
+    }
+
+    // Render post content
+    const postTemplatePath = `posts/${collectionSlug}/single.njk`;
+    const postHtml = this.env.render(postTemplatePath, {
+      ...entry,
+      ...entry.content,
+      locale,
+      globalNavItems,
+      currentYear,
+    });
+
+    // Wrap in layout
+    const html = this.env.render("posts/layout/post.njk", {
+      post: entry,
+      locale,
+      content: postHtml,
+      header: headerHtml,
+      footer: footerHtml,
+      globalNavItems,
+      currentYear,
+    });
+
+    return html;
+  }
+
+  /**
+   * Render a list of blog posts
+   * @param entries - Array of post entries
+   * @param collectionSlug - Collection slug (e.g., 'blog')
+   * @param collectionName - Display name for the collection
+   * @param locale - Locale code
+   */
+  async renderPostList(
+    entries: any[],
+    collectionSlug: string,
+    collectionName: string,
+    locale: string,
+    collectionDescription?: string
+  ): Promise<string> {
+    // Fetch global navigation items
+    const globalNavItems = await this.siteSettingsService.getNavigationItems();
+    const currentYear = new Date().getFullYear();
+
+    // Render header if exists
+    let headerHtml = "";
+    try {
+      const headerPath = "sections/header/default.njk";
+      headerHtml = this.env.render(headerPath, {
+        globalNavItems,
+        currentYear,
+        locale,
+      });
+    } catch (error) {
+      console.warn("Header template not found, skipping");
+    }
+
+    // Render footer if exists
+    let footerHtml = "";
+    try {
+      const footerPath = "sections/footer/default.njk";
+      footerHtml = this.env.render(footerPath, {
+        globalNavItems,
+        currentYear,
+        locale,
+      });
+    } catch (error) {
+      console.warn("Footer template not found, skipping");
+    }
+
+    // Render list content
+    const listTemplatePath = `posts/${collectionSlug}/list.njk`;
+    const listHtml = this.env.render(listTemplatePath, {
+      posts: entries,
+      collectionName,
+      collectionDescription,
+      locale,
+      globalNavItems,
+      currentYear,
+    });
+
+    // Wrap in layout
+    const html = this.env.render("posts/layout/post.njk", {
+      post: { title: collectionName },
+      locale,
+      content: listHtml,
+      header: headerHtml,
+      footer: footerHtml,
       globalNavItems,
       currentYear,
     });

@@ -25,6 +25,15 @@ import {
   removeNavigationItemTool,
   toggleNavigationItemTool
 } from './site-settings-tools'
+import {
+  cmsCreatePost,
+  cmsUpdatePost,
+  cmsPublishPost,
+  cmsArchivePost,
+  cmsDeletePost,
+  cmsListPosts,
+  cmsGetPost
+} from './post-tools'
 
 // ============================================================================
 // CMS - Page Tools
@@ -657,6 +666,15 @@ export const ALL_TOOLS = {
   'cms_removeNavigationItem': removeNavigationItemTool,
   'cms_toggleNavigationItem': toggleNavigationItemTool,
 
+  // Posts (Blog, Products, etc.)
+  'cms_createPost': cmsCreatePost,
+  'cms_updatePost': cmsUpdatePost,
+  'cms_publishPost': cmsPublishPost,
+  'cms_archivePost': cmsArchivePost,
+  'cms_deletePost': cmsDeletePost,
+  'cms_listPosts': cmsListPosts,
+  'cms_getPost': cmsGetPost,
+
   // HTTP
   'http_get': httpGet,
   'http_post': httpPost,
@@ -867,5 +885,47 @@ export const TOOL_METADATA = {
     riskLevel: 'safe',
     requiresApproval: false,
     tags: ['write', 'navigation']
+  },
+  'cms_createPost': {
+    category: 'posts',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'create', 'post']
+  },
+  'cms_updatePost': {
+    category: 'posts',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'update', 'post']
+  },
+  'cms_publishPost': {
+    category: 'posts',
+    riskLevel: 'high',
+    requiresApproval: true,
+    tags: ['write', 'post', 'publish', 'destructive']
+  },
+  'cms_archivePost': {
+    category: 'posts',
+    riskLevel: 'high',
+    requiresApproval: true,
+    tags: ['write', 'post', 'archive', 'destructive']
+  },
+  'cms_deletePost': {
+    category: 'posts',
+    riskLevel: 'high',
+    requiresApproval: true,
+    tags: ['write', 'post', 'delete', 'destructive', 'permanent']
+  },
+  'cms_listPosts': {
+    category: 'posts',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'post', 'list']
+  },
+  'cms_getPost': {
+    category: 'posts',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'post']
   }
 } as const

@@ -230,11 +230,12 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 #### 0.2 Thinking vs Non-Thinking Models
 
 -   [0.2.1 Standard Models vs Thinking Models](./kb/0-foundations/0.2.1-standard-models.md) ✅
-    -   **Status**: ✅ Complete - Restructured to DOCUMENTATION_TEMPLATE.md format (Nov 2025)
-    -   **Length**: 620+ lines with TL;DR, 3 Implementation Patterns, Production Best Practices
-    -   **Updated**: o3 (87.5% ARC-AGI), DeepSeek-R1 (79.8% AIME), Qwen3-235B (92.3% AIME), latest 2024-2025 research
-    -   **Includes**: AI SDK 6 integration, hybrid routing pattern, cost analysis, 15 authoritative sources
+    -   **Status**: ✅ Complete - Updated with latest 2025 benchmarks (Nov 24, 2025)
+    -   **Length**: 680+ lines with TL;DR, 3 Implementation Patterns, Production Best Practices
+    -   **Updated**: o3 (87.5% ARC-AGI-1, <3% ARC-AGI-2), o4-mini (41% ARC-AGI-1), DeepSeek-R1-0528 (91.4% AIME'24, 87.5% AIME'25), Qwen3-235B (85.7% AIME'24, 81.4% AIME'25)
+    -   **Includes**: AI SDK 6 integration (reasoningEffort, extractReasoningMiddleware, sendReasoning), hybrid routing pattern, cost analysis, 18 authoritative sources
     -   **Format**: Standalone knowledge base (no project-specific references)
+    -   **New Research**: ARC-AGI-2 benchmark (March 2025), o4-mini cost efficiency (~5¢/task), DeepSeek-R1-0528 improvements
 -   [0.2.2 Reasoning Models Deep Dive](./kb/0-foundations/0.2.2-reasoning-models.md) ⏳
 -   [0.2.3 When to Use Which](./kb/0-foundations/0.2.3-model-comparison.md) ⏳
 -   [0.2.4 Trade-offs (Cost, Latency, Capabilities)](./kb/0-foundations/0.2.4-tradeoffs.md) ⏳

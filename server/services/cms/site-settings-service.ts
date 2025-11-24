@@ -175,6 +175,12 @@ export class SiteSettingsService {
         visible: true,
       },
       {
+        label: "Blog",
+        href: "/posts/blog?locale=en",
+        location: "both",
+        visible: true,
+      },
+      {
         label: "About",
         href: "/pages/about?locale=en",
         location: "both",

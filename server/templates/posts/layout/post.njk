@@ -1,0 +1,109 @@
+{# Post Layout - Base template for all post types #}
+<!DOCTYPE html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ post.title }} | {{ siteName or "Site" }}</title>
+
+  {# SEO Meta Tags #}
+  {% if post.excerpt %}
+  <meta name="description" content="{{ post.excerpt }}">
+  {% endif %}
+
+  {% if post.author %}
+  <meta name="author" content="{{ post.author }}">
+  {% endif %}
+
+  {# Open Graph / Social Media #}
+  <meta property="og:title" content="{{ post.title }}">
+  <meta property="og:type" content="article">
+  {% if post.excerpt %}
+  <meta property="og:description" content="{{ post.excerpt }}">
+  {% endif %}
+  {% if post.featuredImage %}
+  <meta property="og:image" content="{{ post.featuredImage }}">
+  {% endif %}
+
+  {# Article specific meta #}
+  {% if post.publishedAt %}
+  <meta property="article:published_time" content="{{ post.publishedAt }}">
+  {% endif %}
+  {% if post.author %}
+  <meta property="article:author" content="{{ post.author }}">
+  {% endif %}
+  {% if post.category %}
+  <meta property="article:section" content="{{ post.category }}">
+  {% endif %}
+
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body class="post-body">
+  {# Include Header if available #}
+  {% if header %}
+    {{ header | safe }}
+  {% endif %}
+
+  {# Main Post Content #}
+  <main class="post-main">
+    {{ content | safe }}
+  </main>
+
+  {# Include Footer if available #}
+  {% if footer %}
+    {{ footer | safe }}
+  {% endif %}
+
+  <script>
+    // Mobile menu toggle (same as page layout)
+    document.addEventListener('DOMContentLoaded', function() {
+      const header = document.querySelector('.header');
+      if (!header) return;
+
+      const hamburger = header.querySelector('.header__hamburger');
+      const closeBtn = header.querySelector('.header__mobile-close');
+      const mobilePanel = header.querySelector('.header__mobile-panel');
+      const overlay = header.querySelector('.header__overlay');
+      const mobileLinks = header.querySelectorAll('.header__nav--mobile .header__nav-link');
+
+      function openMenu() {
+        header.classList.add('is-open');
+        hamburger.setAttribute('aria-expanded', 'true');
+        mobilePanel.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeMenu() {
+        header.classList.remove('is-open');
+        hamburger.setAttribute('aria-expanded', 'false');
+        mobilePanel.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+
+      if (hamburger) {
+        hamburger.addEventListener('click', openMenu);
+      }
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeMenu);
+      }
+
+      if (overlay) {
+        overlay.addEventListener('click', closeMenu);
+      }
+
+      // Close menu when clicking on nav links
+      mobileLinks.forEach(function(link) {
+        link.addEventListener('click', closeMenu);
+      });
+
+      // Close menu on escape key
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && header.classList.contains('is-open')) {
+          closeMenu();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

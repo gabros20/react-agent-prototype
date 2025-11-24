@@ -1,0 +1,301 @@
+{# Blog Listing Template - Shows all published blog posts #}
+
+<div class="blog-list">
+  <div class="container">
+    {# Page Header #}
+    <header class="blog-list__header">
+      <h1 class="blog-list__title">{{ collectionName or "Blog" }}</h1>
+      {% if collectionDescription %}
+        <p class="blog-list__description">{{ collectionDescription }}</p>
+      {% endif %}
+    </header>
+
+    {# Posts Grid #}
+    {% if posts and posts.length > 0 %}
+      <div class="blog-list__grid">
+        {% for post in posts %}
+          <article class="blog-card">
+            {# Featured Image #}
+            {% if post.featuredImage %}
+              <a href="/posts/blog/{{ post.slug }}?locale={{ locale }}" class="blog-card__image-link">
+                <div class="blog-card__image">
+                  <img
+                    src="{{ post.featuredImage }}"
+                    alt="{{ post.title }}"
+                    class="blog-card__img"
+                  >
+                </div>
+              </a>
+            {% elif post.content and post.content.cover and post.content.cover.url %}
+              <a href="/posts/blog/{{ post.slug }}?locale={{ locale }}" class="blog-card__image-link">
+                <div class="blog-card__image">
+                  <img
+                    src="{{ post.content.cover.url }}"
+                    alt="{{ post.content.cover.alt or post.title }}"
+                    class="blog-card__img"
+                  >
+                </div>
+              </a>
+            {% else %}
+              <a href="/posts/blog/{{ post.slug }}?locale={{ locale }}" class="blog-card__image-link">
+                <div class="blog-card__image blog-card__image--placeholder">
+                  <svg class="blog-card__placeholder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </a>
+            {% endif %}
+
+            {# Post Content #}
+            <div class="blog-card__content">
+              {# Category Badge #}
+              {% if post.category %}
+                <div class="blog-card__category">
+                  <span class="blog-card__category-badge">{{ post.category }}</span>
+                </div>
+              {% endif %}
+
+              {# Title #}
+              <h2 class="blog-card__title">
+                <a href="/posts/blog/{{ post.slug }}?locale={{ locale }}" class="blog-card__title-link">
+                  {{ post.title }}
+                </a>
+              </h2>
+
+              {# Excerpt #}
+              {% if post.excerpt %}
+                <p class="blog-card__excerpt">{{ post.excerpt | truncate(150) }}</p>
+              {% elif post.content and post.content.body %}
+                <p class="blog-card__excerpt">{{ post.content.body | truncate(150) }}</p>
+              {% endif %}
+
+              {# Meta #}
+              <div class="blog-card__meta">
+                {% if post.author %}
+                  <span class="blog-card__author">By {{ post.author }}</span>
+                {% endif %}
+
+                {% if post.publishedAt %}
+                  <span class="blog-card__date">
+                    <time datetime="{{ post.publishedAt }}">
+                      {{ post.publishedAt | date("MMM D, YYYY") }}
+                    </time>
+                  </span>
+                {% endif %}
+              </div>
+
+              {# Read More Link #}
+              <a href="/posts/blog/{{ post.slug }}?locale={{ locale }}" class="blog-card__link">
+                Read More →
+              </a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      {# Empty State #}
+      <div class="blog-list__empty">
+        <svg class="blog-list__empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+        </svg>
+        <h2 class="blog-list__empty-title">No posts yet</h2>
+        <p class="blog-list__empty-text">Check back soon for new content!</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+.blog-list {
+  padding: 4rem 0;
+  background-color: #f9fafb;
+  min-height: 60vh;
+}
+
+.blog-list__header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.blog-list__title {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 1rem;
+}
+
+.blog-list__description {
+  font-size: 1.25rem;
+  color: #6b7280;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.blog-list__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.blog-card {
+  background-color: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.blog-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.blog-card__image-link {
+  display: block;
+}
+
+.blog-card__image {
+  width: 100%;
+  height: 240px;
+  overflow: hidden;
+  background-color: #e5e7eb;
+}
+
+.blog-card__image--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.blog-card__placeholder-icon {
+  width: 4rem;
+  height: 4rem;
+  color: #9ca3af;
+}
+
+.blog-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+
+.blog-card:hover .blog-card__img {
+  transform: scale(1.05);
+}
+
+.blog-card__content {
+  padding: 1.5rem;
+}
+
+.blog-card__category {
+  margin-bottom: 0.75rem;
+}
+
+.blog-card__category-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background-color: #3b82f6;
+  color: white;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.blog-card__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  line-height: 1.3;
+}
+
+.blog-card__title-link {
+  color: #111827;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.blog-card__title-link:hover {
+  color: #3b82f6;
+}
+
+.blog-card__excerpt {
+  font-size: 1rem;
+  color: #6b7280;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.blog-card__meta {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.blog-card__author {
+  font-weight: 500;
+}
+
+.blog-card__link {
+  display: inline-flex;
+  align-items: center;
+  color: #3b82f6;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.blog-card__link:hover {
+  color: #2563eb;
+}
+
+.blog-list__empty {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.blog-list__empty-icon {
+  width: 5rem;
+  height: 5rem;
+  color: #d1d5db;
+  margin: 0 auto 1.5rem;
+}
+
+.blog-list__empty-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.blog-list__empty-text {
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+@media (max-width: 768px) {
+  .blog-list__title {
+    font-size: 2rem;
+  }
+
+  .blog-list__grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .blog-card__meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+</style>

@@ -6,6 +6,22 @@ async function seed() {
   console.log("🌱 Seeding database...");
 
   try {
+    // Placeholder images for blog posts
+    // Fixed image UUIDs that match seed-images.ts
+    // These will be updated to actual /uploads/ paths by update-blog-images.ts
+    const seedImageIds = [
+      "7f27cf0e-0b38-4c24-b6c5-d15528c80ee3", // mountain-landscape.jpg
+      "8550a4b0-8ba2-4907-b79c-218f59e2d8e6", // golden-puppy.jpg
+      "3f794a9f-5c90-4934-b48f-02d4fdc1c59f", // desk-workspace.jpg
+    ];
+
+    // Placeholder URLs for page sections (will be updated by update-page-images.ts)
+    const seedImageUrls = [
+      "/assets/images/placeholders/hero-placeholder.jpg",
+      "/assets/images/placeholders/image-text-placeholder.jpg",
+      "/assets/images/placeholders/feature-icon-placeholder.svg"
+    ];
+
     // ========================================================================
     // 1. Create team
     // ========================================================================
@@ -456,6 +472,12 @@ async function seed() {
           visible: true,
         },
         {
+          label: "Blog",
+          href: "/posts/blog?locale=en",
+          location: "both",
+          visible: true,
+        },
+        {
           label: "About",
           href: "/pages/about?locale=en",
           location: "both",
@@ -471,7 +493,7 @@ async function seed() {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    console.log("✓ Initialized global navigation");
+    console.log("✓ Initialized global navigation with Blog link");
 
     // ========================================================================
     // 8. Create page: home
@@ -997,35 +1019,267 @@ async function seed() {
     console.log("✓ Created Contact page with full content");
 
     // ========================================================================
-    // 25. Create blog entry
+    // 25. Create blog posts (3 posts: 2 published, 1 draft)
     // ========================================================================
-    const blogEntryId = randomUUID();
-    await db.insert(schema.collectionEntries).values({
-      id: blogEntryId,
-      collectionId: blogCollectionId,
-      slug: "hello-world",
-      title: "Hello World",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    console.log(`✓ Created blog entry: hello-world (${blogEntryId})`);
 
-    // ========================================================================
-    // 26. Add blog entry content
-    // ========================================================================
+    // Post 1: Published - Getting Started Guide
+    const post1Id = randomUUID();
+    await db.insert(schema.collectionEntries).values({
+      id: post1Id,
+      collectionId: blogCollectionId,
+      slug: "getting-started-with-cms",
+      title: "Getting Started with Our CMS",
+      status: "published",
+      publishedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+      author: "Sarah Johnson",
+      excerpt: "Learn how to build dynamic websites with our powerful content management system",
+      featuredImage: seedImageIds[0], // Mountain landscape - will be updated to /uploads/ path
+      category: "Tutorials",
+      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
+      updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+    });
+
     await db.insert(schema.entryContents).values({
       id: randomUUID(),
-      entryId: blogEntryId,
+      entryId: post1Id,
       localeCode: "en",
       content: JSON.stringify({
-        body: "# Hello World\n\nThis is my first blog post!",
-        cover: null,
-        tags: ["AI", "Tech"],
+        body: `# Getting Started with Our CMS
+
+Welcome to our comprehensive guide on building dynamic websites with our content management system!
+
+## What You'll Learn
+
+In this tutorial, we'll cover:
+
+- Setting up your first project
+- Creating pages and sections
+- Managing content with the visual editor
+- Publishing your site to production
+
+## Prerequisites
+
+Before you begin, you should have:
+
+- Basic knowledge of web development
+- Node.js 18+ installed
+- A code editor (VS Code recommended)
+
+## Step 1: Installation
+
+First, install the CLI tool:
+
+\`\`\`bash
+npm install -g our-cms-cli
+cms init my-project
+\`\`\`
+
+## Step 2: Create Your First Page
+
+Navigate to the dashboard and click "New Page". Give it a name like "Home" and choose a template.
+
+## Step 3: Add Sections
+
+Drag and drop sections from the sidebar to build your page layout. Each section is customizable with various content fields.
+
+## Next Steps
+
+Now that you have a basic understanding, explore our advanced features:
+
+- Dynamic routing
+- Multi-language support
+- E-commerce integration
+- Custom components
+
+Happy building! 🚀`,
+        cover: {
+          url: seedImageIds[0], // Mountain landscape - will be updated to /uploads/ path
+          alt: "CMS Dashboard Screenshot"
+        },
+        tags: ["tutorial", "getting-started", "cms", "web-development"]
       }),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
     });
-    console.log("✓ Added blog entry content (English)");
+    console.log(`✓ Created blog post: getting-started-with-cms (${post1Id}) - PUBLISHED`);
+
+    // Post 2: Published - Advanced Techniques
+    const post2Id = randomUUID();
+    await db.insert(schema.collectionEntries).values({
+      id: post2Id,
+      collectionId: blogCollectionId,
+      slug: "advanced-customization-techniques",
+      title: "Advanced Customization Techniques",
+      status: "published",
+      publishedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+      author: "Michael Chen",
+      excerpt: "Take your sites to the next level with these advanced customization patterns",
+      featuredImage: seedImageIds[1], // Golden puppy - will be updated to /uploads/ path
+      category: "Advanced",
+      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    });
+
+    await db.insert(schema.entryContents).values({
+      id: randomUUID(),
+      entryId: post2Id,
+      localeCode: "en",
+      content: JSON.stringify({
+        body: `# Advanced Customization Techniques
+
+Ready to unlock the full power of our CMS? Let's dive into advanced customization patterns.
+
+## Custom Components
+
+Create reusable components that fit your brand:
+
+\`\`\`jsx
+export function CustomHero({ title, subtitle, image }) {
+  return (
+    <section className="hero">
+      <h1>{title}</h1>
+      <p>{subtitle}</p>
+      <img src={image} alt={title} />
+    </section>
+  )
+}
+\`\`\`
+
+## Dynamic Data Fetching
+
+Integrate with external APIs:
+
+\`\`\`javascript
+const products = await fetch('https://api.example.com/products')
+  .then(res => res.json())
+\`\`\`
+
+## Performance Optimization
+
+### Image Optimization
+
+Use our built-in image optimizer for automatic compression and format conversion:
+
+- WebP for modern browsers
+- AVIF for cutting-edge performance
+- Automatic responsive sizing
+
+### Code Splitting
+
+Split your code by route to reduce initial bundle size:
+
+\`\`\`javascript
+const Dashboard = lazy(() => import('./Dashboard'))
+\`\`\`
+
+## Deployment Strategies
+
+### Edge Functions
+
+Deploy serverless functions at the edge for ultra-low latency:
+
+\`\`\`javascript
+export default async function handler(req) {
+  return new Response('Hello from the edge!')
+}
+\`\`\`
+
+### CI/CD Integration
+
+Automate your deployment pipeline with GitHub Actions, GitLab CI, or your preferred tool.
+
+## Conclusion
+
+These techniques will help you build production-ready, high-performance sites. Experiment and find what works best for your use case!`,
+        cover: {
+          url: seedImageIds[1], // Golden puppy - will be updated to /uploads/ path
+          alt: "Code Editor with Custom Components"
+        },
+        tags: ["advanced", "customization", "performance", "optimization"]
+      }),
+      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+    });
+    console.log(`✓ Created blog post: advanced-customization-techniques (${post2Id}) - PUBLISHED`);
+
+    // Post 3: Draft - Upcoming Features
+    const post3Id = randomUUID();
+    await db.insert(schema.collectionEntries).values({
+      id: post3Id,
+      collectionId: blogCollectionId,
+      slug: "upcoming-features-2025",
+      title: "Upcoming Features in 2025",
+      status: "draft",
+      publishedAt: null,
+      author: "Emma Williams",
+      excerpt: "A sneak peek at the exciting features coming to our platform this year",
+      featuredImage: seedImageIds[2], // Desk workspace - will be updated to /uploads/ path
+      category: "News",
+      createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
+      updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    });
+
+    await db.insert(schema.entryContents).values({
+      id: randomUUID(),
+      entryId: post3Id,
+      localeCode: "en",
+      content: JSON.stringify({
+        body: `# Upcoming Features in 2025
+
+We're excited to share what's coming to our CMS platform this year!
+
+## Q1 2025: Visual Editor v2
+
+The next generation of our visual editor is coming with:
+
+- Real-time collaboration
+- Advanced component library
+- Drag-and-drop layouts
+- Mobile-first design tools
+
+## Q2 2025: AI-Powered Content
+
+Harness the power of AI to:
+
+- Generate SEO-optimized content
+- Auto-translate to 50+ languages
+- Smart image suggestions
+- Content quality scoring
+
+## Q3 2025: E-commerce Suite
+
+Launch your online store with:
+
+- Product catalog management
+- Shopping cart and checkout
+- Payment gateway integrations
+- Inventory tracking
+- Order management
+
+## Q4 2025: Enterprise Features
+
+Scale your business with:
+
+- Multi-site management
+- Advanced permissions and roles
+- Custom workflows
+- Audit logs and compliance tools
+
+## Beta Program
+
+Want early access? Join our beta program to test these features before they launch!
+
+Stay tuned for more updates! 🎉`,
+        cover: {
+          url: seedImageIds[2], // Desk workspace - will be updated to /uploads/ path
+          alt: "Roadmap Visualization"
+        },
+        tags: ["news", "roadmap", "features", "2025"]
+      }),
+      createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    });
+    console.log(`✓ Created blog post: upcoming-features-2025 (${post3Id}) - DRAFT`);
 
     // ========================================================================
     // 27. Create default session
@@ -1050,7 +1304,14 @@ async function seed() {
     console.log(`   Environment ID: ${envId}`);
     console.log(`   Home Page ID: ${homePageId}`);
     console.log(`   Session ID: ${sessionId}`);
-    console.log(`\n🔗 Preview: http://localhost:4000/pages/home?locale=en`);
+    console.log(`\n📝 Blog Posts:`);
+    console.log(`   - Getting Started with Our CMS (published)`);
+    console.log(`   - Advanced Customization Techniques (published)`);
+    console.log(`   - Upcoming Features in 2025 (draft)`);
+    console.log(`\n🔗 Preview URLs:`);
+    console.log(`   Homepage: http://localhost:4000/pages/home?locale=en`);
+    console.log(`   Blog List: http://localhost:4000/posts/blog?locale=en`);
+    console.log(`   Single Post: http://localhost:4000/posts/blog/getting-started-with-cms?locale=en`);
 
     process.exit(0);
   } catch (error) {

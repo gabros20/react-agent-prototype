@@ -1,0 +1,283 @@
+{# Single Blog Post Template #}
+
+<article class="post">
+  <div class="container">
+    <div class="post__content">
+      {# Post Header #}
+      <header class="post__header">
+        {# Category Badge #}
+        {% if category %}
+          <div class="post__category">
+            <span class="post__category-badge">{{ category }}</span>
+          </div>
+        {% endif %}
+
+        {# Title #}
+        <h1 class="post__title">{{ title }}</h1>
+
+        {# Excerpt #}
+        {% if excerpt %}
+          <p class="post__excerpt">{{ excerpt }}</p>
+        {% endif %}
+
+        {# Meta Information #}
+        <div class="post__meta">
+          {% if author %}
+            <span class="post__author">By {{ author }}</span>
+          {% endif %}
+
+          {% if publishedAt %}
+            <span class="post__date">
+              <time datetime="{{ publishedAt }}">
+                {{ publishedAt | date("MMMM D, YYYY") }}
+              </time>
+            </span>
+          {% endif %}
+        </div>
+      </header>
+
+      {# Featured Image #}
+      {% if featuredImage %}
+        <div class="post__featured-image">
+          <img
+            src="{{ featuredImage }}"
+            alt="{{ title }}"
+            class="post__image"
+          >
+        </div>
+      {% elif cover and cover.url %}
+        <div class="post__featured-image">
+          <img
+            src="{{ cover.url }}"
+            alt="{{ cover.alt or title }}"
+            class="post__image"
+          >
+        </div>
+      {% endif %}
+
+      {# Post Body #}
+      <div class="post__body">
+        {% if body %}
+          {{ body | markdown | safe }}
+        {% else %}
+          <p>No content available.</p>
+        {% endif %}
+      </div>
+
+      {# Tags #}
+      {% if tags and tags.length > 0 %}
+        <div class="post__tags">
+          <h3 class="post__tags-title">Tags:</h3>
+          <ul class="post__tags-list">
+            {% for tag in tags %}
+              <li class="post__tag">
+                <span class="post__tag-text">{{ tag }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</article>
+
+<style>
+.post {
+  padding: 4rem 0;
+}
+
+.post__content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.post__header {
+  margin-bottom: 3rem;
+  text-align: center;
+}
+
+.post__category {
+  margin-bottom: 1rem;
+}
+
+.post__category-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background-color: #3b82f6;
+  color: white;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.post__title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+  color: #111827;
+}
+
+.post__excerpt {
+  font-size: 1.25rem;
+  color: #6b7280;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.post__meta {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.post__author {
+  font-weight: 600;
+}
+
+.post__featured-image {
+  margin-bottom: 3rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.post__image {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.post__body {
+  font-size: 1.125rem;
+  line-height: 1.75;
+  color: #374151;
+}
+
+.post__body h2 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  color: #111827;
+}
+
+.post__body h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  color: #111827;
+}
+
+.post__body p {
+  margin-bottom: 1.5rem;
+}
+
+.post__body ul,
+.post__body ol {
+  margin-bottom: 1.5rem;
+  padding-left: 1.5rem;
+}
+
+.post__body li {
+  margin-bottom: 0.5rem;
+}
+
+.post__body a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.post__body a:hover {
+  color: #2563eb;
+}
+
+.post__body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 2rem 0;
+}
+
+.post__body code {
+  background-color: #f3f4f6;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.post__body pre {
+  background-color: #1f2937;
+  color: #f9fafb;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 2rem 0;
+}
+
+.post__body pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.post__tags {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.post__tags-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #374151;
+}
+
+.post__tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.post__tag {
+  display: inline-block;
+}
+
+.post__tag-text {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background-color: #f3f4f6;
+  color: #374151;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+  .post__title {
+    font-size: 2rem;
+  }
+
+  .post__excerpt {
+    font-size: 1.125rem;
+  }
+
+  .post__meta {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .post__body {
+    font-size: 1rem;
+  }
+}
+</style>
