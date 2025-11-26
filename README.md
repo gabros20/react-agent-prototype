@@ -250,6 +250,26 @@ The preview server renders your CMS pages as a real website using Nunjucks templ
 
 **Note**: The root path (`/`) returns a 404 without the redirect - this is expected behavior as the preview server is designed to render specific page slugs.
 
+### Navigation URL Format
+
+**IMPORTANT**: Navigation links must use the preview URL format:
+
+```
+/pages/{slug}?locale=en
+```
+
+**Examples**:
+- `/pages/home?locale=en` ✅
+- `/pages/about?locale=en` ✅
+- `/pages/contact?locale=en` ✅
+
+**Wrong** (causes 404):
+- `/` ❌
+- `/about` ❌
+- `/contact` ❌
+
+The AI agent automatically uses this format when adding pages to navigation after creation.
+
 ### Templates
 
 Templates are located in `server/templates/`:

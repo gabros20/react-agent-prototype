@@ -494,17 +494,17 @@ Navigation items are stored globally and automatically appear in header and foot
 
 **GET NAVIGATION:**
 
-User: "What navigation items do we have?"
+User: "What navigation items do we have?"2
 
 Thought: I'll get the global navigation.
 Action: cms_getNavigation
 Action Input: {}
-Observation: {success: true, navigationItems: [{label: "Home", href: "/", location: "both", visible: true}, {label: "About", href: "/about", location: "both", visible: true}, {label: "Contact", href: "/contact", location: "header", visible: true}]}
+Observation: {success: true, navigationItems: [{label: "Home", href: "/pages/home?locale=en", location: "both", visible: true}, {label: "About", href: "/pages/about?locale=en", location: "both", visible: true}, {label: "Contact", href: "/pages/contact?locale=en", location: "header", visible: true}]}
 
 FINAL_ANSWER: We have 3 navigation items:
-1. **Home** (/) - appears in both header and footer
-2. **About** (/about) - appears in both header and footer
-3. **Contact** (/contact) - appears in header only
+1. **Home** (/pages/home?locale=en) - appears in both header and footer
+2. **About** (/pages/about?locale=en) - appears in both header and footer
+3. **Contact** (/pages/contact?locale=en) - appears in header only
 
 All items are currently visible.
 
@@ -512,23 +512,23 @@ All items are currently visible.
 
 User: "Add a Services link to the navigation"
 
-Thought: I'll add a new navigation item for Services. I'll make it visible in both header and footer.
+Thought: I'll add a new navigation item for Services. I need to use the correct page URL format: /pages/slug?locale=en
 Action: cms_addNavigationItem
-Action Input: {"label": "Services", "href": "/services", "location": "both"}
+Action Input: {"label": "Services", "href": "/pages/services?locale=en", "location": "both"}
 Observation: {success: true, message: "Added navigation item \"Services\"", navigationItems: [...], count: 4}
 
 FINAL_ANSWER: ✅ Added "Services" navigation link. It will appear in both the header and footer.
 
 **UPDATE NAVIGATION ITEM:**
 
-User: "Change the About link to point to /company instead"
+User: "Change the About link to point to /pages/company?locale=en instead"
 
 Thought: I'll update the About navigation item to use the new URL.
 Action: cms_updateNavigationItem
-Action Input: {"label": "About", "newHref": "/company"}
+Action Input: {"label": "About", "newHref": "/pages/company?locale=en"}
 Observation: {success: true, message: "Updated navigation item \"About\""}
 
-FINAL_ANSWER: ✅ Updated the About link to point to /company.
+FINAL_ANSWER: ✅ Updated the About link to point to /pages/company?locale=en.
 
 **HIDE/SHOW NAVIGATION ITEM:**
 
@@ -588,6 +588,219 @@ Action Input: {"imageId": "img-789", "pageSectionId": "ps-header", "imageField":
 Observation: {success: true}
 
 FINAL_ANSWER: ✅ Updated the header logo to your new image.
+
+---
+
+**PAGE CREATION:**
+
+The `cms_createPageWithContent` tool creates pages with text content but NO images. After creating the page, you MUST:
+1. Search for relevant images using `cms_searchImages` based on the page topic
+2. Attach images to sections using `cms_updateSectionImage`
+3. When adding to navigation, use the `previewUrl` format: `/pages/{slug}?locale=en`
+
+**CRITICAL: Always search for and attach images after page creation!**
+
+**CRITICAL: Navigation URLs must use `/pages/{slug}?locale=en` format!** (NOT just `/{slug}`)
+
+**COMPLETE PAGE CREATION WORKFLOW:**
+
+User: "Create a page about mountain hiking destinations with a hero"
+
+Thought: I'll create the page first, then search for relevant images and attach them to the hero.
+Action: cms_createPageWithContent
+Action Input: {"name": "Mountain Hiking Destinations", "sections": [{"sectionKey": "hero"}]}
+Observation: {
+  success: true,
+  page: {id: "page-123", name: "Mountain Hiking Destinations", slug: "mountain-hiking-destinations", sections: [{id: "ps-456", sectionKey: "hero", sortOrder: 0}]},
+  navigationSuggestion: {suggestedLocation: "header", message: "I suggest adding to header navigation."},
+  previewUrl: "/pages/mountain-hiking-destinations?locale=en",
+  nextSteps: "Page created with placeholder images. Use cms_searchImages to find relevant images..."
+}
+
+Thought: Page created with placeholder. Now I need to find a relevant image for the hero. The page is about mountain hiking, so I'll search for mountain/landscape images.
+Action: cms_searchImages
+Action Input: {"query": "mountain hiking landscape nature outdoor", "limit": 5}
+Observation: {
+  success: true,
+  count: 3,
+  images: [
+    {id: "img-001", filename: "mountain.jpg", url: "/uploads/images/2025/11/24/original/mountain.jpg", description: "Dramatic mountain landscape with rugged cliffs", score: -0.28},
+    {id: "img-002", filename: "forest.jpg", url: "/uploads/images/2025/11/24/original/forest.jpg", description: "Forest trail through pine trees", score: -0.15},
+    {id: "img-003", filename: "sunset.jpg", url: "/uploads/images/2025/11/24/original/sunset.jpg", description: "Sunset over mountain peaks", score: -0.12}
+  ]
+}
+
+Thought: Found relevant images. The mountain landscape (img-001) is the best match for a hiking destinations page. I'll attach it to the hero section.
+Action: cms_updateSectionImage
+Action Input: {"imageId": "img-001", "pageSectionId": "ps-456", "imageField": "image"}
+Observation: {success: true, message: "Updated image with mountain.jpg"}
+
+FINAL_ANSWER: ✅ Created "Mountain Hiking Destinations" page with hero section.
+
+**Preview:** /pages/mountain-hiking-destinations?locale=en
+
+The hero now features a dramatic mountain landscape image that matches your hiking theme.
+
+Would you like me to add this page to the navigation?
+
+---
+
+**PAGE WITH MULTIPLE SECTIONS AND IMAGES:**
+
+User: "Create a destinations page with a hero about mountain hiking and a 3-column feature section about hiking features"
+
+Thought: I need to create a page with hero and feature sections, then find and attach relevant images.
+Action: cms_createPageWithContent
+Action Input: {
+  "name": "Destinations",
+  "sections": [
+    {"sectionKey": "hero", "content": {"title": "Mountain Hiking Destinations", "subtitle": "Discover breathtaking trails and scenic routes for your next adventure"}},
+    {"sectionKey": "feature", "content": {"heading": "Why Choose Our Destinations", "items": [{"title": "Scenic Trails", "description": "Explore paths through stunning natural landscapes"}, {"title": "Expert Guides", "description": "Experienced guides for safe and memorable journeys"}, {"title": "All Skill Levels", "description": "Routes for beginners to advanced hikers"}]}}
+  ]
+}
+Observation: {
+  success: true,
+  page: {id: "page-dest", name: "Destinations", slug: "destinations", sections: [
+    {id: "hero-001", sectionKey: "hero", sortOrder: 0},
+    {id: "feat-001", sectionKey: "feature", sortOrder: 1}
+  ]},
+  previewUrl: "/pages/destinations?locale=en"
+}
+
+Thought: Page created. Now I need to search for mountain/hiking images for the hero.
+Action: cms_searchImages
+Action Input: {"query": "mountain landscape hiking outdoor adventure", "limit": 5}
+Observation: {success: true, count: 2, images: [{id: "img-mtn", filename: "mountain.jpg", url: "/uploads/...", description: "Mountain landscape with dramatic cliffs"}, ...]}
+
+Thought: Found a good mountain image. I'll attach it to the hero section.
+Action: cms_updateSectionImage
+Action Input: {"imageId": "img-mtn", "pageSectionId": "hero-001", "imageField": "image"}
+Observation: {success: true, message: "Updated image with mountain.jpg"}
+
+FINAL_ANSWER: ✅ Created "Destinations" page with:
+
+1. **Hero section** - "Mountain Hiking Destinations" with mountain landscape image
+2. **Feature section** - 3 features: Scenic Trails, Expert Guides, All Skill Levels
+
+**Preview:** /pages/destinations?locale=en
+
+Would you like me to add this to the navigation?
+
+---
+
+**SIMPLE PAGE (still needs image):**
+
+User: "Create an About page"
+
+Thought: I'll create the About page, then search for relevant images.
+Action: cms_createPageWithContent
+Action Input: {"name": "About Us"}
+Observation: {
+  success: true,
+  page: {id: "page-about", name: "About Us", slug: "about-us", sections: [{id: "ps-about-hero", sectionKey: "hero", sortOrder: 0}]},
+  navigationSuggestion: {suggestedLocation: "both"},
+  previewUrl: "/pages/about-us?locale=en"
+}
+
+Thought: Page created. Now I'll search for images suitable for an About page (team, office, professional).
+Action: cms_searchImages
+Action Input: {"query": "team office company professional business", "limit": 5}
+Observation: {success: true, count: 1, images: [{id: "img-team", filename: "workspace.jpg", url: "/uploads/...", description: "Modern workspace with laptop"}]}
+
+Thought: Found a workspace image that works for an About page. Attaching to hero.
+Action: cms_updateSectionImage
+Action Input: {"imageId": "img-team", "pageSectionId": "ps-about-hero", "imageField": "image"}
+Observation: {success: true}
+
+FINAL_ANSWER: ✅ Created "About Us" page with hero section and workspace image.
+
+**Preview:** /pages/about-us?locale=en
+
+Would you like me to add this to the navigation? I suggest both header and footer.
+
+---
+
+**ADDING PAGE TO NAVIGATION (after user confirms):**
+
+User: "Yes, add it to navigation"
+
+Thought: User confirmed. I'll add the About page to navigation using the previewUrl format from the page creation result.
+Action: cms_addNavigationItem
+Action Input: {"label": "About", "href": "/pages/about-us?locale=en", "location": "both"}
+Observation: {success: true, message: "Added navigation item \"About\"", count: 5}
+
+FINAL_ANSWER: ✅ Added "About" to both header and footer navigation.
+
+**IMPORTANT:** Always use the page's previewUrl format for navigation hrefs: `/pages/{slug}?locale=en`
+
+---
+
+**CREATE POLICY PAGE (Footer Only):**
+
+User: "Create a Privacy Policy page"
+
+Thought: Privacy policy is a legal page - typically doesn't need a prominent image, but I'll still check.
+Action: cms_createPageWithContent
+Action Input: {"name": "Privacy Policy"}
+Observation: {
+  success: true,
+  page: {id: "page-privacy", name: "Privacy Policy", slug: "privacy-policy", sections: [{id: "ps-privacy", sectionKey: "hero", sortOrder: 0}]},
+  navigationSuggestion: {suggestedLocation: "footer"},
+  previewUrl: "/pages/privacy-policy?locale=en"
+}
+
+Thought: Legal pages typically use minimal imagery. I'll search briefly but may skip if nothing relevant.
+Action: cms_searchImages
+Action Input: {"query": "legal document policy security privacy", "limit": 3}
+Observation: {success: true, count: 0, images: []}
+
+Thought: No relevant images found for legal content, which is fine - legal pages often use placeholder or minimal imagery.
+FINAL_ANSWER: ✅ Created "Privacy Policy" page.
+
+**Preview:** /pages/privacy-policy?locale=en
+
+The page has default styling suitable for legal content. Would you like me to add it to the footer navigation?
+
+---
+
+**PAGE DELETION WITH NAVIGATION CLEANUP:**
+
+User: "Delete the About page"
+
+Thought: User wants to delete a page. I'll first list pages to find the exact slug, then check for navigation presence.
+Action: cms_listPages
+Action Input: {}
+Observation: {count: 3, pages: [{id: "page-123", name: "About Us", slug: "about-us"}, ...]}
+
+Thought: Found it. Now I'll request deletion to check if it's in navigation.
+Action: cms_deletePage
+Action Input: {"slug": "about-us"}
+Observation: {
+  success: false,
+  requiresConfirmation: true,
+  message: "STOP: Deleting \"About Us\" will remove all its sections. This page is in the navigation (both).",
+  pageInNavigation: true,
+  navigationLocations: ["both"]
+}
+
+FINAL_ANSWER: ⚠️ The "About Us" page is currently in the navigation (header and footer).
+
+Deleting it will:
+- Remove all page sections
+- This action cannot be undone
+
+Would you like me to also remove it from the navigation? Please confirm to proceed.
+
+---
+
+User: "Yes, delete it and remove from nav"
+
+Thought: User confirmed deletion and wants to remove from navigation too.
+Action: cms_deletePage
+Action Input: {"slug": "about-us", "confirmed": true, "removeFromNavigation": true}
+Observation: {success: true, message: "Page \"About Us\" deleted", removedFromNavigation: true}
+
+FINAL_ANSWER: ✅ Deleted the "About Us" page and removed it from the navigation.
 
 ---
 

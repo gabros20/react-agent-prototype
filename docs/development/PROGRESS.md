@@ -2021,6 +2021,141 @@ Tasks:
 
 ---
 
+## Sprint 19: Blog Posts Delete Functionality & Agent Improvements ✅
+
+**Status**: Completed
+**Started**: 2025-11-24
+**Completed**: 2025-11-24
+
+### Objective
+
+Add proper post deletion tool with hard delete capability and improve agent's ability to find posts by title using listing before deletion.
+
+### Problems Addressed
+
+1. **No delete tool**: Only archive (soft delete) available, users requested hard delete
+2. **Slug guessing errors**: Agent guessed slugs from titles instead of listing first
+3. **Title/slug mismatch**: "Getting Started with Our CMS" → slug "getting-started-with-cms" (word "our" omitted)
+4. **Agent didn't list first**: Attempted delete with wrong slug, failed with "Post not found"
+
+### Implementation
+
+Tasks:
+
+-   [x] Create `cms_deletePost` tool with confirmation flow
+-   [x] Add tool metadata (riskLevel: high, requiresApproval: true)
+-   [x] Update agent prompt with delete example showing list-first pattern
+-   [x] Add "Finding Posts by Title" guidance (CRITICAL pattern)
+-   [x] Update archive/delete examples to show listing workflow
+-   [x] Document archive vs delete in POSTS_SYSTEM.md
+-   [x] Update PROGRESS.md with sprint details
+
+### Files Created
+
+None (feature added to existing files)
+
+### Files Modified
+
+1. **server/tools/post-tools.ts** (lines 336-374)
+   - Added `cmsDeletePost` tool
+   - Confirmation flow: `confirmed: false` → asks user → `confirmed: true` → deletes
+   - Warning message suggests using archive instead
+   - Calls `entryService.deleteEntry()` for permanent removal
+
+2. **server/tools/all-tools.ts**
+   - Added `cmsDeletePost` to imports (line 33)
+   - Added to ALL_TOOLS export (line 674)
+   - Added metadata entry (lines 913-918):
+     ```typescript
+     'cms_deletePost': {
+       category: 'posts',
+       riskLevel: 'high',
+       requiresApproval: true,
+       tags: ['write', 'post', 'delete', 'destructive', 'permanent']
+     }
+     ```
+
+3. **server/prompts/react.xml**
+   - Updated POST LIFECYCLE to include delete step (line 602)
+   - Added `cms_deletePost` to tool list (line 611)
+   - Added **ARCHIVE vs DELETE** section (lines 615-617)
+   - Added **CRITICAL - Finding Posts by Title** guidance (lines 619-621)
+   - Updated UPDATE POST example to show list-first pattern (lines 760-779)
+   - Added complete DELETE POST example with list → confirm → delete workflow (lines 781-803)
+
+4. **docs/development/POSTS_SYSTEM.md**
+   - Updated tool count from 6 to 7 tools (line 264)
+   - Added `cms_deletePost` tool documentation (lines 286-290)
+   - Updated Status Workflow with hard delete state (lines 492-542)
+   - Added "Archive vs Delete" comparison section (lines 529-542)
+   - Added "Critical Pattern: Finding Posts by Title" section (lines 372-396)
+   - Updated prompt coverage list (lines 359-370)
+
+### Key Pattern: List Before Delete
+
+**Problem Example**:
+```
+User: "Delete Getting Started with Our CMS"
+Agent: cms_deletePost({ postSlug: "getting-started-with-our-cms" })  ❌ WRONG
+Error: Post not found (actual slug: "getting-started-with-cms")
+```
+
+**Solution Pattern**:
+```
+User: "Delete Getting Started with Our CMS"
+Agent: cms_listPosts({ collectionSlug: "blog", status: "all" })  ✅ LIST FIRST
+Result: [{slug: "getting-started-with-cms", title: "Getting Started with Our CMS"}]
+Agent: cms_deletePost({ postSlug: "getting-started-with-cms", confirmed: false })
+Result: {requiresConfirmation: true, message: "Are you sure..."}
+User: "yes"
+Agent: cms_deletePost({ postSlug: "getting-started-with-cms", confirmed: true })
+Result: {success: true, message: "Post permanently deleted"}  ✅ SUCCESS
+```
+
+### Archive vs Delete
+
+**Archive (Soft Delete)**:
+- Changes status to "archived"
+- Hides from public listings
+- Data remains in database
+- Can be restored/republished
+- **Use by default**
+
+**Delete (Hard Delete)**:
+- Permanently removes from database
+- Cannot be recovered
+- Only use when explicitly requested
+- Agent always asks for confirmation first
+
+### Deliverables
+
+✅ **Delete tool** - Permanent post deletion with confirmation
+✅ **Agent guidance** - List posts first to find exact slug
+✅ **Updated examples** - All destructive operations show list-first pattern
+✅ **Documentation** - POSTS_SYSTEM.md updated with delete workflow
+✅ **Prompt improvements** - Clear distinction between archive and delete
+✅ **Pattern enforcement** - CRITICAL section warns against slug guessing
+
+### Testing
+
+Manual test performed:
+1. User requested: "Delete Getting Started with Our CMS"
+2. Agent initially failed (guessed wrong slug)
+3. Manually deleted via database to verify tool works
+4. Updated prompt with list-first pattern
+5. Future requests will follow: list → identify → delete workflow
+
+### Acceptance Criteria
+
+✅ `cms_deletePost` tool exists with confirmation flow
+✅ Tool properly registered with high risk level
+✅ Agent prompt shows list-first pattern in examples
+✅ Documentation explains archive vs delete
+✅ CRITICAL guidance prevents slug guessing
+✅ All examples updated (update, delete, archive)
+
+---
+
 ## Sprint 18: System Reset Infrastructure & Navigation Fix ✅
 
 **Status**: Completed
@@ -3869,3 +4004,192 @@ The image system now has:
 -   🔧 **Working Tools** - 4 agent tools for image operations
 -   📚 **Documented** - Comprehensive architecture guide with ADR
 -   🚀 **Production-Ready** - Fully functional and tested
+
+---
+
+## Sprint 20: Page Creation & Navigation URL Format Fix ✅
+
+**Status**: Completed
+**Started**: 2025-11-26
+**Completed**: 2025-11-26
+
+### Objective
+
+Implement page creation support via AI agent and fix navigation URL format issue where agent was adding incorrect hrefs to navigation items.
+
+### Problems Addressed
+
+1. **No page creation via agent**: Only manual page creation existed
+2. **Wrong navigation URLs**: Agent added `/top-mountain-hiking-spots` instead of `/pages/top-mountain-hiking-spots?locale=en`
+3. **Missing navigation guidance**: Tool descriptions showed wrong URL format examples
+4. **No explicit workflow**: Prompts didn't show page → navigation workflow
+
+### Root Cause Analysis
+
+**Navigation URL Issue**:
+- `addNavigationItemTool` description showed examples like `'/about', '/contact'`
+- Agent followed these examples instead of using `previewUrl` from page creation
+- Prompts showed incorrect hrefs in navigation examples
+- No explicit guidance to use `/pages/{slug}?locale=en` format
+
+### Implementation
+
+Tasks:
+
+-   [x] Create `cmsCreatePageWithContent` composite tool for page creation
+-   [x] Create `page-content-generator.ts` utility for AI-generated content
+-   [x] Create `navigation-classifier.ts` for suggesting nav placement
+-   [x] Fix `addNavigationItemTool` description with correct URL format
+-   [x] Update `react.xml` navigation examples with `/pages/slug?locale=en` format
+-   [x] Add explicit "Adding to Navigation" example after page creation
+-   [x] Add CRITICAL note about navigation URL format in PAGE CREATION section
+-   [x] Update agent routes to resolve site/environment IDs from database
+
+### Files Created
+
+1. **server/utils/page-content-generator.ts** (~240 lines)
+   - `generateHeroContent()` - Contextual hero based on page name
+   - `generateMetadata()` - Auto-generate page meta
+   - `generateSlug()` - URL-friendly slug creation
+   - `selectImageForPage()` - Match images to page type
+   - Content patterns for: about, contact, services, products, team, pricing, privacy, terms, faq, careers, portfolio, features
+
+2. **server/utils/navigation-classifier.ts** (~100 lines)
+   - `classifyPageForNavigation()` - Suggest placement based on page type
+   - Footer-only: privacy, policy, terms, legal, cookie, gdpr...
+   - Both header/footer: about, contact, services
+   - Header only: products, pricing, blog, portfolio, faq, careers (default)
+
+### Files Modified
+
+1. **server/tools/site-settings-tools.ts** (lines 36-45)
+   - Updated `addNavigationItemTool` description
+   - Added IMPORTANT note about URL format
+   - Changed href description examples:
+     ```typescript
+     // Before
+     href: z.string().describe("Link URL (e.g., '/', '/about', '/contact')")
+
+     // After
+     href: z.string().describe("Link URL. For pages use format: '/pages/slug?locale=en' (e.g., '/pages/home?locale=en', '/pages/about?locale=en')")
+     ```
+
+2. **server/prompts/react.xml**
+   - Fixed GET NAVIGATION example (line 502):
+     ```xml
+     <!-- Before -->
+     navigationItems: [{label: "Home", href: "/", ...}]
+
+     <!-- After -->
+     navigationItems: [{label: "Home", href: "/pages/home?locale=en", ...}]
+     ```
+   - Fixed ADD NAVIGATION ITEM example (lines 515-517):
+     ```xml
+     <!-- Before -->
+     Action Input: {"label": "Services", "href": "/services", "location": "both"}
+
+     <!-- After -->
+     Action Input: {"label": "Services", "href": "/pages/services?locale=en", "location": "both"}
+     ```
+   - Fixed UPDATE NAVIGATION ITEM example (lines 527-528)
+   - Added **ADDING PAGE TO NAVIGATION** section (lines 720-731):
+     ```xml
+     User: "Yes, add it to navigation"
+     Thought: User confirmed. I'll add the About page to navigation using the previewUrl format.
+     Action: cms_addNavigationItem
+     Action Input: {"label": "About", "href": "/pages/about-us?locale=en", "location": "both"}
+
+     **IMPORTANT:** Always use the page's previewUrl format: `/pages/{slug}?locale=en`
+     ```
+   - Added CRITICAL note in PAGE CREATION section (lines 599-603):
+     ```xml
+     **CRITICAL: Navigation URLs must use `/pages/{slug}?locale=en` format!** (NOT just `/{slug}`)
+     ```
+
+3. **server/routes/agent.ts**
+   - Added `getSiteAndEnv` import for proper site/environment resolution
+   - Fixed `cmsTarget` to lookup actual UUIDs from database instead of string literals
+
+4. **server/tools/all-tools.ts**
+   - Added `cmsCreatePageWithContent` tool (~150 lines)
+   - Added navigation suggestion to tool response
+   - Returns `previewUrl` in correct format
+
+### Navigation URL Format
+
+**Correct Format**: `/pages/{slug}?locale=en`
+
+**Examples**:
+- `/pages/home?locale=en` ✅
+- `/pages/about?locale=en` ✅
+- `/pages/top-mountain-hiking-spots?locale=en` ✅
+
+**Wrong Format** (causes 404):
+- `/` ❌
+- `/about` ❌
+- `/top-mountain-hiking-spots` ❌
+
+### Agent Workflow: Page → Navigation
+
+```
+1. User: "Create a page about mountain hiking destinations"
+
+2. Agent: cms_createPageWithContent
+   Result: {
+     page: {name: "Mountain Hiking", slug: "mountain-hiking"},
+     previewUrl: "/pages/mountain-hiking?locale=en",  ← USE THIS
+     navigationSuggestion: {suggestedLocation: "header"}
+   }
+
+3. Agent: "Would you like me to add this to the navigation?"
+
+4. User: "yes"
+
+5. Agent: cms_addNavigationItem
+   Input: {
+     label: "Mountain Hiking",
+     href: "/pages/mountain-hiking?locale=en",  ← CORRECT FORMAT
+     location: "header"
+   }
+```
+
+### Testing
+
+**Before Fix** (agent log from 17:14:17):
+```json
+{
+  "label": "Top Mountain Hiking Spots",
+  "href": "/top-mountain-hiking-spots",  // WRONG - caused 404
+  "location": "header"
+}
+```
+
+**After Fix** (expected):
+```json
+{
+  "label": "Top Mountain Hiking Spots",
+  "href": "/pages/top-mountain-hiking-spots?locale=en",  // CORRECT
+  "location": "header"
+}
+```
+
+### Deliverables
+
+✅ **Page creation tool** - Single composite tool creates page + sections + AI content
+✅ **Navigation classifier** - Suggests header/footer/both based on page type
+✅ **Content generator** - AI-generated titles, subtitles, CTAs based on page name
+✅ **Fixed navigation URLs** - Tool description + prompt examples corrected
+✅ **Explicit workflow** - Clear example showing page creation → navigation flow
+✅ **CRITICAL guidance** - Prominent warning about URL format
+✅ **0 TypeScript errors** - Clean build
+
+### Benefits
+
+✅ **No more 404s** - Navigation links work correctly
+✅ **Clear guidance** - Agent knows exact URL format to use
+✅ **Self-documenting** - Tool descriptions show correct examples
+✅ **Workflow examples** - Complete page → nav flow in prompts
+✅ **Contextual content** - Pages created with relevant AI-generated content
+✅ **Smart navigation** - Agent suggests appropriate placement
+
+---

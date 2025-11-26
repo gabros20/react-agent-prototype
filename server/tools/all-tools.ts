@@ -34,6 +34,13 @@ import {
   cmsListPosts,
   cmsGetPost
 } from './post-tools'
+import {
+  generateHeroContent,
+  generateMetadata,
+  generateSlug
+} from '../utils/page-content-generator'
+import { classifyPageForNavigation } from '../utils/navigation-classifier'
+import { SiteSettingsService } from '../services/cms/site-settings-service'
 
 // ============================================================================
 // CMS - Page Tools
@@ -155,25 +162,83 @@ export const cmsUpdatePage = tool({
 })
 
 export const cmsDeletePage = tool({
-  description: 'Delete a page (CASCADE: deletes all sections). DANGEROUS - requires confirmation.',
+  description: 'Delete a page (CASCADE: deletes all sections). Checks if page is in navigation and offers cleanup. DANGEROUS - requires confirmation.',
   inputSchema: z.object({
-    id: z.string().describe('Page ID to delete'),
-    confirmed: z.boolean().optional().describe('Set to true to confirm deletion')
+    slug: z.string().optional().describe('Page slug to delete'),
+    id: z.string().optional().describe('Page ID to delete'),
+    confirmed: z.boolean().optional().describe('Set to true to confirm deletion'),
+    removeFromNavigation: z.boolean().optional().describe('Also remove from navigation if present')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-    
+
+    if (!input.slug && !input.id) {
+      throw new Error('Either slug or id must be provided')
+    }
+
+    // Get page
+    let page: any
+    if (input.id) {
+      page = await ctx.services.pageService.getPageById(input.id)
+    } else {
+      page = await ctx.services.pageService.getPageBySlug(input.slug!)
+    }
+
+    if (!page) {
+      throw new Error(`Page not found: ${input.slug || input.id}`)
+    }
+
+    // Check if page is in navigation
+    const siteSettingsService = new SiteSettingsService(ctx.db)
+    const navItems = await siteSettingsService.getNavigationItems()
+
+    const pageHref = `/pages/${page.slug}?locale=en`
+    const inNavigation = navItems.filter((item: any) =>
+      item.href.includes(page.slug) || item.href === pageHref
+    )
+
     // Require explicit confirmation
     if (!input.confirmed) {
+      let message = `STOP: Deleting "${page.name}" will remove all its sections. This cannot be undone.`
+
+      if (inNavigation.length > 0) {
+        const locations = [...new Set(inNavigation.map((i: any) => i.location))].join(', ')
+        message += ` Note: This page is in the navigation (${locations}).`
+        message += ' Set removeFromNavigation: true to also remove from nav.'
+      }
+
+      message += ' Call again with confirmed: true if user has approved.'
+
       return {
         success: false,
         requiresConfirmation: true,
-        message: 'STOP: This is a destructive operation. Call again with confirmed: true if user has approved.'
+        message,
+        pageInNavigation: inNavigation.length > 0,
+        navigationLocations: inNavigation.map((i: any) => i.location)
       }
     }
-    
-    await ctx.services.pageService.deletePage(input.id)
-    return { success: true, message: `Page ${input.id} deleted` }
+
+    // Remove from navigation if requested
+    let removedFromNav = false
+    if (input.removeFromNavigation && inNavigation.length > 0) {
+      for (const navItem of inNavigation) {
+        try {
+          await siteSettingsService.removeNavigationItem(navItem.label)
+          removedFromNav = true
+        } catch (e) {
+          // Ignore if already removed
+        }
+      }
+    }
+
+    // Delete the page (cascade deletes sections)
+    await ctx.services.pageService.deletePage(page.id)
+
+    return {
+      success: true,
+      message: `Page "${page.name}" deleted`,
+      removedFromNavigation: removedFromNav
+    }
   }
 })
 
@@ -182,7 +247,7 @@ export const cmsListPages = tool({
   inputSchema: z.object({}),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-    
+
     const pages = await ctx.services.pageService.listPages()
     return {
       count: pages.length,
@@ -191,6 +256,108 @@ export const cmsListPages = tool({
         name: p.name,
         slug: p.slug
       }))
+    }
+  }
+})
+
+export const cmsCreatePageWithContent = tool({
+  description: 'Create a new page with sections and AI-generated text content. IMPORTANT: This tool creates pages with placeholder images. After creation, use cms_searchImages to find relevant images, then cms_updateSectionImage to attach them to sections.',
+  inputSchema: z.object({
+    name: z.string().describe('Page name (e.g., "About Us", "Services", "Contact")'),
+    slug: z.string().optional().describe('URL-friendly slug (auto-generated from name if not provided)'),
+    sections: z.array(z.object({
+      sectionKey: z.string().describe('Section definition key (e.g., "hero", "image-text", "feature")'),
+      content: z.record(z.string(), z.any()).optional().describe('Section content - if omitted, AI generates contextual text content (no images)')
+    })).optional().describe('Sections to add - defaults to hero section if not provided'),
+    indexing: z.boolean().optional().default(true).describe('Enable search indexing'),
+    meta: z.object({
+      title: z.string().optional(),
+      description: z.string().optional()
+    }).optional().describe('Page metadata - auto-generated if not provided')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext
+    const { siteId, environmentId } = ctx.cmsTarget || { siteId: 'default-site', environmentId: 'main' }
+
+    // 1. Generate slug if not provided
+    const slug = input.slug || generateSlug(input.name)
+
+    // 2. Generate metadata if not provided
+    const meta = input.meta || generateMetadata(input.name)
+
+    // 3. Create the page
+    const page = await ctx.services.pageService.createPage({
+      name: input.name,
+      slug,
+      siteId,
+      environmentId,
+      indexing: input.indexing ?? true,
+      meta
+    })
+
+    // 4. Determine sections to add (default: hero only)
+    const sectionsToAdd = input.sections || [{ sectionKey: 'hero' }]
+    const createdSections: Array<{ id: string; sectionKey: string; sortOrder: number }> = []
+
+    // 5. Add each section with content (NO automatic image selection - agent should do this)
+    for (let i = 0; i < sectionsToAdd.length; i++) {
+      const sectionSpec = sectionsToAdd[i]
+
+      // Get section definition by key
+      const sectionDef = await ctx.services.sectionService.getSectionDefByKey(sectionSpec.sectionKey)
+      if (!sectionDef) {
+        throw new Error(`Section definition "${sectionSpec.sectionKey}" not found. Use cms_listSectionDefs to see available sections.`)
+      }
+
+      // Add section to page
+      const pageSection = await ctx.services.sectionService.addSectionToPage({
+        pageId: page.id,
+        sectionDefId: sectionDef.id,
+        sortOrder: i,
+        status: 'published'
+      })
+
+      // Generate or use provided content (text only, no images)
+      let content = sectionSpec.content
+      if (!content) {
+        // AI-generate TEXT content based on section type
+        if (sectionSpec.sectionKey === 'hero') {
+          // Generate hero content WITHOUT image - agent will add image separately
+          content = generateHeroContent(input.name, slug, null)
+        }
+        // Other section types will use template defaults (empty content)
+      }
+
+      // Sync content if we have any
+      if (content && Object.keys(content).length > 0) {
+        await ctx.services.sectionService.syncPageContents({
+          pageSectionId: pageSection.id,
+          localeCode: 'en',
+          content
+        })
+      }
+
+      createdSections.push({
+        id: pageSection.id,
+        sectionKey: sectionSpec.sectionKey,
+        sortOrder: i
+      })
+    }
+
+    // 6. Generate navigation suggestion
+    const navigationSuggestion = classifyPageForNavigation(input.name, slug)
+
+    return {
+      success: true,
+      page: {
+        id: page.id,
+        name: input.name,
+        slug,
+        sections: createdSections
+      },
+      navigationSuggestion,
+      previewUrl: `/pages/${slug}?locale=en`,
+      nextSteps: 'Page created with placeholder images. Use cms_searchImages to find relevant images based on page content, then cms_updateSectionImage to attach them to the hero and other sections.'
     }
   }
 })
@@ -627,6 +794,7 @@ export const ALL_TOOLS = {
   // Pages
   'cms_getPage': cmsGetPage,
   'cms_createPage': cmsCreatePage,
+  'cms_createPageWithContent': cmsCreatePageWithContent,
   'cms_updatePage': cmsUpdatePage,
   'cms_deletePage': cmsDeletePage,
   'cms_listPages': cmsListPages,
@@ -699,6 +867,12 @@ export const TOOL_METADATA = {
     riskLevel: 'moderate',
     requiresApproval: false,
     tags: ['write', 'page']
+  },
+  'cms_createPageWithContent': {
+    category: 'cms',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'create', 'page', 'composite']
   },
   'cms_updatePage': {
     category: 'cms',

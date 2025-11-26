@@ -35,10 +35,10 @@ export const getNavigationTool: any = tool({
  */
 export const addNavigationItemTool: any = tool({
   description:
-    "Add a new navigation item to the global navigation. Maximum 5 items allowed. The item will be visible by default.",
+    "Add a new navigation item to the global navigation. Maximum 5 items allowed. The item will be visible by default. IMPORTANT: Use the page preview URL format '/pages/slug?locale=en' for page links.",
   inputSchema: z.object({
     label: z.string().describe("Navigation link text (e.g., 'Home', 'About')"),
-    href: z.string().describe("Link URL (e.g., '/', '/about', '/contact')"),
+    href: z.string().describe("Link URL. For pages use format: '/pages/slug?locale=en' (e.g., '/pages/home?locale=en', '/pages/about?locale=en')"),
     location: z
       .enum(["header", "footer", "both"])
       .describe("Where to show: 'header', 'footer', or 'both'"),

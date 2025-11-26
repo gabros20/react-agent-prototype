@@ -16,6 +16,7 @@ import type { AgentContext } from '../tools/types'
 import type { CoreMessage } from 'ai'
 import { approvalQueue } from '../services/approval-queue'
 import { ApiResponse, ErrorCodes, HttpStatus } from '../types/api-response'
+import { getSiteAndEnv } from '../utils/get-context'
 
 // Request schema
 const agentRequestSchema = z.object({
@@ -93,6 +94,35 @@ export function createAgentRoutes(services: ServiceContainer) {
         }
       }
 
+      // Get actual site and environment IDs from database
+      let cmsTarget: { siteId: string; environmentId: string }
+      try {
+        // Use provided IDs if they look like UUIDs, otherwise lookup by name
+        if (input.cmsTarget?.siteId && input.cmsTarget.siteId.includes('-')) {
+          // Looks like UUID - use directly
+          cmsTarget = {
+            siteId: input.cmsTarget.siteId,
+            environmentId: input.cmsTarget.environmentId || 'main'
+          }
+        } else {
+          // Lookup by name (default: local-site/main)
+          const siteName = input.cmsTarget?.siteId || 'local-site'
+          const envName = input.cmsTarget?.environmentId || 'main'
+          cmsTarget = await getSiteAndEnv(services.db, siteName, envName)
+        }
+      } catch (error) {
+        logger.warn('Could not resolve CMS target, using fallback lookup', {
+          error: (error as Error).message
+        })
+        // Fallback: try to get first available site/env
+        const site = await services.db.query.sites.findFirst()
+        const env = await services.db.query.environments.findFirst()
+        if (!site || !env) {
+          throw new Error('No site/environment configured. Run seed script first.')
+        }
+        cmsTarget = { siteId: site.id, environmentId: env.id }
+      }
+
       // Create agent context
       const context: AgentContext = {
         db: services.db,
@@ -109,13 +139,7 @@ export function createAgentRoutes(services: ServiceContainer) {
         sessionId,
         services,
         sessionService: services.sessionService,
-        cmsTarget: input.cmsTarget ? {
-          siteId: input.cmsTarget.siteId || 'default-site',
-          environmentId: input.cmsTarget.environmentId || 'main'
-        } : {
-          siteId: 'default-site',
-          environmentId: 'main'
-        }
+        cmsTarget
       }
 
       logger.info('Starting agent execution', {
@@ -268,6 +292,32 @@ export function createAgentRoutes(services: ServiceContainer) {
         }
       }
 
+      // Get actual site and environment IDs from database
+      let cmsTarget: { siteId: string; environmentId: string }
+      try {
+        // Use provided IDs if they look like UUIDs, otherwise lookup by name
+        if (input.cmsTarget?.siteId && input.cmsTarget.siteId.includes('-')) {
+          cmsTarget = {
+            siteId: input.cmsTarget.siteId,
+            environmentId: input.cmsTarget.environmentId || 'main'
+          }
+        } else {
+          const siteName = input.cmsTarget?.siteId || 'local-site'
+          const envName = input.cmsTarget?.environmentId || 'main'
+          cmsTarget = await getSiteAndEnv(services.db, siteName, envName)
+        }
+      } catch (error) {
+        logger.warn('Could not resolve CMS target, using fallback lookup', {
+          error: (error as Error).message
+        })
+        const site = await services.db.query.sites.findFirst()
+        const env = await services.db.query.environments.findFirst()
+        if (!site || !env) {
+          throw new Error('No site/environment configured. Run seed script first.')
+        }
+        cmsTarget = { siteId: site.id, environmentId: env.id }
+      }
+
       // Create agent context
       const context: AgentContext = {
         db: services.db,
@@ -277,13 +327,7 @@ export function createAgentRoutes(services: ServiceContainer) {
         sessionId,
         services,
         sessionService: services.sessionService,
-        cmsTarget: input.cmsTarget ? {
-          siteId: input.cmsTarget.siteId || 'default-site',
-          environmentId: input.cmsTarget.environmentId || 'main'
-        } : {
-          siteId: 'default-site',
-          environmentId: 'main'
-        }
+        cmsTarget
       }
 
       logger.info('Starting agent execution (non-streaming)', {
