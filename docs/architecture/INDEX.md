@@ -49,6 +49,39 @@ This index provides a high-level view of the system's major architectural layers
 
 ---
 
+## Layer 3: Agent System (Deep Dive)
+
+The Agent System is the core of the AI capabilities. These sub-documents provide detailed explanations of each pattern:
+
+| # | Topic | File | Description |
+|---|-------|------|-------------|
+| 3.1 | [ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | `LAYER_3.1_REACT_LOOP.md` | Orchestrator, Think→Act→Observe cycle, step limits |
+| 3.2 | [Tools](./LAYER_3.2_TOOLS.md) | `LAYER_3.2_TOOLS.md` | Tool anatomy, categories, Zod schemas, composition |
+| 3.3 | [Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | `LAYER_3.3_WORKING_MEMORY.md` | Entity tracking, sliding window, reference resolution |
+| 3.4 | [Prompts](./LAYER_3.4_PROMPTS.md) | `LAYER_3.4_PROMPTS.md` | System prompt structure, XML/Handlebars, injection |
+| 3.5 | [Human-in-the-Loop](./LAYER_3.5_HITL.md) | `LAYER_3.5_HITL.md` | Approval queue, confirmation patterns, dangerous ops |
+| 3.6 | [Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | `LAYER_3.6_ERROR_RECOVERY.md` | Retry logic, backoff, stuck detection, degradation |
+| 3.7 | [Streaming](./LAYER_3.7_STREAMING.md) | `LAYER_3.7_STREAMING.md` | SSE events, real-time feedback, frontend parsing |
+| 3.8 | [Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) | `LAYER_3.8_CONTEXT_INJECTION.md` | AgentContext, multi-tenant, tracing |
+
+### Agent System Reading Order
+
+**Getting Started:**
+1. [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Understand how the agent executes
+2. [3.2 Tools](./LAYER_3.2_TOOLS.md) - How capabilities are defined
+
+**Deep Understanding:**
+3. [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - How behavior is guided
+4. [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - How context is maintained
+
+**Advanced Patterns:**
+5. [3.5 HITL](./LAYER_3.5_HITL.md) - Human oversight
+6. [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Handling failures
+7. [3.7 Streaming](./LAYER_3.7_STREAMING.md) - Real-time communication
+8. [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) - Dependency management
+
+---
+
 ## Quick Reference
 
 ### Tech Stack
