@@ -18,14 +18,7 @@ router.get("/api/images/:id/status", async (req, res) => {
 		const status = await imageProcessingService.getImageStatus(req.params.id);
 		res.json(ApiResponse.success(status));
 	} catch (error) {
-		res
-			.status(HttpStatus.NOT_FOUND)
-			.json(
-				ApiResponse.error(
-					ErrorCodes.NOT_FOUND,
-					error instanceof Error ? error.message : "Image not found",
-				),
-			);
+		res.status(HttpStatus.NOT_FOUND).json(ApiResponse.error(ErrorCodes.NOT_FOUND, error instanceof Error ? error.message : "Image not found"));
 	}
 });
 
@@ -57,19 +50,10 @@ router.get("/api/images/:id/thumbnail", async (req, res) => {
  */
 router.get("/api/images/:id/details", async (req, res) => {
 	try {
-		const details = await imageProcessingService.getImageWithDetails(
-			req.params.id,
-		);
+		const details = await imageProcessingService.getImageWithDetails(req.params.id);
 		res.json(ApiResponse.success(details));
 	} catch (error) {
-		res
-			.status(HttpStatus.NOT_FOUND)
-			.json(
-				ApiResponse.error(
-					ErrorCodes.NOT_FOUND,
-					error instanceof Error ? error.message : "Image not found",
-				),
-			);
+		res.status(HttpStatus.NOT_FOUND).json(ApiResponse.error(ErrorCodes.NOT_FOUND, error instanceof Error ? error.message : "Image not found"));
 	}
 });
 
@@ -79,19 +63,12 @@ router.get("/api/images/:id/details", async (req, res) => {
  */
 router.get("/api/images/conversation/:sessionId", async (req, res) => {
 	try {
-		const images = await imageProcessingService.getConversationImages(
-			req.params.sessionId,
-		);
+		const images = await imageProcessingService.getConversationImages(req.params.sessionId);
 		res.json(ApiResponse.success(images));
 	} catch (error) {
-		res
-			.status(HttpStatus.INTERNAL_SERVER_ERROR)
-			.json(
-				ApiResponse.error(
-					ErrorCodes.INTERNAL_ERROR,
-					error instanceof Error ? error.message : "Failed to get images",
-				),
-			);
+		res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
+			ApiResponse.error(ErrorCodes.INTERNAL_ERROR, error instanceof Error ? error.message : "Failed to get images")
+		);
 	}
 });
 
@@ -103,20 +80,10 @@ router.get("/api/images/search", searchLimiter, async (req, res) => {
 	try {
 		const query = req.query.q as string;
 		const page = Math.max(1, parseInt((req.query.page as string) || "1", 10));
-		const limit = Math.min(
-			100,
-			Math.max(1, parseInt((req.query.limit as string) || "10", 10)),
-		);
+		const limit = Math.min(100, Math.max(1, parseInt((req.query.limit as string) || "10", 10)));
 
 		if (!query) {
-			return res
-				.status(HttpStatus.BAD_REQUEST)
-				.json(
-					ApiResponse.error(
-						ErrorCodes.MISSING_REQUIRED_FIELD,
-						"Query parameter 'q' is required",
-					),
-				);
+			return res.status(HttpStatus.BAD_REQUEST).json(ApiResponse.error(ErrorCodes.MISSING_REQUIRED_FIELD, "Query parameter 'q' is required"));
 		}
 
 		const { default: vectorIndex } = await import("../services/vector-index");
@@ -139,18 +106,13 @@ router.get("/api/images/search", searchLimiter, async (req, res) => {
 		res.json(
 			ApiResponse.paginated(results, pagination, {
 				requestId: req.headers["x-request-id"] as string,
-			}),
+			})
 		);
 	} catch (error) {
 		console.error("Image search error:", error);
-		res
-			.status(HttpStatus.INTERNAL_SERVER_ERROR)
-			.json(
-				ApiResponse.error(
-					ErrorCodes.INTERNAL_ERROR,
-					error instanceof Error ? error.message : "Search failed",
-				),
-			);
+		res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
+			ApiResponse.error(ErrorCodes.INTERNAL_ERROR, error instanceof Error ? error.message : "Search failed")
+		);
 	}
 });
 
@@ -163,14 +125,7 @@ router.post("/api/images/find", async (req, res) => {
 		const { description } = req.body;
 
 		if (!description) {
-			return res
-				.status(HttpStatus.BAD_REQUEST)
-				.json(
-					ApiResponse.error(
-						ErrorCodes.MISSING_REQUIRED_FIELD,
-						"Description field is required",
-					),
-				);
+			return res.status(HttpStatus.BAD_REQUEST).json(ApiResponse.error(ErrorCodes.MISSING_REQUIRED_FIELD, "Description field is required"));
 		}
 
 		const { default: vectorIndex } = await import("../services/vector-index");
@@ -178,14 +133,7 @@ router.post("/api/images/find", async (req, res) => {
 
 		res.json(ApiResponse.success(image));
 	} catch (error) {
-		res
-			.status(HttpStatus.NOT_FOUND)
-			.json(
-				ApiResponse.error(
-					ErrorCodes.NOT_FOUND,
-					error instanceof Error ? error.message : "Image not found",
-				),
-			);
+		res.status(HttpStatus.NOT_FOUND).json(ApiResponse.error(ErrorCodes.NOT_FOUND, error instanceof Error ? error.message : "Image not found"));
 	}
 });
 
@@ -198,14 +146,9 @@ router.delete("/api/images/:id", async (req, res) => {
 		await imageProcessingService.deleteImage(req.params.id);
 		res.json(ApiResponse.success({ deleted: true, id: req.params.id }));
 	} catch (error) {
-		res
-			.status(HttpStatus.INTERNAL_SERVER_ERROR)
-			.json(
-				ApiResponse.error(
-					ErrorCodes.INTERNAL_ERROR,
-					error instanceof Error ? error.message : "Delete failed",
-				),
-			);
+		res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
+			ApiResponse.error(ErrorCodes.INTERNAL_ERROR, error instanceof Error ? error.message : "Delete failed")
+		);
 	}
 });
 

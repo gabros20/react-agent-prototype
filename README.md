@@ -713,6 +713,85 @@ See **[docs/IMAGE_ARCHITECTURE.md](docs/IMAGE_ARCHITECTURE.md)** for complete ar
 - **[docs/IMAGE_SYSTEM_COMPLETE.md](docs/IMAGE_SYSTEM_COMPLETE.md)** - Implementation summary
 - **[docs/IMAGE_ARCHITECTURE.md](docs/IMAGE_ARCHITECTURE.md)** - Architecture pattern and decision record
 
+## Web Research (Exa AI)
+
+AI-powered web research tools for gathering fresh, up-to-date information from the web.
+
+### Features
+
+- 🔍 **Quick Search** - Fast web lookups for news, facts, and resources
+- 📚 **Deep Research** - Comprehensive multi-source research with citations
+- 📄 **Content Fetch** - Extract full text and summaries from URLs
+- 🤖 **Smart Mode Selection** - Agent automatically chooses shallow vs deep research
+
+### Setup
+
+1. **Get Exa API Key** from [https://dashboard.exa.ai](https://dashboard.exa.ai)
+
+2. **Add to `.env`**:
+```bash
+EXA_API_KEY=your-api-key-here
+EXA_DEFAULT_MODEL=exa-research        # or exa-research-pro for higher quality
+EXA_RESEARCH_TIMEOUT=120              # seconds (30-300)
+```
+
+3. **Test the integration**:
+```bash
+# Quick search test
+pnpm tsx scripts/test-exa-search.ts quick
+
+# Deep research test (takes 30-90s)
+pnpm tsx scripts/test-exa-search.ts deep
+
+# Fetch URL content
+pnpm tsx scripts/test-exa-search.ts fetch https://example.com
+```
+
+### Agent Tools
+
+Three web research tools available to the agent:
+
+| Tool | Use Case | Speed |
+|------|----------|-------|
+| `web_quickSearch` | Quick facts, news, links | <5s |
+| `web_deepResearch` | Blog posts, comprehensive pages | 30-120s |
+| `web_fetchContent` | Read specific URLs | <10s |
+
+### When to Use
+
+**Quick Search** (shallow):
+- "What's the weather in Paris?"
+- "Latest AI news"
+- "Find React documentation link"
+
+**Deep Research** (comprehensive):
+- "Create a blog post about sustainable fashion, search the web for recent trends"
+- "Build an about page, research AI industry statistics"
+- "Write an article on renewable energy innovations"
+
+### Example Prompts
+
+```
+"What's the current Bitcoin price?"
+→ Uses web_quickSearch with livecrawl: "always" for real-time data
+
+"Create a blog post about electric vehicles, research the latest developments"
+→ Uses web_deepResearch first, then cms_createPost with research findings
+
+"Read this article and summarize: https://example.com/article"
+→ Uses web_fetchContent with includeSummary: true
+```
+
+### Cost
+
+| Operation | exa-research | exa-research-pro |
+|-----------|--------------|------------------|
+| Search | $5/1k queries | $5/1k queries |
+| Page read | $5/1k pages | $10/1k pages |
+| Research task | ~$0.10-0.20 | ~$0.15-0.30 |
+
+Costs are logged in tool responses for visibility.
+
 ## Development Workflow
 
 ### Recommended Daily Workflow

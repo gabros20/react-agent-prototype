@@ -24,6 +24,8 @@
 -   [x] Sprint 16: Link Normalization & Standardization (✅ Completed)
 -   [x] Sprint 17: Image System Cleanup & API Standardization (✅ Completed)
 -   [x] Sprint 18: System Reset Infrastructure & Navigation Fix (✅ Completed)
+-   [x] Sprint 20: Page Creation & Navigation URL Format Fix (✅ Completed)
+-   [x] Sprint 21: Exa AI Web Research Tools (✅ Completed)
 
 ---
 
@@ -4191,5 +4193,189 @@ Tasks:
 ✅ **Workflow examples** - Complete page → nav flow in prompts
 ✅ **Contextual content** - Pages created with relevant AI-generated content
 ✅ **Smart navigation** - Agent suggests appropriate placement
+
+---
+
+## Sprint 21: Exa AI Web Research Tools ✅
+
+**Status**: Completed
+**Started**: 2025-11-26
+**Completed**: 2025-11-26
+
+### Objective
+
+Add web research capabilities to the agent using Exa AI's API, enabling both quick lookups for fresh information and deep multi-source research for content generation.
+
+### Features Implemented
+
+1. **Quick Search** (`web_quickSearch`)
+   - Fast web lookups for news, facts, current events
+   - Category filtering (news, company, research paper, pdf, github, tweet, etc.)
+   - Domain include/exclude lists
+   - Recent-only filter (last 7 days)
+   - Livecrawl options for real-time data
+
+2. **Deep Research** (`web_deepResearch`)
+   - Comprehensive multi-source research (async, 30-120s)
+   - Structured output with custom sections
+   - Citation tracking with URLs and snippets
+   - Statistics and data point extraction
+   - Two model options: `exa-research` (faster/cheaper) or `exa-research-pro` (higher quality)
+
+3. **Content Fetch** (`web_fetchContent`)
+   - Fetch full text from specific URLs
+   - AI-generated summaries with custom focus
+   - Support for up to 10 URLs per request
+   - Character limit controls
+
+### Implementation
+
+#### Files Created (5 files)
+
+1. **server/types/exa.ts** (~180 lines)
+   - TypeScript interfaces for Exa API types
+   - Search, Contents, and Research API types
+   - Tool input/output types for agent tools
+
+2. **server/services/ai/exa-research.service.ts** (~300 lines)
+   - `ExaResearchService` class encapsulating all Exa API calls
+   - Methods: `search()`, `quickSearch()`, `getContents()`, `fetchUrlContent()`
+   - Methods: `startResearch()`, `getResearchStatus()`, `waitForResearch()`, `deepResearch()`
+   - Singleton instance via `getExaService()`
+   - Polling mechanism for async research jobs
+   - Error handling and timeout management
+
+3. **server/tools/web-research-tools.ts** (~200 lines)
+   - Three tool definitions using AI SDK v6 native patterns
+   - Zod schemas for input validation
+   - Detailed descriptions for agent understanding
+   - `webResearchTools` export object
+
+4. **scripts/test-exa-search.ts** (~180 lines)
+   - Test script for all three tools
+   - Usage: `pnpm tsx scripts/test-exa-search.ts [quick|deep|fetch]`
+   - Formatted output with timing and cost info
+
+5. **docs/plans/EXA_WEB_RESEARCH_TOOLS.md** (~300 lines)
+   - Comprehensive implementation plan
+   - API architecture documentation
+   - Agent decision logic guidelines
+   - Cost considerations and examples
+
+#### Files Modified (3 files)
+
+1. **.env**
+   - Added `EXA_API_KEY` environment variable
+   - Added `EXA_DEFAULT_MODEL` (default: exa-research)
+   - Added `EXA_RESEARCH_TIMEOUT` (default: 120 seconds)
+
+2. **server/tools/all-tools.ts**
+   - Imported web research tools
+   - Added `web_quickSearch`, `web_deepResearch`, `web_fetchContent` to ALL_TOOLS
+   - Added tool metadata with category 'web-research'
+
+3. **server/prompts/react.xml** (~160 lines added)
+   - Added **WEB RESEARCH (Exa AI)** section
+   - Research tool descriptions and use cases
+   - When to use shallow vs deep search guidance
+   - Research → content workflow pattern
+   - Quick search example (EV news)
+   - Deep research example (blog post about sustainable fashion)
+   - Fetch URL content example
+   - Research tips and best practices
+
+4. **README.md**
+   - Added **Web Research (Exa AI)** section
+   - Setup instructions with API key
+   - Tool comparison table
+   - Example prompts
+   - Cost information
+
+### Agent Decision Logic
+
+**Use Quick Search When:**
+- Simple questions (weather, prices, current events)
+- Finding specific resources or links
+- Recent news on a topic
+- Verifying information
+- User asks for "quick" or "brief" information
+
+**Use Deep Research When:**
+- Creating blog posts or articles
+- Building comprehensive pages
+- User explicitly says "research" or "search the web for"
+- Complex topics needing multiple perspectives
+- Content that should cite sources
+
+### Workflow: Research → Content
+
+```
+User: "Create a blog post about sustainable fashion, search the web for recent trends"
+
+1. Agent detects: content creation + research request
+2. Action: web_deepResearch
+   Input: {
+     topic: "Sustainable fashion trends 2024-2025",
+     sections: ["overview", "key_trends", "innovations", "challenges"],
+     includeStatistics: true
+   }
+3. Wait 30-90 seconds for research completion
+4. Agent receives: structured report + citations
+5. Action: cms_createPost
+   Input: {
+     title: "...",
+     content: { body: "...(informed by research)..." },
+     ...
+   }
+6. Result: Well-researched, cited blog post
+```
+
+### Cost Estimates
+
+| Operation | exa-research | exa-research-pro |
+|-----------|--------------|------------------|
+| Search query | ~$0.005 | ~$0.005 |
+| Page content | ~$0.005/page | ~$0.010/page |
+| Deep research task | ~$0.10-0.20 | ~$0.15-0.30 |
+
+### Testing
+
+```bash
+# Quick search test
+pnpm tsx scripts/test-exa-search.ts quick
+# → Returns 5 results with snippets in <5s
+
+# Deep research test (takes 30-90s)
+pnpm tsx scripts/test-exa-search.ts deep
+# → Returns structured report with citations
+
+# Fetch URL content test
+pnpm tsx scripts/test-exa-search.ts fetch https://exa.ai
+# → Returns page text and AI summary
+```
+
+### TypeScript Status
+
+✅ **Zero Errors**: `pnpm typecheck` passes
+
+### Deliverables
+
+✅ **3 new web research tools** - Quick search, deep research, content fetch
+✅ **Exa service** - Complete API client with polling for async research
+✅ **TypeScript types** - Full type coverage for Exa API
+✅ **Agent prompts** - Comprehensive guidance for when/how to use tools
+✅ **Test script** - Easy verification of all tools
+✅ **Documentation** - README section + implementation plan
+✅ **Cost logging** - Costs returned in tool responses
+✅ **0 TypeScript errors** - Clean build
+
+### Benefits
+
+✅ **Fresh information** - Agent can get real-time web data
+✅ **Research-backed content** - Blog posts with citations and sources
+✅ **Smart mode selection** - Agent chooses shallow/deep based on context
+✅ **Cost visibility** - Costs logged in responses
+✅ **Flexible** - Category filters, domain controls, date filters
+✅ **Comprehensive** - Quick facts to deep research covered
 
 ---

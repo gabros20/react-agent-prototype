@@ -35,6 +35,11 @@ import {
   cmsGetPost
 } from './post-tools'
 import {
+  webQuickSearchTool,
+  webDeepResearchTool,
+  webFetchContentTool
+} from './web-research-tools'
+import {
   generateHeroContent,
   generateMetadata,
   generateSlug
@@ -848,7 +853,12 @@ export const ALL_TOOLS = {
   'http_post': httpPost,
 
   // Planning
-  'plan_analyzeTask': planAnalyzeTask
+  'plan_analyzeTask': planAnalyzeTask,
+
+  // Web Research (Exa AI)
+  'web_quickSearch': webQuickSearchTool,
+  'web_deepResearch': webDeepResearchTool,
+  'web_fetchContent': webFetchContentTool
 }
 
 // ============================================================================
@@ -1101,5 +1111,23 @@ export const TOOL_METADATA = {
     riskLevel: 'safe',
     requiresApproval: false,
     tags: ['read', 'post']
+  },
+  'web_quickSearch': {
+    category: 'web-research',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'search', 'web', 'external']
+  },
+  'web_deepResearch': {
+    category: 'web-research',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['read', 'research', 'web', 'external', 'async']
+  },
+  'web_fetchContent': {
+    category: 'web-research',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'fetch', 'web', 'external']
   }
 } as const
