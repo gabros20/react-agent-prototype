@@ -50,44 +50,44 @@ import { PageService } from './page-service';
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    SERVICE CONTAINER                             │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                  Static Instance                         │    │
-│  │                                                          │    │
-│  │  ServiceContainer.instance (singleton)                   │    │
-│  │       │                                                  │    │
-│  │       ▼                                                  │    │
-│  │  ┌────────────────────────────────────────────────────┐ │    │
-│  │  │              Instance Properties                    │ │    │
-│  │  │                                                     │ │    │
-│  │  │  readonly db: DrizzleDB                            │ │    │
-│  │  │  readonly vectorIndex: VectorIndexService          │ │    │
-│  │  │  readonly pageService: PageService                 │ │    │
-│  │  │  readonly sectionService: SectionService           │ │    │
-│  │  │  readonly entryService: EntryService               │ │    │
-│  │  │  readonly sessionService: SessionService           │ │    │
-│  │  └────────────────────────────────────────────────────┘ │    │
-│  │                                                          │    │
-│  │  Static Methods:                                         │    │
-│  │  ├─ initialize(db) → Promise<ServiceContainer>          │    │
-│  │  └─ get() → ServiceContainer                             │    │
-│  │                                                          │    │
-│  │  Instance Methods:                                       │    │
-│  │  └─ dispose() → Promise<void>                            │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-│  Access Pattern:                                                 │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  // At startup (once)                                    │    │
-│  │  const services = await ServiceContainer.initialize(db); │    │
-│  │                                                          │    │
-│  │  // Anywhere else                                        │    │
-│  │  const services = ServiceContainer.get();                │    │
-│  │  await services.pageService.createPage(...);             │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                    SERVICE CONTAINER                           │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                  Static Instance                         │  │
+│  │                                                          │  │
+│  │  ServiceContainer.instance (singleton)                   │  │
+│  │       │                                                  │  │
+│  │       ▼                                                  │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │              Instance Properties                   │  │  │
+│  │  │                                                    │  │  │
+│  │  │  readonly db: DrizzleDB                            │  │  │
+│  │  │  readonly vectorIndex: VectorIndexService          │  │  │
+│  │  │  readonly pageService: PageService                 │  │  │
+│  │  │  readonly sectionService: SectionService           │  │  │
+│  │  │  readonly entryService: EntryService               │  │  │
+│  │  │  readonly sessionService: SessionService           │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  │                                                          │  │
+│  │  Static Methods:                                         │  │
+│  │  ├─ initialize(db) → Promise<ServiceContainer>           │  │
+│  │  └─ get() → ServiceContainer                             │  │
+│  │                                                          │  │
+│  │  Instance Methods:                                       │  │
+│  │  └─ dispose() → Promise<void>                            │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  Access Pattern:                                               │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  // At startup (once)                                    │  │
+│  │  const services = await ServiceContainer.initialize(db); │  │
+│  │                                                          │  │
+│  │  // Anywhere else                                        │  │
+│  │  const services = ServiceContainer.get();                │  │
+│  │  await services.pageService.createPage(...);             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---

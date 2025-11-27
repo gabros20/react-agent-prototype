@@ -48,33 +48,33 @@ const pages = await db.query.pages.findMany({
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    VECTOR INDEX SERVICE                          │
-│                                                                  │
-│  CMS Services                     Image Processing               │
+│                    VECTOR INDEX SERVICE                         │
+│                                                                 │
+│  CMS Services                     Image Processing              │
 │  ├─ PageService.create()         ├─ processImage()              │
 │  ├─ SectionService.create()      └─ generates metadata          │
 │  └─ EntryService.upsert()                │                      │
 │           │                              │                      │
 │           ▼                              ▼                      │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                 VectorIndexService                       │    │
-│  │                                                          │    │
-│  │  Resource Operations:          Image Operations:         │    │
+│  │                 VectorIndexService                      │    │
+│  │                                                         │    │
+│  │  Resource Operations:          Image Operations:        │    │
 │  │  ├─ add(doc)                  ├─ addImage(data)         │    │
 │  │  ├─ update(id, doc)           ├─ searchImages(query)    │    │
 │  │  ├─ delete(id)                ├─ findImageByDescription │    │
 │  │  ├─ search(query, type?)      └─ deleteImage(id)        │    │
 │  │  └─ exists(id)                                          │    │
-│  │                                                          │    │
-│  │  Embedding:                                              │    │
+│  │                                                         │    │
+│  │  Embedding:                                             │    │
 │  │  └─ embed(text) → OpenRouter API → 1536-dim vector      │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                      LanceDB                             │    │
-│  │                                                          │    │
-│  │  resource_index table:                                   │    │
+│  │                      LanceDB                            │    │
+│  │                                                         │    │
+│  │  resource_index table:                                  │    │
 │  │  ├─ id (string)            ├─ searchableText (string)   │    │
 │  │  ├─ type (enum)            ├─ metadataJson (string)     │    │
 │  │  ├─ name (string)          ├─ embedding (float[1536])   │    │

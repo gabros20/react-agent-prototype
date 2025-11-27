@@ -52,16 +52,16 @@ router.post("/pages", async (req, res) => {
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      CMS SERVICES                                │
-│                                                                  │
+│                      CMS SERVICES                               │
+│                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   ServiceContainer                       │    │
-│  │                                                          │    │
+│  │                   ServiceContainer                      │    │
+│  │                                                         │    │
 │  │  pageService = new PageService(db, vectorIndex)         │    │
 │  │  sectionService = new SectionService(db, vectorIndex)   │    │
 │  │  entryService = new EntryService(db, vectorIndex)       │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
+│                                                                 │
 │  ┌───────────────────┬───────────────────┬──────────────────┐   │
 │  │    PageService    │  SectionService   │   EntryService   │   │
 │  ├───────────────────┼───────────────────┼──────────────────┤   │
@@ -72,15 +72,15 @@ router.post("/pages", async (req, res) => {
 │  │ listPages()       │ getSectionContent()│ getEntryBySlug()│   │
 │  │ deletePage()      │ deleteSectionDef()│ deleteEntry()    │   │
 │  └────────┬──────────┴────────┬──────────┴────────┬─────────┘   │
-│           │                   │                   │              │
-│           ▼                   ▼                   ▼              │
+│           │                   │                   │             │
+│           ▼                   ▼                   ▼             │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    VectorIndexService                    │    │
-│  │                                                          │    │
+│  │                    VectorIndexService                   │    │
+│  │                                                         │    │
 │  │  add({ id, type, name, slug, searchableText })          │    │
-│  │  update(id, { ... })                                     │    │
-│  │  delete(id)                                              │    │
-│  │  search(query, type?, limit?)                            │    │
+│  │  update(id, { ... })                                    │    │
+│  │  delete(id)                                             │    │
+│  │  search(query, type?, limit?)                           │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
 ```

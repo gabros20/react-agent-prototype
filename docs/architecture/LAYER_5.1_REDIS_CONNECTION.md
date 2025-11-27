@@ -48,13 +48,13 @@ redis.on('error', () => {});  // Silent failure
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    REDIS CONNECTIONS                             │
-│                                                                  │
+│                    REDIS CONNECTIONS                            │
+│                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    Redis Server                          │    │
-│  │                    localhost:6379                        │    │
+│  │                    Redis Server                         │    │
+│  │                    localhost:6379                       │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
+│                        │                                        │
 │         ┌──────────────┼──────────────┐                         │
 │         │              │              │                         │
 │         ▼              ▼              ▼                         │
@@ -67,11 +67,11 @@ redis.on('error', () => {});  // Silent failure
 │         │              │              │                         │
 │         ▼              ▼              ▼                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   Event Handlers                         │    │
-│  │                                                          │    │
+│  │                   Event Handlers                        │    │
+│  │                                                         │    │
 │  │  • connect   → ✅ [Queue/Worker] Redis connected        │    │
 │  │  • error     → ❌ [Queue/Worker] Redis error: ...       │    │
-│  │  • close     → ⚠️  [Worker] Redis connection closed      │    │
+│  │  • close     → ⚠️  [Worker] Redis connection closed     │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
 ```

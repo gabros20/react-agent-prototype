@@ -13,175 +13,282 @@
 
 **The full picture: from user message to final response**
 
+This diagram shows how all agent components connect. Use it as a map to understand the system before diving into code.
+
+**Source Files:**
+
+-   Agent Orchestrator: `server/agent/orchestrator.ts`
+-   Routes: `server/routes/agent.ts`
+-   Tools: `server/tools/all-tools.ts`
+-   Prompts: `server/prompts/react.xml`
+-   Working Memory: `server/services/working-memory/`
+-   Client Hook: `app/assistant/_hooks/use-agent.ts`
+-   Stores: `app/assistant/_stores/`
+
 **Layers shown:** [Layer 1](./LAYER_1_SERVER_CORE.md) | [Layer 2](./LAYER_2_DATABASE.md) | [Layer 3](./LAYER_3_AGENT.md) | [Layer 4](./LAYER_4_SERVICES.md) | [Layer 6](./LAYER_6_CLIENT.md)
 
 ```mermaid
 flowchart TB
-    subgraph UserInterface["👤 User Interface (Layer 6)"]
-        UI[Chat Input]
-        UIStore[(Zustand Store)]
-        UIRender[Chat Messages]
+    subgraph Frontend["Frontend - app/assistant/"]
+        subgraph ReactUI["React Components"]
+            ChatPane["ChatPane.tsx"]
+            MessageInput["Message Input"]
+            ApprovalModal["ApprovalModal.tsx"]
+        end
+
+        subgraph ZustandStores["Zustand Stores - _stores/"]
+            ChatStore["useChatStore<br/>messages, sessionId, isStreaming"]
+            SessionStore["useSessionStore<br/>sessions, currentSessionId"]
+            ApprovalStore["useApprovalStore<br/>pendingApproval"]
+            LogStore["useLogStore<br/>execution logs"]
+        end
+
+        subgraph ClientHook["Hook - _hooks/use-agent.ts"]
+            UseAgent["useAgent()<br/>sendMessage, messages, isStreaming"]
+            SSEParser["SSE Parser<br/>ReadableStream + TextDecoder"]
+        end
     end
 
-    subgraph SSELayer["📡 SSE Streaming (Layer 6.2)"]
-        SSEClient[useAgent Hook]
-        SSEParser[Buffer Parser]
+    subgraph NextProxy["Next.js Proxy - app/api/agent/route.ts"]
+        ProxyRoute["POST /api/agent<br/>Proxies to backend"]
     end
 
-    subgraph ServerRoutes["🚀 Express Routes (Layer 1.5)"]
-        Route[POST /v1/agent/stream]
-        SSEWriter[SSE Response Writer]
+    subgraph Backend["Backend - server/"]
+        subgraph ExpressRoutes["Routes - routes/agent.ts"]
+            StreamRoute["POST /v1/agent/stream"]
+            ApprovalRoute["POST /v1/agent/approval/:approvalId"]
+            WriteSSE["writeSSE()<br/>event + data format"]
+        end
+
+        subgraph Container["ServiceContainer - services/service-container.ts"]
+            ContainerSingleton["ServiceContainer.get()<br/>Singleton Pattern"]
+            DbInstance["db: DrizzleDB"]
+            VectorIndex["vectorIndex: VectorIndexService"]
+            Services["services:<br/>PageService, SectionService,<br/>EntryService, SessionService"]
+        end
+
+        subgraph ContextBuild["Context Assembly"]
+            AgentContext["AgentContext<br/>db, vectorIndex, services,<br/>logger, stream, traceId,<br/>sessionId, cmsTarget"]
+        end
+
+        subgraph PromptCompilation["Prompt System - prompts/"]
+            ReactXML["react.xml<br/>Handlebars Template"]
+            WorkingMemStr["workingMemory variable"]
+            ToolsFormatted["toolsFormatted variable"]
+            HandlebarsCompile["Handlebars.compile()"]
+            SystemPrompt["Compiled System Prompt<br/>~2800 tokens"]
+        end
+
+        subgraph WorkingMem["Working Memory - services/working-memory/"]
+            WorkingContext["WorkingContext class<br/>MAX_ENTITIES = 10"]
+            EntityExtractor["EntityExtractor class<br/>Pattern matching extraction"]
+            ToContextString["toContextString()<br/>Groups by entity type"]
+        end
+
+        subgraph Orchestrator["Agent Orchestrator - agent/orchestrator.ts"]
+            CreateAgent["createAgent()<br/>Instantiates ToolLoopAgent"]
+            StreamWithApproval["streamAgentWithApproval()<br/>Main entry point"]
+
+            subgraph ReActLoop["ReAct Loop - AI SDK v6 ToolLoopAgent"]
+                PrepareStep["prepareStep<br/>Auto-checkpoint every 3 steps<br/>Trim history if more than 20 msgs"]
+                Think["THINK<br/>Analyze user request + context"]
+                Act["ACT<br/>Select and call tool"]
+                Observe["OBSERVE<br/>Process tool result"]
+                OnStepFinish["onStepFinish<br/>Emit SSE events"]
+                StopCondition{"Stop Condition<br/>FINAL_ANSWER detected?<br/>maxSteps: 15 reached?"}
+            end
+        end
+
+        subgraph ToolSystem["Tool Registry - tools/"]
+            AllTools["ALL_TOOLS constant<br/>48 tools"]
+
+            subgraph ToolCategories["Tool Categories"]
+                CmsTools["cms_* tools<br/>getPage, createPage,<br/>addSectionToPage, etc."]
+                SearchTools["search_* tools<br/>searchVector"]
+                WebTools["web_* tools<br/>quickSearch, deepResearch"]
+                PexelsTools["pexels_* tools<br/>searchPhotos, downloadPhoto"]
+                HttpTools["http_* tools<br/>httpGet, httpPost"]
+            end
+
+            ToolDef["tool() definition<br/>description, inputSchema,<br/>needsApproval?, execute"]
+            ZodSchema["Zod Schema<br/>Input validation"]
+            ExperimentalContext["experimental_context<br/>as AgentContext"]
+        end
+
+        subgraph HITLSystem["HITL - services/approval-queue.ts"]
+            ApprovalQueue["ApprovalQueue singleton<br/>pendingRequests Map<br/>resolvers Map"]
+            RequestApproval["requestApproval()<br/>Returns Promise, 5min timeout"]
+            RespondApproval["respondToApproval()<br/>Resolves Promise"]
+        end
+
+        subgraph ServicesLayer["Services Layer - services/"]
+            PageService["PageService"]
+            SectionService["SectionService"]
+            EntryService["EntryService"]
+            ImageService["ImageService"]
+            SessionService["SessionService<br/>saveMessages, loadMessages"]
+            VectorService["VectorIndexService<br/>search, sync"]
+        end
+
+        subgraph Database["Database Layer - db/"]
+            DrizzleORM["Drizzle ORM"]
+            SQLiteDB[("SQLite<br/>data/sqlite.db")]
+            LanceDB[("LanceDB<br/>data/lance-db/")]
+        end
+
+        subgraph ErrorRecovery["Error Recovery"]
+            ExecuteWithRetry["executeAgentWithRetry()<br/>max 3 retries"]
+            ExponentialBackoff["Exponential Backoff<br/>1s, 2s, 4s, max 10s"]
+            Checkpoint["Checkpoint<br/>Every 3 steps via prepareStep"]
+        end
     end
 
-    subgraph ContextInjection["🔧 Context Injection (Layer 3.8)"]
-        Container[ServiceContainer<br/>Singleton]
-        ContextAssembly[AgentContext Assembly]
-        CmsTarget[CMS Target Resolution<br/>siteId, environmentId]
-        TraceId[TraceId Generation<br/>UUID per request]
-    end
+    %% === FLOW 1: User sends message ===
+    MessageInput -->|"user types message"| ChatStore
+    ChatStore -->|"setIsStreaming(true)"| UseAgent
+    UseAgent -->|"POST /api/agent<br/>sessionId, prompt"| ProxyRoute
+    ProxyRoute -->|"forward request"| StreamRoute
 
-    subgraph PromptSystem["📝 Prompt System (Layer 3.4)"]
-        PromptTemplate[react.xml Template<br/>~1200 lines]
-        Handlebars[Handlebars Compiler]
-        CompiledPrompt[Compiled System Prompt]
-    end
+    %% === FLOW 2: Context Assembly ===
+    StreamRoute -->|"ServiceContainer.get()"| ContainerSingleton
+    ContainerSingleton --> DbInstance
+    ContainerSingleton --> VectorIndex
+    ContainerSingleton --> Services
+    DbInstance --> AgentContext
+    VectorIndex --> AgentContext
+    Services --> AgentContext
+    StreamRoute -->|"traceId: crypto.randomUUID()"| AgentContext
 
-    subgraph WorkingMemory["🧠 Working Memory (Layer 3.3)"]
-        EntityExtractor[Entity Extractor]
-        SlidingWindow[Sliding Window<br/>max 10 entities]
-        MemoryContext[Memory Context String]
-    end
+    %% === FLOW 3: Working Memory Load ===
+    AgentContext -->|"getWorkingContext(sessionId)"| WorkingContext
+    WorkingContext --> ToContextString
+    ToContextString --> WorkingMemStr
 
-    subgraph AgentCore["🤖 ReAct Loop (Layer 3.1)"]
-        ToolLoopAgent[ToolLoopAgent<br/>AI SDK v6]
-        Think[THINK<br/>Analyze context]
-        Act[ACT<br/>Execute tool]
-        Observe[OBSERVE<br/>Process result]
-        StopCheck{FINAL_ANSWER?<br/>Max Steps?}
-    end
+    %% === FLOW 4: Prompt Compilation ===
+    ReactXML --> HandlebarsCompile
+    WorkingMemStr --> HandlebarsCompile
+    ToolsFormatted --> HandlebarsCompile
+    AllTools -->|"Object.keys()"| ToolsFormatted
+    HandlebarsCompile --> SystemPrompt
 
-    subgraph ToolRegistry["🔨 Tool Registry (Layer 3.2)"]
-        AllTools[ALL_TOOLS<br/>21 tools]
-        ToolExec[Tool Execute Function]
-        ZodValidation[Zod Schema Validation]
-    end
+    %% === FLOW 5: Agent Creation ===
+    SystemPrompt --> CreateAgent
+    AgentContext --> CreateAgent
+    AllTools --> CreateAgent
+    CreateAgent --> StreamWithApproval
 
-    subgraph HITLSystem["⚠️ HITL Approval (Layer 3.5)"]
-        ApprovalCheck{Needs Approval?}
-        ApprovalQueue[Approval Queue]
-        UserDecision[User Approve/Reject]
-    end
-
-    subgraph Services["⚙️ Services (Layer 4)"]
-        PageService[PageService]
-        SectionService[SectionService]
-        EntryService[EntryService]
-        ImageService[ImageService]
-        SessionService[SessionService]
-    end
-
-    subgraph Database["💾 Database (Layer 2)"]
-        SQLite[(SQLite + Drizzle)]
-        VectorStore[(LanceDB Vector)]
-    end
-
-    subgraph ErrorRecovery["🔄 Error Recovery (Layer 3.6)"]
-        RetryLogic[Retry with Backoff<br/>3 attempts]
-        Checkpoint[Checkpoint System<br/>every 3 steps]
-    end
-
-    %% User Flow
-    UI -->|user message| UIStore
-    UIStore -->|POST request| SSEClient
-    SSEClient -->|fetch with SSE| Route
-
-    %% Context Setup
-    Route --> Container
-    Container --> ContextAssembly
-    ContextAssembly --> CmsTarget
-    ContextAssembly --> TraceId
-
-    %% Prompt Compilation
-    ContextAssembly --> Handlebars
-    PromptTemplate --> Handlebars
-    SlidingWindow --> MemoryContext
-    MemoryContext -->|workingMemory var| Handlebars
-    Handlebars --> CompiledPrompt
-
-    %% Agent Initialization
-    CompiledPrompt --> ToolLoopAgent
-    ContextAssembly -->|experimental_context| ToolLoopAgent
-    AllTools --> ToolLoopAgent
-
-    %% ReAct Loop
-    ToolLoopAgent --> Think
+    %% === FLOW 6: ReAct Loop Execution ===
+    StreamWithApproval --> PrepareStep
+    PrepareStep --> Think
+    Think -->|"check WorkingContext"| WorkingContext
     Think --> Act
-    Act --> ApprovalCheck
+    Act -->|"select tool from ALL_TOOLS"| ToolDef
 
-    %% HITL Branch
-    ApprovalCheck -->|delete/destructive| ApprovalQueue
-    ApprovalQueue -->|SSE event| SSEWriter
-    SSEWriter -->|approval-required| SSEParser
-    SSEParser --> UIRender
-    UIRender --> UserDecision
-    UserDecision -->|approve/reject| Route
-    Route --> ApprovalQueue
-    ApprovalQueue -->|continue/cancel| ToolExec
+    %% === FLOW 7: Tool Execution ===
+    ToolDef --> ZodSchema
+    ZodSchema -->|"validate input"| ExperimentalContext
+    ExperimentalContext -->|"ctx.services.pageService"| PageService
+    ExperimentalContext --> SectionService
+    ExperimentalContext --> EntryService
+    ExperimentalContext --> ImageService
+    ExperimentalContext -->|"ctx.vectorIndex"| VectorService
 
-    %% Normal Tool Execution
-    ApprovalCheck -->|safe operation| ZodValidation
-    ZodValidation --> ToolExec
-    ToolExec -->|via ctx.services| PageService
-    ToolExec --> SectionService
-    ToolExec --> EntryService
-    ToolExec --> ImageService
+    %% === FLOW 8: Service to Database ===
+    PageService --> DrizzleORM
+    SectionService --> DrizzleORM
+    EntryService --> DrizzleORM
+    ImageService --> DrizzleORM
+    VectorService --> LanceDB
+    DrizzleORM --> SQLiteDB
 
-    %% Database Access
-    PageService --> SQLite
-    SectionService --> SQLite
-    EntryService --> SQLite
-    ImageService --> VectorStore
+    %% === FLOW 9: HITL Branch (needsApproval tools) ===
+    ToolDef -->|"needsApproval: true"| ApprovalQueue
+    ApprovalQueue -->|"requestApproval()"| RequestApproval
+    RequestApproval -->|"SSE: approval-required"| WriteSSE
+    WriteSSE --> SSEParser
+    SSEParser -->|"setPendingApproval()"| ApprovalStore
+    ApprovalStore --> ApprovalModal
+    ApprovalModal -->|"user decision"| ApprovalRoute
+    ApprovalRoute -->|"respondToApproval()"| RespondApproval
+    RespondApproval -->|"Promise resolves"| ExperimentalContext
 
-    %% Error Handling
-    ToolExec -.->|on error| RetryLogic
-    RetryLogic -.->|retry| ToolExec
-    RetryLogic -.->|max retries| Observe
+    %% === FLOW 10: Observe Phase ===
+    ExperimentalContext -->|"tool result"| Observe
+    Observe -->|"EntityExtractor.extract()"| EntityExtractor
+    EntityExtractor -->|"addMany(entities)"| WorkingContext
 
-    %% Observation Phase
-    ToolExec --> Observe
-    Observe --> EntityExtractor
-    EntityExtractor --> SlidingWindow
+    %% === FLOW 11: SSE Events During Loop ===
+    OnStepFinish -->|"tool-call, tool-result"| WriteSSE
+    Observe --> OnStepFinish
+    OnStepFinish --> StopCondition
 
-    %% Checkpoint
-    Observe --> Checkpoint
+    %% === FLOW 12: Loop Control ===
+    StopCondition -->|"continue"| PrepareStep
+    StopCondition -->|"FINAL_ANSWER or step 15"| WriteSSE
+
+    %% === FLOW 13: Error Handling ===
+    ExperimentalContext -.->|"on error"| ExecuteWithRetry
+    ExecuteWithRetry -.-> ExponentialBackoff
+    ExponentialBackoff -.-> ExperimentalContext
+
+    %% === FLOW 14: Checkpointing ===
+    PrepareStep -->|"every 3 steps"| Checkpoint
     Checkpoint --> SessionService
-    SessionService --> SQLite
+    SessionService --> SQLiteDB
 
-    %% Loop Control
-    Observe --> StopCheck
-    StopCheck -->|continue| Think
-    StopCheck -->|done| SSEWriter
+    %% === FLOW 15: Response Stream ===
+    WriteSSE -->|"SSE format:<br/>event: type<br/>data: JSON"| SSEParser
+    SSEParser -->|"text-delta"| ChatStore
+    SSEParser -->|"tool-result"| LogStore
+    SSEParser -->|"result: sessionId"| SessionStore
+    ChatStore --> ChatPane
+    LogStore --> ChatPane
 
-    %% Response Stream
-    SSEWriter -->|text-delta, tool-result| SSEParser
-    SSEParser --> UIStore
-    UIStore --> UIRender
-
-    %% Styling
-    classDef core fill:#e1f5ff,stroke:#333
+    %% === STYLING ===
+    classDef frontend fill:#f3e5f5,stroke:#333
+    classDef store fill:#e1bee7,stroke:#333
+    classDef route fill:#bbdefb,stroke:#333
+    classDef context fill:#c8e6c9,stroke:#333
+    classDef prompt fill:#fff9c4,stroke:#333
     classDef memory fill:#ffe1f5,stroke:#333
-    classDef safety fill:#ffebeb,stroke:#333
+    classDef agent fill:#e1f5ff,stroke:#333
     classDef tool fill:#fff4e1,stroke:#333
-    classDef data fill:#e8f5e9,stroke:#333
-    classDef ui fill:#f3e5f5,stroke:#333
+    classDef hitl fill:#ffcdd2,stroke:#333
+    classDef service fill:#b2dfdb,stroke:#333
+    classDef db fill:#d7ccc8,stroke:#333
+    classDef error fill:#ffccbc,stroke:#333
 
-    class ToolLoopAgent,Think,Act,Observe,StopCheck core
-    class EntityExtractor,SlidingWindow,MemoryContext memory
-    class ApprovalCheck,ApprovalQueue,UserDecision safety
-    class AllTools,ToolExec,ZodValidation tool
-    class SQLite,VectorStore data
-    class UI,UIStore,UIRender,SSEClient ui
+    class ChatPane,MessageInput,ApprovalModal frontend
+    class ChatStore,SessionStore,ApprovalStore,LogStore store
+    class StreamRoute,ApprovalRoute,WriteSSE,ProxyRoute route
+    class AgentContext,ContainerSingleton,DbInstance,VectorIndex,Services context
+    class ReactXML,WorkingMemStr,ToolsFormatted,HandlebarsCompile,SystemPrompt prompt
+    class WorkingContext,EntityExtractor,ToContextString memory
+    class CreateAgent,StreamWithApproval,PrepareStep,Think,Act,Observe,OnStepFinish,StopCondition agent
+    class AllTools,CmsTools,SearchTools,WebTools,PexelsTools,HttpTools,ToolDef,ZodSchema,ExperimentalContext tool
+    class ApprovalQueue,RequestApproval,RespondApproval hitl
+    class PageService,SectionService,EntryService,ImageService,SessionService,VectorService service
+    class DrizzleORM,SQLiteDB,LanceDB db
+    class ExecuteWithRetry,ExponentialBackoff,Checkpoint error
 ```
+
+### How to Read This Diagram
+
+**Entry Point:** User types in `ChatPane.tsx` → message goes to `useChatStore` → `useAgent()` hook sends POST to `/api/agent`
+
+**Context Assembly:** Backend builds `AgentContext` from `ServiceContainer` singleton - this is the "bag of dependencies" every tool receives
+
+**Prompt Compilation:** `react.xml` template + `workingMemory` + `toolsFormatted` → Handlebars compiles → final system prompt
+
+**ReAct Loop:** `ToolLoopAgent` runs Think→Act→Observe cycle up to 15 steps or until `FINAL_ANSWER` is detected
+
+**Tool Execution:** Tools access services via `experimental_context as AgentContext` - no globals, no closures
+
+**HITL Flow:** Tools with `needsApproval: true` pause execution, send SSE event, wait for user decision
+
+**Working Memory:** `EntityExtractor` pulls entities from tool results → `WorkingContext` tracks last 10 → enables "the page" reference resolution
+
+**Streaming:** All events flow through `writeSSE()` → SSE format → `useAgent()` parser → Zustand stores → React re-render
 
 ---
 

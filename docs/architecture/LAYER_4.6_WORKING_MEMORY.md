@@ -49,34 +49,34 @@ recentPages.push(page.id);
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    WORKING MEMORY SYSTEM                         │
-│                                                                  │
-│  Tool Execution                                                  │
-│       │                                                          │
-│       ▼                                                          │
+│                    WORKING MEMORY SYSTEM                        │
+│                                                                 │
+│  Tool Execution                                                 │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                 EntityExtractor                          │    │
-│  │                                                          │    │
-│  │  extract(toolName, toolResult):                          │    │
+│  │                 EntityExtractor                         │    │
+│  │                                                         │    │
+│  │  extract(toolName, toolResult):                         │    │
 │  │  ├─ Pattern 1: Single resource → { id, name, slug }     │    │
 │  │  ├─ Pattern 2: Search results → matches[0..2]           │    │
 │  │  ├─ Pattern 3: List results → items[0..4]               │    │
 │  │  └─ Pattern 4: Paginated → data[0..4]                   │    │
-│  │                                                          │    │
-│  │  inferType(toolName):                                    │    │
+│  │                                                         │    │
+│  │  inferType(toolName):                                   │    │
 │  │  ├─ cms_getPage → "page"                                │    │
 │  │  ├─ cms_getSection → "section"                          │    │
 │  │  ├─ cms_listEntries → "entry"                           │    │
 │  │  └─ result.type fallback                                │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                  WorkingContext                          │    │
-│  │                                                          │    │
+│  │                  WorkingContext                         │    │
+│  │                                                         │    │
 │  │  entities: Entity[] (max 10, sliding window)            │    │
-│  │                                                          │    │
-│  │  Operations:                                             │    │
+│  │                                                         │    │
+│  │  Operations:                                            │    │
 │  │  ├─ add(entity)        → push to front, dedupe, prune   │    │
 │  │  ├─ addMany(entities)  → batch add                      │    │
 │  │  ├─ getRecent(n=5)     → last N entities                │    │
@@ -84,15 +84,15 @@ recentPages.push(page.id);
 │  │  ├─ toJSON()           → serialize for storage          │    │
 │  │  └─ fromJSON(state)    → deserialize from storage       │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
+│                        │                                        │
 │       ┌────────────────┴────────────────┐                       │
 │       ▼                                 ▼                       │
 │  System Prompt                    Session Storage               │
 │  "[WORKING MEMORY]                sessions.workingContext       │
 │   pages:                          (JSON column)                 │
-│   - "Home" (uuid-123)                                          │
+│   - "Home" (uuid-123)                                           │
 │   sections:                                                     │
-│   - "Hero" (uuid-456)"                                         │
+│   - "Hero" (uuid-456)"                                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

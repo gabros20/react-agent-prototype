@@ -10,25 +10,25 @@ This index provides a high-level view of the system's major architectural layers
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        CLIENT LAYER                              │
+│                        CLIENT LAYER                             │
 │  Next.js 16 • React 19 • Zustand • SSE Streaming                │
 ├─────────────────────────────────────────────────────────────────┤
-│                      RENDERING LAYER                             │
+│                      RENDERING LAYER                            │
 │  Nunjucks Templates • Section Variants • Asset Pipeline         │
 ├─────────────────────────────────────────────────────────────────┤
-│                        AGENT LAYER                               │
+│                        AGENT LAYER                              │
 │  ReAct Loop • Tool Registry • Working Memory • HITL Approval    │
 ├─────────────────────────────────────────────────────────────────┤
-│                       SERVICES LAYER                             │
+│                       SERVICES LAYER                            │
 │  PageService • SectionService • SessionService • VectorIndex    │
 ├─────────────────────────────────────────────────────────────────┤
-│                    BACKGROUND LAYER                              │
+│                    BACKGROUND LAYER                             │
 │  BullMQ • Redis • Image Worker • Async Processing               │
 ├─────────────────────────────────────────────────────────────────┤
-│                      DATABASE LAYER                              │
+│                      DATABASE LAYER                             │
 │  SQLite + Drizzle ORM • LanceDB Vector Store                    │
 ├─────────────────────────────────────────────────────────────────┤
-│                      SERVER CORE                                 │
+│                      SERVER CORE                                │
 │  Express.js • Dependency Injection • Middleware • Routes        │
 └─────────────────────────────────────────────────────────────────┘
 ```

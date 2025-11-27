@@ -47,37 +47,37 @@ session.title = "Untitled Session";
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SESSION MANAGEMENT                            │
-│                                                                  │
-│  Frontend                                                        │
-│       │                                                          │
-│       ▼                                                          │
+│                    SESSION MANAGEMENT                           │
+│                                                                 │
+│  Frontend                                                       │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   SessionService                         │    │
-│  │                                                          │    │
-│  │  Session Operations:                                     │    │
+│  │                   SessionService                        │    │
+│  │                                                         │    │
+│  │  Session Operations:                                    │    │
 │  │  ├─ createSession(title?)                               │    │
 │  │  ├─ listSessions()          → SessionWithMetadata[]     │    │
 │  │  ├─ getSessionById(id)      → Session + Messages        │    │
 │  │  ├─ updateSession(id, data)                             │    │
 │  │  └─ deleteSession(id)                                   │    │
-│  │                                                          │    │
-│  │  Message Operations:                                     │    │
+│  │                                                         │    │
+│  │  Message Operations:                                    │    │
 │  │  ├─ addMessage(sessionId, msg)                          │    │
 │  │  ├─ clearMessages(sessionId)                            │    │
 │  │  ├─ loadMessages(sessionId)  → CoreMessage[]            │    │
 │  │  └─ saveMessages(sessionId, msgs)                       │    │
-│  │                                                          │    │
-│  │  WorkingContext Operations:                              │    │
+│  │                                                         │    │
+│  │  WorkingContext Operations:                             │    │
 │  │  ├─ saveWorkingContext(sessionId, context)              │    │
 │  │  └─ loadWorkingContext(sessionId) → WorkingContext      │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                      SQLite                              │    │
-│  │                                                          │    │
-│  │  sessions                    messages                    │    │
+│  │                      SQLite                             │    │
+│  │                                                         │    │
+│  │  sessions                    messages                   │    │
 │  │  ├─ id (UUID)               ├─ id (UUID)                │    │
 │  │  ├─ title                   ├─ sessionId (FK)           │    │
 │  │  ├─ checkpoint (JSON)       ├─ role (enum)              │    │

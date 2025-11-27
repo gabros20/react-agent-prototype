@@ -43,15 +43,15 @@ Agent: Deleted 5 pages.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Human-in-the-Loop System                       │
+│                   Human-in-the-Loop System                      │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   Two Patterns:                                                  │
-│                                                                  │
+│                                                                 │
+│   Two Patterns:                                                 │
+│                                                                 │
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │  Pattern 1: APPROVAL QUEUE (Async)                      │   │
 │   │                                                         │   │
-│   │  Used for: publishPost, archivePost, deleteImage,      │   │
+│   │  Used for: publishPost, archivePost, deleteImage,       │   │
 │   │            http_post                                    │   │
 │   │                                                         │   │
 │   │  Flow:                                                  │   │
@@ -59,11 +59,11 @@ Agent: Deleted 5 pages.
 │   │           → Frontend Modal → User Decision              │   │
 │   │           → Response → Continue/Cancel                  │   │
 │   └─────────────────────────────────────────────────────────┘   │
-│                                                                  │
+│                                                                 │
 │   ┌─────────────────────────────────────────────────────────┐   │
 │   │  Pattern 2: CONFIRMATION FLAG (Prompt-Based)            │   │
 │   │                                                         │   │
-│   │  Used for: deletePage, deletePageSection,              │   │
+│   │  Used for: deletePage, deletePageSection,               │   │
 │   │            deletePageSections                           │   │
 │   │                                                         │   │
 │   │  Flow:                                                  │   │
@@ -71,7 +71,7 @@ Agent: Deleted 5 pages.
 │   │           → Agent asks user → User confirms in chat     │   │
 │   │           → Tool({ confirmed: true }) → Execute         │   │
 │   └─────────────────────────────────────────────────────────┘   │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

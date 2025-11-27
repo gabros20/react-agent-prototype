@@ -43,47 +43,47 @@ app.listen(3000);               // Server starts before DB is ready
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     STARTUP SEQUENCE                             │
-│                                                                  │
-│  1. Load Environment (.env)                                      │
-│       │                                                          │
-│       ▼                                                          │
-│  2. Create Express App                                           │
-│       │                                                          │
-│       ▼                                                          │
-│  3. Apply Global Middleware (CORS, JSON, Logging)               │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  4. startServer() - Async Function                       │    │
-│  │       │                                                  │    │
-│  │       ▼                                                  │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  ServiceContainer.initialize(db)                │    │    │
-│  │  │  - Connect to SQLite                            │    │    │
-│  │  │  - Initialize VectorIndex (LanceDB)             │    │    │
-│  │  │  - Create service instances                     │    │    │
-│  │  └─────────────────────┬───────────────────────────┘    │    │
-│  │                        │                                │    │
-│  │                        ▼                                │    │
-│  │  5. Mount Route Handlers                                │    │
-│  │       ├─ /api/upload, /api/images                      │    │
-│  │       ├─ /v1/teams/:team/sites/:site/...               │    │
-│  │       ├─ /v1/agent                                      │    │
-│  │       ├─ /v1/sessions                                   │    │
-│  │       └─ /uploads (static)                              │    │
-│  │                        │                                │    │
-│  │                        ▼                                │    │
-│  │  6. Mount Error Handler (last)                          │    │
-│  │                        │                                │    │
-│  │                        ▼                                │    │
-│  │  7. app.listen(PORT)                                    │    │
-│  │       │                                                  │    │
-│  │       ▼                                                  │    │
-│  │  ✅ Server Ready                                         │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                     STARTUP SEQUENCE                          │
+│                                                               │
+│  1. Load Environment (.env)                                   │
+│       │                                                       │
+│       ▼                                                       │
+│  2. Create Express App                                        │
+│       │                                                       │
+│       ▼                                                       │
+│  3. Apply Global Middleware (CORS, JSON, Logging)             │
+│       │                                                       │
+│       ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  4. startServer() - Async Function                      │  │
+│  │       │                                                 │  │
+│  │       ▼                                                 │  │
+│  │  ┌─────────────────────────────────────────────────┐    │  │
+│  │  │  ServiceContainer.initialize(db)                │    │  │
+│  │  │  - Connect to SQLite                            │    │  │
+│  │  │  - Initialize VectorIndex (LanceDB)             │    │  │
+│  │  │  - Create service instances                     │    │  │
+│  │  └─────────────────────┬───────────────────────────┘    │  │
+│  │                        │                                │  │
+│  │                        ▼                                │  │
+│  │  5. Mount Route Handlers                                │  │
+│  │       ├─ /api/upload, /api/images                       │  │
+│  │       ├─ /v1/teams/:team/sites/:site/...                │  │
+│  │       ├─ /v1/agent                                      │  │
+│  │       ├─ /v1/sessions                                   │  │
+│  │       └─ /uploads (static)                              │  │
+│  │                        │                                │  │
+│  │                        ▼                                │  │
+│  │  6. Mount Error Handler (last)                          │  │
+│  │                        │                                │  │
+│  │                        ▼                                │  │
+│  │  7. app.listen(PORT)                                    │  │
+│  │       │                                                 │  │
+│  │       ▼                                                 │  │
+│  │  ✅ Server Ready                                        │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ---

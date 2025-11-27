@@ -1,0 +1,212 @@
+{
+  "main": {
+    "id": "6e0fe12891a4af50",
+    "type": "split",
+    "children": [
+      {
+        "id": "342030d29c732f35",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "640c05ac129435cf",
+            "type": "leaf",
+            "state": {
+              "type": "canvas",
+              "state": {
+                "file": "C - Brease Assistant.canvas",
+                "viewState": {
+                  "x": -444.724736098319,
+                  "y": -546.7777282494467,
+                  "zoom": 0.027129443522739757
+                }
+              },
+              "icon": "lucide-layout-dashboard",
+              "title": "C - Brease Assistant"
+            }
+          },
+          {
+            "id": "02c6ffb1d484a915",
+            "type": "leaf",
+            "state": {
+              "type": "canvas",
+              "state": {
+                "file": "C - Brease Assistant.canvas",
+                "viewState": {
+                  "x": 4274.496460453175,
+                  "y": 723.3101916820007,
+                  "zoom": -1.0391558111558885
+                }
+              },
+              "icon": "lucide-layout-dashboard",
+              "title": "C - Brease Assistant"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "0dafab2e4f9d5c85",
+    "type": "mobile-drawer",
+    "children": [
+      {
+        "id": "0bc4877f49418aeb",
+        "type": "leaf",
+        "state": {
+          "type": "file-explorer",
+          "state": {
+            "sortOrder": "alphabetical",
+            "autoReveal": false
+          },
+          "icon": "lucide-folder-closed",
+          "title": "Files"
+        }
+      },
+      {
+        "id": "a3a531dcbb28b7ed",
+        "type": "leaf",
+        "state": {
+          "type": "search",
+          "state": {
+            "query": "",
+            "matchingCase": false,
+            "explainSearch": false,
+            "collapseAll": false,
+            "extraContext": false,
+            "sortOrder": "alphabetical"
+          },
+          "icon": "lucide-search",
+          "title": "Search"
+        }
+      },
+      {
+        "id": "671db85878e8f8c0",
+        "type": "leaf",
+        "state": {
+          "type": "tag",
+          "state": {
+            "sortOrder": "frequency",
+            "useHierarchy": true,
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-tags",
+          "title": "Tags"
+        }
+      },
+      {
+        "id": "5afe0eb197cc64f4",
+        "type": "leaf",
+        "state": {
+          "type": "all-properties",
+          "state": {
+            "sortOrder": "frequency",
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-archive",
+          "title": "All properties"
+        }
+      },
+      {
+        "id": "d190671572d9da2b",
+        "type": "leaf",
+        "state": {
+          "type": "bookmarks",
+          "state": {},
+          "icon": "lucide-bookmark",
+          "title": "Bookmarks"
+        }
+      }
+    ],
+    "currentTab": 0
+  },
+  "right": {
+    "id": "771a7c69030d5981",
+    "type": "mobile-drawer",
+    "children": [
+      {
+        "id": "a93a408dc48de629",
+        "type": "leaf",
+        "state": {
+          "type": "backlink",
+          "state": {
+            "file": "X - Thread by @akshay_pachaar - 1879154648327811134.md",
+            "collapseAll": false,
+            "extraContext": false,
+            "sortOrder": "alphabetical",
+            "showSearch": false,
+            "searchQuery": "",
+            "backlinkCollapsed": false,
+            "unlinkedCollapsed": true
+          },
+          "icon": "links-coming-in",
+          "title": "Backlinks"
+        }
+      },
+      {
+        "id": "81e20bfdcdd1c014",
+        "type": "leaf",
+        "state": {
+          "type": "outgoing-link",
+          "state": {
+            "file": "X - Thread by @akshay_pachaar - 1879154648327811134.md",
+            "linksCollapsed": false,
+            "unlinkedCollapsed": true
+          },
+          "icon": "links-going-out",
+          "title": "Outgoing links"
+        }
+      },
+      {
+        "id": "e0cd3f0b83ee394a",
+        "type": "leaf",
+        "state": {
+          "type": "outline",
+          "state": {
+            "file": "X - Thread by @akshay_pachaar - 1879154648327811134.md",
+            "followCursor": false,
+            "showSearch": false,
+            "searchQuery": ""
+          },
+          "icon": "lucide-list",
+          "title": "Outline"
+        }
+      },
+      {
+        "id": "16892fb5ab2befb2",
+        "type": "leaf",
+        "state": {
+          "type": "file-properties",
+          "state": {
+            "file": "N - Do We Actually Need Vector DB or RAG for Brease Assistant?.md"
+          },
+          "icon": "lucide-info",
+          "title": "File properties"
+        }
+      }
+    ],
+    "currentTab": 3
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "02c6ffb1d484a915",
+  "lastOpenFiles": [
+    "N - Agentic AI Patterns Library.md",
+    "C - Brease Assistant.canvas",
+    "N - Do We Actually Need Vector DB or RAG for Brease Assistant?.md",
+    "D - 2025-10-29.md",
+    "N - Current Brease Agent Architecture Analysis.md",
+    "X - Thread by @akshay_pachaar - 1879154648327811134.md",
+    "X - Thread by @akshay_pachaar - 1970850770120839249.md"
+  ]
+}

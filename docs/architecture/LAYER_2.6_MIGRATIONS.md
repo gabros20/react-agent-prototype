@@ -41,44 +41,44 @@ ALTER TABLE pages ADD COLUMN status TEXT;
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     MIGRATION WORKFLOW                           │
-│                                                                  │
-│  Developer changes schema.ts                                     │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────┐                │
-│  │  pnpm db:generate                           │                │
-│  │                                             │                │
-│  │  Drizzle Kit compares:                      │                │
-│  │  schema.ts ←→ last migration                │                │
-│  │                                             │                │
-│  │  Generates: 0006_xxx.sql                    │                │
-│  └─────────────────────┬───────────────────────┘                │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌─────────────────────────────────────────────┐                │
-│  │  pnpm db:push                               │                │
-│  │                                             │                │
-│  │  Applies migration to sqlite.db             │                │
-│  │  Records in _drizzle_migrations             │                │
-│  └─────────────────────────────────────────────┘                │
-│                                                                  │
-├─────────────────────────────────────────────────────────────────┤
-│                      SEEDING WORKFLOW                            │
-│                                                                  │
-│  pnpm seed                                                       │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────┐                │
-│  │  scripts/seed.ts                            │                │
-│  │                                             │                │
-│  │  Creates hierarchy:                         │                │
-│  │  Team → Site → Environment → Pages/Posts   │                │
-│  │                                             │                │
-│  │  Outputs IDs for reference                  │                │
-│  └─────────────────────────────────────────────┘                │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│                     MIGRATION WORKFLOW             │
+│                                                    │
+│  Developer changes schema.ts                       │
+│       │                                            │
+│       ▼                                            │
+│  ┌─────────────────────────────────────────────┐   │
+│  │  pnpm db:generate                           │   │
+│  │                                             │   │
+│  │  Drizzle Kit compares:                      │   │
+│  │  schema.ts ←→ last migration                │   │
+│  │                                             │   │
+│  │  Generates: 0006_xxx.sql                    │   │
+│  └─────────────────────┬───────────────────────┘   │
+│                        │                           │
+│                        ▼                           │
+│  ┌─────────────────────────────────────────────┐   │
+│  │  pnpm db:push                               │   │
+│  │                                             │   │
+│  │  Applies migration to sqlite.db             │   │
+│  │  Records in _drizzle_migrations             │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                    │
+├────────────────────────────────────────────────────┤
+│                      SEEDING WORKFLOW              │
+│                                                    │
+│  pnpm seed                                         │
+│       │                                            │
+│       ▼                                            │
+│  ┌─────────────────────────────────────────────┐   │
+│  │  scripts/seed.ts                            │   │
+│  │                                             │   │
+│  │  Creates hierarchy:                         │   │
+│  │  Team → Site → Environment → Pages/Posts    │   │
+│  │                                             │   │
+│  │  Outputs IDs for reference                  │   │
+│  └─────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────┘
 ```
 
 ---

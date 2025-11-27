@@ -1,0 +1,238 @@
+{
+  "main": {
+    "id": "7a6958cd1c24bf39",
+    "type": "split",
+    "children": [
+      {
+        "id": "ca233cdd575a8189",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "974d0433f089a4b1",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "architecture/LAYER_7.5_POST_RENDERING.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "LAYER_7.5_POST_RENDERING"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "41b1bb6015f161e0",
+    "type": "split",
+    "children": [
+      {
+        "id": "ab2050433bb72c3b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7faed0a0438d29d8",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "156f707c094b5c07",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": true,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "ff9635816e61d8c9",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 544.5
+  },
+  "right": {
+    "id": "21b6a6d77a0d8894",
+    "type": "split",
+    "children": [
+      {
+        "id": "27cf2073905a721c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "75b8160c55c44071",
+            "type": "leaf",
+            "state": {
+              "type": "file-properties",
+              "state": {
+                "file": "N - Cursor Rules - Mermaid charts.md"
+              },
+              "icon": "lucide-info",
+              "title": "File properties for N - Cursor Rules - Mermaid charts"
+            }
+          },
+          {
+            "id": "844e85aba76cefee",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "9742ab21870474e2",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "9585f2171cd0a6e7",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Untitled.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Untitled"
+            }
+          },
+          {
+            "id": "161a7bc3b67d5f05",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "X - Thread by @_avichawla - 1955880448602857525.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of X - Thread by @_avichawla - 1955880448602857525"
+            }
+          },
+          {
+            "id": "17598af939d205e9",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 393.5,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "974d0433f089a4b1",
+  "lastOpenFiles": [
+    "architecture/LAYER_7.2_TEMPLATE_REGISTRY.md",
+    "architecture/LAYER_6.4_CHAT_COMPONENTS.md",
+    "architecture/LAYER_5.5_RETRY_AND_ERROR.md",
+    "architecture/LAYER_6.1_STATE_MANAGEMENT.md",
+    "architecture/LAYER_6.3_SESSION_UI.md",
+    "architecture/LAYER_5.4_JOB_PROCESSORS.md",
+    "architecture/LAYER_5.3_WORKER_LIFECYCLE.md",
+    "architecture/LAYER_2.2_ENTITY_HIERARCHY.md",
+    "architecture/LAYER_2_DATABASE.md",
+    "architecture/LAYER_2.1_DRIZZLE_ORM.md",
+    "architecture/LAYER_2.4_IMAGE_STORAGE.md",
+    "architecture/LAYER_2.3_CONTENT_MODEL.md",
+    "architecture/LAYER_2.5_VECTOR_STORAGE.md",
+    "architecture/LAYER_2.6_MIGRATIONS.md",
+    "architecture/LAYER_3.1_REACT_LOOP.md",
+    "architecture/LAYER_3.4_PROMPTS.md",
+    "architecture/LAYER_3.6_ERROR_RECOVERY.md",
+    "architecture/LAYER_4.1_CMS_SERVICES.md",
+    "architecture/LAYER_4.7_APPROVAL_QUEUE.md",
+    "architecture/LAYER_5.2_QUEUE_DEFINITION.md",
+    "architecture/LAYER_5.1_REDIS_CONNECTION.md",
+    "architecture/LAYER_5_BACKGROUND.md",
+    "architecture/LAYER_4.6_WORKING_MEMORY.md",
+    "architecture/LAYER_4.5_RENDERER.md",
+    "architecture/LAYER_4.4_IMAGE_PROCESSING.md",
+    "architecture/LAYER_4.3_VECTOR_INDEX.md",
+    "architecture",
+    "C - Brease Assistant.canvas",
+    "C - Brease Assistant - IMAGE 20251109.png",
+    "Inbox",
+    "X - post -- IMAGE - 20251106.webp",
+    "X - post -- IMAGE - 20251106-1.webp",
+    "X - post -- IMAGE - 1762412873163.webp",
+    "X - post-1762412408196.webp",
+    "Pasted image 20251106072915.png",
+    "Clippings",
+    "T - Canvas Template.canvas",
+    "Canvas - Mindmap.canvas",
+    "N - test canvas.canvas",
+    "templates"
+  ]
+}

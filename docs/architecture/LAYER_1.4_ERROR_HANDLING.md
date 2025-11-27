@@ -44,56 +44,56 @@ throw new Error("Database error");
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      ERROR FLOW                                  │
-│                                                                  │
-│  Route Handler                                                   │
-│       │                                                          │
-│       ├── throw new ZodError([...])                             │
-│       ├── throw new Error("Not found")                          │
-│       ├── throw new Error("UNIQUE constraint failed")           │
-│       └── throw new Error("Something unexpected")               │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                  Error Handler Middleware                │    │
-│  │                                                          │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Error Classification                            │    │    │
-│  │  │                                                  │    │    │
-│  │  │  ZodError?                                       │    │    │
-│  │  │    → 400 VALIDATION_ERROR                        │    │    │
-│  │  │                                                  │    │    │
-│  │  │  "UNIQUE constraint"?                            │    │    │
-│  │  │    → 409 CONFLICT                                │    │    │
-│  │  │                                                  │    │    │
-│  │  │  "not found"?                                    │    │    │
-│  │  │    → 404 NOT_FOUND                               │    │    │
-│  │  │                                                  │    │    │
-│  │  │  "invalid"?                                      │    │    │
-│  │  │    → 400 INVALID_INPUT                           │    │    │
-│  │  │                                                  │    │    │
-│  │  │  Otherwise                                       │    │    │
-│  │  │    → 500 INTERNAL_ERROR                          │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                                                          │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Response Formatting                             │    │    │
-│  │  │                                                  │    │    │
-│  │  │  {                                               │    │    │
-│  │  │    "error": {                                    │    │    │
-│  │  │      "code": "ERROR_CODE",                       │    │    │
-│  │  │      "message": "Human readable message",        │    │    │
-│  │  │      "details": { ... }  // Optional             │    │    │
-│  │  │    },                                            │    │    │
-│  │  │    "statusCode": 400                             │    │    │
-│  │  │  }                                               │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
-│  Client receives consistent error response                       │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      ERROR FLOW                              │
+│                                                              │
+│  Route Handler                                               │
+│       │                                                      │
+│       ├── throw new ZodError([...])                          │
+│       ├── throw new Error("Not found")                       │
+│       ├── throw new Error("UNIQUE constraint failed")        │
+│       └── throw new Error("Something unexpected")            │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │                  Error Handler Middleware              │  │
+│  │                                                        │  │
+│  │  ┌──────────────────────────────────────────────────┐  │  │
+│  │  │  Error Classification                            │  │  │
+│  │  │                                                  │  │  │
+│  │  │  ZodError?                                       │  │  │
+│  │  │    → 400 VALIDATION_ERROR                        │  │  │
+│  │  │                                                  │  │  │
+│  │  │  "UNIQUE constraint"?                            │  │  │
+│  │  │    → 409 CONFLICT                                │  │  │
+│  │  │                                                  │  │  │
+│  │  │  "not found"?                                    │  │  │
+│  │  │    → 404 NOT_FOUND                               │  │  │
+│  │  │                                                  │  │  │
+│  │  │  "invalid"?                                      │  │  │
+│  │  │    → 400 INVALID_INPUT                           │  │  │
+│  │  │                                                  │  │  │
+│  │  │  Otherwise                                       │  │  │
+│  │  │    → 500 INTERNAL_ERROR                          │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  │                                                        │  │
+│  │  ┌──────────────────────────────────────────────────┐  │  │
+│  │  │  Response Formatting                             │  │  │
+│  │  │                                                  │  │  │
+│  │  │  {                                               │  │  │
+│  │  │    "error": {                                    │  │  │
+│  │  │      "code": "ERROR_CODE",                       │  │  │
+│  │  │      "message": "Human readable message",        │  │  │
+│  │  │      "details": { ... }  // Optional             │  │  │
+│  │  │    },                                            │  │  │
+│  │  │    "statusCode": 400                             │  │  │
+│  │  │  }                                               │  │  │
+│  │  └──────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                        │                                     │
+│                        ▼                                     │
+│  Client receives consistent error response                   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---

@@ -49,13 +49,13 @@ sections.map(s => render(s));  // May be out of order
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────┐
 │                    PAGE RENDERING FLOW                           │
 │                                                                  │
-│  renderPage(slug, locale, pageService)                          │
+│  renderPage(slug, locale, pageService)                           │
 │       │                                                          │
 │       ▼                                                          │
-│  ┌───────────────────────────────────────────────────────────┐  │
+│  ┌────────────────────────────────────────────────────────────┐  │
 │  │                 Fetch Page Data                            │  │
 │  │                                                            │  │
 │  │  const page = await pageService.getPageBySlug(             │  │
@@ -65,78 +65,78 @@ sections.map(s => render(s));  // May be out of order
 │  │  );                                                        │  │
 │  │                                                            │  │
 │  │  page = {                                                  │  │
-│  │    id, name, slug, status,                                │  │
-│  │    meta: { title, description },                          │  │
-│  │    pageSections: [                                        │  │
-│  │      { order, content, sectionDefinition }                │  │
-│  │    ]                                                      │  │
-│  │  }                                                        │  │
-│  └───────────────────────────────────────────────────────────┘  │
+│  │    id, name, slug, status,                                 │  │
+│  │    meta: { title, description },                           │  │
+│  │    pageSections: [                                         │  │
+│  │      { order, content, sectionDefinition }                 │  │
+│  │    ]                                                       │  │
+│  │  }                                                         │  │
+│  └────────────────────────────────────────────────────────────┘  │
 │                        │                                         │
 │                        ▼                                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
+│  ┌────────────────────────────────────────────────────────────┐  │
 │  │               Fetch Global Context                         │  │
 │  │                                                            │  │
 │  │  const globalNavItems = await siteSettingsService          │  │
 │  │    .getNavigationItems();                                  │  │
 │  │                                                            │  │
 │  │  const currentYear = new Date().getFullYear();             │  │
-│  └───────────────────────────────────────────────────────────┘  │
+│  └────────────────────────────────────────────────────────────┘  │
 │                        │                                         │
 │                        ▼                                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
+│  ┌────────────────────────────────────────────────────────────┐  │
 │  │              Render Sections (Loop)                        │  │
 │  │                                                            │  │
-│  │  for (const pageSection of page.pageSections) {           │  │
-│  │    const templateKey = sectionDef.templateKey;            │  │
-│  │    const variant = sectionDef.defaultVariant || "default";│  │
-│  │    const templatePath = resolveTemplate(key, variant);    │  │
+│  │  for (const pageSection of page.pageSections) {            │  │
+│  │    const templateKey = sectionDef.templateKey;             │  │
+│  │    const variant = sectionDef.defaultVariant || "default"; │  │
+│  │    const templatePath = resolveTemplate(key, variant);     │  │
 │  │                                                            │  │
-│  │    sectionHtml = env.render(templatePath, {               │  │
-│  │      ...contentData,                                      │  │
-│  │      sectionKey,                                          │  │
-│  │      locale,                                              │  │
-│  │      globalNavItems,                                      │  │
-│  │      currentYear,                                         │  │
-│  │    });                                                    │  │
+│  │    sectionHtml = env.render(templatePath, {                │  │
+│  │      ...contentData,                                       │  │
+│  │      sectionKey,                                           │  │
+│  │      locale,                                               │  │
+│  │      globalNavItems,                                       │  │
+│  │      currentYear,                                          │  │
+│  │    });                                                     │  │
 │  │                                                            │  │
-│  │    sectionHtmlList.push(sectionHtml);                     │  │
-│  │  }                                                        │  │
-│  └───────────────────────────────────────────────────────────┘  │
+│  │    sectionHtmlList.push(sectionHtml);                      │  │
+│  │  }                                                         │  │
+│  └────────────────────────────────────────────────────────────┘  │
 │                        │                                         │
 │                        ▼                                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
+│  ┌────────────────────────────────────────────────────────────┐  │
 │  │              Render Layout                                 │  │
 │  │                                                            │  │
-│  │  return env.render("layout/page.njk", {                   │  │
-│  │    page,                                                  │  │
-│  │    locale,                                                │  │
-│  │    content: sectionHtmlList.join("\n"),                   │  │
-│  │    globalNavItems,                                        │  │
-│  │    currentYear,                                           │  │
-│  │  });                                                      │  │
-│  └───────────────────────────────────────────────────────────┘  │
+│  │  return env.render("layout/page.njk", {                    │  │
+│  │    page,                                                   │  │
+│  │    locale,                                                 │  │
+│  │    content: sectionHtmlList.join("\n"),                    │  │
+│  │    globalNavItems,                                         │  │
+│  │    currentYear,                                            │  │
+│  │  });                                                       │  │
+│  └────────────────────────────────────────────────────────────┘  │
 │                        │                                         │
 │                        ▼                                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
+│  ┌────────────────────────────────────────────────────────────┐  │
 │  │              Final HTML Output                             │  │
 │  │                                                            │  │
-│  │  <!DOCTYPE html>                                          │  │
-│  │  <html lang="en">                                         │  │
-│  │  <head>                                                   │  │
-│  │    <title>Home | Site Name</title>                        │  │
-│  │    <link rel="stylesheet" href="/assets/styles.css">     │  │
-│  │  </head>                                                  │  │
-│  │  <body>                                                   │  │
-│  │    <!-- Header section -->                                │  │
-│  │    <!-- Hero section -->                                  │  │
-│  │    <!-- Feature section -->                               │  │
-│  │    <!-- CTA section -->                                   │  │
-│  │    <!-- Footer section -->                                │  │
-│  │  </body>                                                  │  │
-│  │  </html>                                                  │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+│  │  <!DOCTYPE html>                                           │  │
+│  │  <html lang="en">                                          │  │
+│  │  <head>                                                    │  │
+│  │    <title>Home | Site Name</title>                         │  │
+│  │    <link rel="stylesheet" href="/assets/styles.css">       │  │
+│  │  </head>                                                   │  │
+│  │  <body>                                                    │  │
+│  │    <!-- Header section -->                                 │  │
+│  │    <!-- Hero section -->                                   │  │
+│  │    <!-- Feature section -->                                │  │
+│  │    <!-- CTA section -->                                    │  │
+│  │    <!-- Footer section -->                                 │  │
+│  │  </body>                                                   │  │
+│  │  </html>                                                   │  │
+│  └────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---

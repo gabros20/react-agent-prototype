@@ -16,37 +16,37 @@ The rendering layer transforms CMS data into HTML pages using Nunjucks templates
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Rendering Layer                             │
+│                      Rendering Layer                            │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                   RendererService                           ││
-│  │                                                             ││
-│  │  • Compile templates                                        ││
-│  │  • Inject data                                              ││
-│  │  • Apply filters                                            ││
-│  │  • Resolve assets                                           ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                              │                                   │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                   RendererService                         │  │
+│  │                                                           │  │
+│  │  • Compile templates                                      │  │
+│  │  • Inject data                                            │  │
+│  │  • Apply filters                                          │  │
+│  │  • Resolve assets                                         │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                  │
 │         ┌────────────────────┼────────────────────┐             │
 │         ▼                    ▼                    ▼             │
-│  ┌─────────────┐     ┌─────────────┐      ┌─────────────┐      │
-│  │   Layout    │     │   Sections  │      │   Assets    │      │
-│  │   Template  │     │             │      │             │      │
-│  │             │     │  hero       │      │  CSS        │      │
-│  │  header     │     │  features   │      │  images     │      │
-│  │  content    │     │  image-text │      │  fonts      │      │
-│  │  footer     │     │  posts      │      │             │      │
-│  │             │     │  cta        │      │             │      │
-│  └─────────────┘     └─────────────┘      └─────────────┘      │
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    Nunjucks Engine                          ││
-│  │                                                             ││
-│  │  Filters: markdown, truncate, date, asset, normalizeLink   ││
-│  │  Globals: site, env, page                                   ││
-│  └─────────────────────────────────────────────────────────────┘│
+│  ┌─────────────┐     ┌─────────────┐      ┌─────────────┐       │
+│  │   Layout    │     │   Sections  │      │   Assets    │       │
+│  │   Template  │     │             │      │             │       │
+│  │             │     │  hero       │      │  CSS        │       │
+│  │  header     │     │  features   │      │  images     │       │
+│  │  content    │     │  image-text │      │  fonts      │       │
+│  │  footer     │     │  posts      │      │             │       │
+│  │             │     │  cta        │      │             │       │
+│  └─────────────┘     └─────────────┘      └─────────────┘       │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                    Nunjucks Engine                        │  │
+│  │                                                           │  │
+│  │  Filters: markdown, truncate, date, asset, normalizeLink  │  │
+│  │  Globals: site, env, page                                 │  │
+│  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

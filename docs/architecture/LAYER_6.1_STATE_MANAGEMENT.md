@@ -47,66 +47,66 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    ZUSTAND STORES                                │
-│                                                                  │
+│                    ZUSTAND STORES                               │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    chat-store                              │  │
-│  │                                                            │  │
-│  │  State:                                                    │  │
+│  │                    chat-store                             │  │
+│  │                                                           │  │
+│  │  State:                                                   │  │
 │  │  ├─ sessionId: string | null                              │  │
 │  │  ├─ messages: ChatMessage[]                               │  │
 │  │  ├─ currentTraceId: string | null                         │  │
 │  │  └─ isStreaming: boolean                                  │  │
-│  │                                                            │  │
-│  │  Actions:                                                  │  │
+│  │                                                           │  │
+│  │  Actions:                                                 │  │
 │  │  ├─ setSessionId()                                        │  │
 │  │  ├─ setMessages() / addMessage()                          │  │
 │  │  └─ reset()                                               │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  Persistence: localStorage (last 50 messages)             │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   session-store                            │  │
-│  │                                                            │  │
-│  │  State:                                                    │  │
+│  │                   session-store                           │  │
+│  │                                                           │  │
+│  │  State:                                                   │  │
 │  │  ├─ sessions: SessionMetadata[]                           │  │
 │  │  ├─ currentSessionId: string | null                       │  │
 │  │  ├─ isLoading: boolean                                    │  │
 │  │  └─ error: string | null                                  │  │
-│  │                                                            │  │
-│  │  Actions:                                                  │  │
+│  │                                                           │  │
+│  │  Actions:                                                 │  │
 │  │  ├─ loadSessions() / loadSession()                        │  │
 │  │  ├─ createSession() / updateSession()                     │  │
 │  │  └─ deleteSession() / clearHistory()                      │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  Persistence: None (fetched from backend)                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                  approval-store                            │  │
-│  │                                                            │  │
-│  │  State:                                                    │  │
+│  │                  approval-store                           │  │
+│  │                                                           │  │
+│  │  State:                                                   │  │
 │  │  └─ pendingApproval: ApprovalRequest | null               │  │
-│  │                                                            │  │
-│  │  Actions:                                                  │  │
+│  │                                                           │  │
+│  │  Actions:                                                 │  │
 │  │  └─ setPendingApproval()                                  │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  Persistence: None (transient HITL state)                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                     log-store                              │  │
-│  │                                                            │  │
-│  │  State:                                                    │  │
+│  │                     log-store                             │  │
+│  │                                                           │  │
+│  │  State:                                                   │  │
 │  │  ├─ logs: LogEntry[]                                      │  │
 │  │  └─ filterType: 'all' | LogEntry['type']                  │  │
-│  │                                                            │  │
-│  │  Actions:                                                  │  │
+│  │                                                           │  │
+│  │  Actions:                                                 │  │
 │  │  ├─ addLog()                                              │  │
 │  │  ├─ setFilterType()                                       │  │
 │  │  └─ clearLogs()                                           │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  Persistence: None (debug session only)                   │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘

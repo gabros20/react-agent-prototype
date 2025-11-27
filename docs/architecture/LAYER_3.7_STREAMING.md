@@ -43,9 +43,9 @@ User: "Nice, I can see exactly what it's doing!"
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Streaming Architecture                      │
+│                      Streaming Architecture                     │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
+│                                                                 │
 │  ┌────────────────┐                                             │
 │  │   Frontend     │                                             │
 │  │  (Next.js)     │                                             │
@@ -53,9 +53,9 @@ User: "Nice, I can see exactly what it's doing!"
 │  │  useAgent()    │                                             │
 │  │  hook          │                                             │
 │  └───────┬────────┘                                             │
-│          │                                                       │
-│          │ POST /api/agent                                       │
-│          ▼                                                       │
+│          │                                                      │
+│          │ POST /api/agent                                      │
+│          ▼                                                      │
 │  ┌────────────────┐                                             │
 │  │   Next.js      │                                             │
 │  │   API Route    │                                             │
@@ -63,28 +63,28 @@ User: "Nice, I can see exactly what it's doing!"
 │  │   Proxy to     │                                             │
 │  │   Express      │                                             │
 │  └───────┬────────┘                                             │
-│          │                                                       │
-│          │ POST /v1/agent/stream                                 │
-│          ▼                                                       │
+│          │                                                      │
+│          │ POST /v1/agent/stream                                │
+│          ▼                                                      │
 │  ┌────────────────┐     ┌────────────────┐                      │
 │  │   Express      │     │   Agent        │                      │
 │  │   Route        │◀───▶│  Orchestrator  │                      │
 │  │                │     │                │                      │
 │  │   writeSSE()   │     │  Yields events │                      │
 │  └───────┬────────┘     └────────────────┘                      │
-│          │                                                       │
-│          │ SSE Stream                                            │
-│          │                                                       │
-│          │ event: text-delta                                     │
-│          │ data: {"delta": "I'll"}                               │
-│          │                                                       │
-│          │ event: text-delta                                     │
-│          │ data: {"delta": " create"}                            │
-│          │                                                       │
-│          │ event: tool-call                                      │
-│          │ data: {"name": "cms_createPage", ...}                 │
-│          │                                                       │
-│          ▼                                                       │
+│          │                                                      │
+│          │ SSE Stream                                           │
+│          │                                                      │
+│          │ event: text-delta                                    │
+│          │ data: {"delta": "I'll"}                              │
+│          │                                                      │
+│          │ event: text-delta                                    │
+│          │ data: {"delta": " create"}                           │
+│          │                                                      │
+│          │ event: tool-call                                     │
+│          │ data: {"name": "cms_createPage", ...}                │
+│          │                                                      │
+│          ▼                                                      │
 │  ┌────────────────┐                                             │
 │  │   Frontend     │                                             │
 │  │  State Update  │                                             │
@@ -93,7 +93,7 @@ User: "Nice, I can see exactly what it's doing!"
 │  │  LogStore      │                                             │
 │  │  ApprovalStore │                                             │
 │  └────────────────┘                                             │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

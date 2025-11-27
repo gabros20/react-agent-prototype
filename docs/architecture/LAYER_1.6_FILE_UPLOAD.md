@@ -51,43 +51,43 @@ if (file.originalname.endsWith(".jpg")) {
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    FILE UPLOAD PIPELINE                         │
-│                                                                  │
-│  POST /api/upload                                                │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  1. Rate Limiter (uploadLimiter)                         │    │
-│  │     - 10 uploads per 15 minutes per IP                   │    │
-│  │     - Returns 429 if exceeded                            │    │
-│  └─────────────────────┬───────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  2. Multer Middleware (upload.array)                     │    │
-│  │     - Memory storage (no disk write)                     │    │
-│  │     - 5MB file size limit                                │    │
-│  │     - 10 files max per request                           │    │
-│  │     - MIME type filter (jpeg, png, gif, webp, avif)      │    │
-│  └─────────────────────┬───────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  3. Validation Middleware (validateUploadedFiles)        │    │
-│  │     - Magic byte verification via file-type library      │    │
-│  │     - Filename sanitization                              │    │
-│  │     - Path traversal detection                           │    │
-│  └─────────────────────┬───────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  4. Route Handler                                        │    │
-│  │     - Extract sessionId                                  │    │
-│  │     - Pass to imageProcessingService                     │    │
-│  │     - Return upload results                              │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                    FILE UPLOAD PIPELINE                       │
+│                                                               │
+│  POST /api/upload                                             │
+│       │                                                       │
+│       ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  1. Rate Limiter (uploadLimiter)                        │  │
+│  │     - 10 uploads per 15 minutes per IP                  │  │
+│  │     - Returns 429 if exceeded                           │  │
+│  └─────────────────────┬───────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  2. Multer Middleware (upload.array)                    │  │
+│  │     - Memory storage (no disk write)                    │  │
+│  │     - 5MB file size limit                               │  │
+│  │     - 10 files max per request                          │  │
+│  │     - MIME type filter (jpeg, png, gif, webp, avif)     │  │
+│  └─────────────────────┬───────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  3. Validation Middleware (validateUploadedFiles)       │  │
+│  │     - Magic byte verification via file-type library     │  │
+│  │     - Filename sanitization                             │  │
+│  │     - Path traversal detection                          │  │
+│  └─────────────────────┬───────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │  4. Route Handler                                       │  │
+│  │     - Extract sessionId                                 │  │
+│  │     - Pass to imageProcessingService                    │  │
+│  │     - Return upload results                             │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ---

@@ -50,41 +50,41 @@ upload("logo.png") // Another 500KB - same file!
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      IMAGE UPLOAD FLOW                           │
-│                                                                  │
-│  Upload Request                                                  │
-│       │                                                          │
-│       ▼                                                          │
+│                      IMAGE UPLOAD FLOW                          │
+│                                                                 │
+│  Upload Request                                                 │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────┐                                            │
 │  │  Calculate Hash │ SHA256 of file bytes                       │
 │  └────────┬────────┘                                            │
-│           │                                                      │
-│           ▼                                                      │
+│           │                                                     │
+│           ▼                                                     │
 │  ┌─────────────────────────────────────────┐                    │
-│  │     Hash exists in DB?                   │                    │
-│  │     ├─ YES: Return existing image        │                    │
-│  │     └─ NO: Continue upload               │                    │
+│  │     Hash exists in DB?                  │                    │
+│  │     ├─ YES: Return existing image       │                    │
+│  │     └─ NO: Continue upload              │                    │
 │  └─────────────────────┬───────────────────┘                    │
-│                        │                                         │
+│                        │                                        │
 │           ┌────────────┴────────────┐                           │
-│           ▼                         ▼                            │
+│           ▼                         ▼                           │
 │  ┌─────────────────┐    ┌─────────────────────┐                 │
 │  │  Save to Disk   │    │  Insert DB Record   │                 │
 │  │  /uploads/YYYY  │    │  status: processing │                 │
 │  │  /MM/DD/orig/   │    │                     │                 │
 │  └─────────────────┘    └──────────┬──────────┘                 │
-│                                    │                             │
-│                        Queue BullMQ Job                          │
-│                                    │                             │
+│                                    │                            │
+│                        Queue BullMQ Job                         │
+│                                    │                            │
 │           ┌────────────────────────┴────────────────┐           │
-│           ▼                         ▼               ▼            │
+│           ▼                         ▼               ▼           │
 │  ┌─────────────────┐    ┌─────────────────┐ ┌────────────────┐  │
 │  │ Generate        │    │ AI Metadata     │ │ Vector Index   │  │
 │  │ Variants        │    │ (GPT-4o-mini)   │ │ (LanceDB)      │  │
 │  │ WebP/AVIF       │    │ desc,tags,mood  │ │ embeddings     │  │
 │  └─────────────────┘    └─────────────────┘ └────────────────┘  │
-│                                    │                             │
-│                        status: completed                         │
+│                                    │                            │
+│                        status: completed                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

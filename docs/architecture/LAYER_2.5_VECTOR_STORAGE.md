@@ -42,11 +42,11 @@ SELECT * FROM pages WHERE searchable_text MATCH 'artificial intelligence';
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      VECTOR PIPELINE                             │
-│                                                                  │
+│                      VECTOR PIPELINE                            │
+│                                                                 │
 │  Content Change (Page/Section/Image)                            │
-│       │                                                          │
-│       ▼                                                          │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────────────────────────────────┐                │
 │  │         Build Searchable Text               │                │
 │  │                                             │                │
@@ -54,28 +54,28 @@ SELECT * FROM pages WHERE searchable_text MATCH 'artificial intelligence';
 │  │  Image: description + tags + mood + colors  │                │
 │  │  Section: definition.name + content summary │                │
 │  └─────────────────────┬───────────────────────┘                │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────┐                │
 │  │         OpenRouter Embeddings API           │                │
 │  │         text-embedding-3-small              │                │
 │  │         1536 dimensions                     │                │
 │  └─────────────────────┬───────────────────────┘                │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌─────────────────────────────────────────────┐                │
-│  │              LanceDB Storage                │                │
-│  │                                             │                │
-│  │  resource_index table:                      │                │
-│  │  ┌─────────────────────────────────────┐   │                │
-│  │  │ id | type | name | searchableText  │   │                │
-│  │  │ embedding[1536] | metadata | updatedAt│   │                │
-│  │  └─────────────────────────────────────┘   │                │
-│  └─────────────────────────────────────────────┘                │
-│                                                                  │
-│  Search Query                                                    │
-│       │                                                          │
-│       ▼                                                          │
+│                        │                                        │
+│                        ▼                                        │
+│  ┌──────────────────────────────────────────────┐               │
+│  │              LanceDB Storage                 │               │
+│  │                                              │               │
+│  │  resource_index table:                       │               │
+│  │  ┌────────────────────────────────────────┐  │               │
+│  │  │ id | type | name | searchableText |    │  │               │
+│  │  │ embedding[1536] | metadata | updatedAt │  │               │
+│  │  └────────────────────────────────────────┘  │               │
+│  └──────────────────────────────────────────────┘               │
+│                                                                 │
+│  Search Query                                                   │
+│       │                                                         │
+│       ▼                                                         │
 │  Query → Embed → Vector Search → Similarity Scores → Results    │
 └─────────────────────────────────────────────────────────────────┘
 ```

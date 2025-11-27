@@ -51,15 +51,15 @@ const metadata = await analyzeWithAI(buffer); // Blocks request for 5+ seconds
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   IMAGE PROCESSING PIPELINE                      │
-│                                                                  │
+│                   IMAGE PROCESSING PIPELINE                     │
+│                                                                 │
 │  Upload Request (POST /api/images/upload)                       │
-│       │                                                          │
-│       ▼                                                          │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │            ImageProcessingService                        │    │
-│  │                                                          │    │
-│  │  processImage(buffer, filename, sessionId):              │    │
+│  │            ImageProcessingService                       │    │
+│  │                                                         │    │
+│  │  processImage(buffer, filename, sessionId):             │    │
 │  │  ├─ 1. Generate SHA256 hash                             │    │
 │  │  ├─ 2. Check for duplicate (findDuplicate)              │    │
 │  │  │      ├─ Exists: Link to conversation, return early   │    │
@@ -71,25 +71,25 @@ const metadata = await analyzeWithAI(buffer); // Blocks request for 5+ seconds
 │  │  ├─ 5. Dispatch BullMQ jobs                             │    │
 │  │  │      ├─ generate-metadata job                        │    │
 │  │  │      └─ generate-variants job                        │    │
-│  │  └─ 6. Return { imageId, isNew, status }               │    │
+│  │  └─ 6. Return { imageId, isNew, status }                │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
+│                        │                                        │
 │       ┌────────────────┴────────────────┐                       │
 │       ▼                                 ▼                       │
-│  ┌─────────────┐               ┌─────────────────┐              │
-│  │ Filesystem  │               │    BullMQ       │              │
-│  │             │               │                 │              │
-│  │ /uploads/   │               │ ┌─────────────┐ │              │
-│  │  images/    │               │ │ Metadata Job│ │              │
-│  │   2025/     │               │ │ → AI analysis│              │
-│  │    11/      │               │ │ → Vector idx │              │
-│  │     27/     │               │ └─────────────┘ │              │
-│  │      original/              │ ┌─────────────┐ │              │
-│  │      variants/              │ │ Variants Job│ │              │
-│  │                             │ │ → 3 sizes   │ │              │
-│  │                             │ │ → WebP/AVIF │ │              │
-│  └─────────────┘               │ └─────────────┘ │              │
-│                                └─────────────────┘              │
+│  ┌────────────────┐             ┌──────────────────┐            │
+│  │ Filesystem     │             │    BullMQ        │            │
+│  │                │             │                  │            │
+│  │ /uploads/      │             │ ┌──────────────┐ │            │
+│  │  images/       │             │ │ Metadata Job │ │            │
+│  │   2025/        │             │ │ → AI analysis│ │            │
+│  │    11/         │             │ │ → Vector idx │ │            │
+│  │     27/        │             │ └──────────────┘ │            │
+│  │      original/ │             │ ┌──────────────┐ │            │
+│  │      variants/ │             │ │ Variants Job │ │            │
+│  │                │             │ │ → 3 sizes    │ │            │
+│  │                │             │ │ → WebP/AVIF  │ │            │
+│  └────────────────┘             │ └──────────────┘ │            │
+│                                 └──────────────────┘            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

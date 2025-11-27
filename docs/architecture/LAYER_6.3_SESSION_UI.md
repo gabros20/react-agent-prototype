@@ -47,46 +47,46 @@ deleteSession(id);  // Immediate, no undo
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SESSION UI COMPONENTS                         │
-│                                                                  │
+│                    SESSION UI COMPONENTS                        │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                  SessionSidebar                            │  │
-│  │                                                            │  │
+│  │                  SessionSidebar                           │  │
+│  │                                                           │  │
 │  │  Trigger Button (PanelLeft icon)                          │  │
-│  │       │                                                    │  │
-│  │       ▼                                                    │  │
+│  │       │                                                   │  │
+│  │       ▼                                                   │  │
 │  │  Sheet (slide from left)                                  │  │
 │  │  ├─ Header: "Chat Sessions"                               │  │
 │  │  ├─ New Session Button                                    │  │
 │  │  └─ ScrollArea                                            │  │
 │  │       └─ SessionItem (mapped)                             │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    SessionItem                             │  │
-│  │                                                            │  │
+│  │                    SessionItem                            │  │
+│  │                                                           │  │
 │  │  ┌─────────────────────────────────────────────────────┐  │  │
 │  │  │ [Title]                              [⋮ Menu]       │  │  │
 │  │  │ 5 messages • 2 hours ago                            │  │  │
 │  │  └─────────────────────────────────────────────────────┘  │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  Dropdown Menu:                                           │  │
-│  │  ├─ Clear History → AlertDialog                          │  │
-│  │  └─ Delete Session → AlertDialog                         │  │
-│  │                                                            │  │
+│  │  ├─ Clear History → AlertDialog                           │  │
+│  │  └─ Delete Session → AlertDialog                          │  │
+│  │                                                           │  │
 │  │  Click Action:                                            │  │
-│  │  └─ handleLoadSession() → chatStore.setSessionId()       │  │
-│  │                        → chatStore.setMessages()         │  │
-│  │                        → close sheet                     │  │
+│  │  └─ handleLoadSession() → chatStore.setSessionId()        │  │
+│  │                        → chatStore.setMessages()          │  │
+│  │                        → close sheet                      │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   AlertDialogs                             │  │
-│  │                                                            │  │
+│  │                   AlertDialogs                            │  │
+│  │                                                           │  │
 │  │  Clear History:                                           │  │
 │  │  "This will delete all messages but keep the session"     │  │
 │  │  [Cancel] [Clear History]                                 │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  Delete Session:                                          │  │
 │  │  "This will permanently delete the session"               │  │
 │  │  [Cancel] [Delete] (destructive style)                    │  │

@@ -37,31 +37,31 @@ class Page {
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Schema Definition Layer                      │
-│                                                                  │
-│  ┌──────────────────┐    ┌──────────────────┐                   │
-│  │  sqliteTable()   │    │   relations()    │                   │
-│  │  Column Types    │    │   Foreign Keys   │                   │
-│  │  Constraints     │    │   One/Many       │                   │
-│  └────────┬─────────┘    └────────┬─────────┘                   │
-│           │                       │                              │
-│           ▼                       ▼                              │
-│  ┌─────────────────────────────────────────────┐                │
-│  │              TypeScript Types               │                │
-│  │  • Insert types (with defaults)             │                │
-│  │  • Select types (full row)                  │                │
-│  │  • Inferred from schema automatically       │                │
-│  └─────────────────────┬───────────────────────┘                │
-│                        │                                         │
-│           ┌────────────┴────────────┐                           │
-│           ▼                         ▼                            │
-│  ┌─────────────────┐    ┌─────────────────────┐                 │
-│  │  Drizzle Query  │    │   drizzle-zod       │                 │
-│  │  Builder API    │    │   Zod Schemas       │                 │
-│  │  (type-safe)    │    │   (runtime valid.)  │                 │
-│  └─────────────────┘    └─────────────────────┘                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│             Schema Definition Layer                 │
+│                                                     │
+│  ┌──────────────────┐    ┌──────────────────┐       │
+│  │  sqliteTable()   │    │   relations()    │       │
+│  │  Column Types    │    │   Foreign Keys   │       │
+│  │  Constraints     │    │   One/Many       │       │
+│  └────────┬─────────┘    └────────┬─────────┘       │
+│           │                       │                 │
+│           ▼                       ▼                 │
+│  ┌─────────────────────────────────────────────┐    │
+│  │              TypeScript Types               │    │
+│  │  • Insert types (with defaults)             │    │
+│  │  • Select types (full row)                  │    │
+│  │  • Inferred from schema automatically       │    │
+│  └─────────────────────┬───────────────────────┘    │
+│                        │                            │
+│           ┌────────────┴────────────┐               │
+│           ▼                         ▼               │
+│  ┌─────────────────┐    ┌─────────────────────┐     │
+│  │  Drizzle Query  │    │   drizzle-zod       │     │
+│  │  Builder API    │    │   Zod Schemas       │     │
+│  │  (type-safe)    │    │   (runtime valid.)  │     │
+│  └─────────────────┘    └─────────────────────┘     │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---

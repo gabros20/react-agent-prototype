@@ -46,41 +46,41 @@ Without proper section templates:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SECTION TEMPLATE ANATOMY                      │
-│                                                                  │
+│                    SECTION TEMPLATE ANATOMY                     │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Variable Defaults                             │  │
-│  │                                                            │  │
+│  │              Variable Defaults                            │  │
+│  │                                                           │  │
 │  │  {% set displayTitle = title or "Welcome" %}              │  │
 │  │  {% set displayImage = image or placeholderImage %}       │  │
 │  │  {% set normalizedLink = ctaLink | normalizeLink %}       │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                              ▼                                   │
+│                              │                                  │
+│                              ▼                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Section Wrapper                               │  │
-│  │                                                            │  │
+│  │              Section Wrapper                              │  │
+│  │                                                           │  │
 │  │  <section class="hero hero--centered">                    │  │
 │  │    <div class="container">                                │  │
 │  │      <!-- Section content -->                             │  │
 │  │    </div>                                                 │  │
 │  │  </section>                                               │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                              ▼                                   │
+│                              │                                  │
+│                              ▼                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Content Elements                              │  │
-│  │                                                            │  │
+│  │              Content Elements                             │  │
+│  │                                                           │  │
 │  │  {% if displayTitle %}                                    │  │
 │  │    <h1 class="hero__title">{{ displayTitle }}</h1>        │  │
 │  │  {% endif %}                                              │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  {% if displayImage %}                                    │  │
 │  │    <img src="{{ displayImage.url }}"                      │  │
 │  │         alt="{{ displayImage.alt }}"                      │  │
 │  │         class="hero__image">                              │  │
 │  │  {% endif %}                                              │  │
-│  │                                                            │  │
+│  │                                                           │  │
 │  │  {% if normalizedLink %}                                  │  │
 │  │    <a href="{{ normalizedLink.href }}"                    │  │
 │  │       class="hero__cta">{{ ctaText }}</a>                 │  │

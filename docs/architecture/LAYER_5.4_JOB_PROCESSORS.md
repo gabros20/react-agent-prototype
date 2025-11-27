@@ -52,53 +52,53 @@ const metadata = await generateMetadata(buffer);  // Fails → whole pipeline fa
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    JOB PROCESSOR PIPELINE                        │
-│                                                                  │
-│  Upload Complete                                                 │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │              processMetadata(job)                        │    │
-│  │                                                          │    │
-│  │  1. Read file from disk          (10%)                  │    │
-│  │  2. Generate metadata via GPT-4o (50%)                  │    │
-│  │  3. Store in image_metadata      (80%)                  │    │
-│  │  4. Queue embeddings job         (100%)                 │    │
-│  │                                                          │    │
-│  │  Input:  { imageId, filePath }                          │    │
-│  │  Output: { description, tags, colors, mood, ... }       │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │              processVariants(job)                        │    │
-│  │                                                          │    │
-│  │  1. Read original image          (10%)                  │    │
-│  │  2. Generate 6 variants          (60%)                  │    │
-│  │     • 640w, 1024w, 1920w                                │    │
-│  │     • WebP + AVIF formats                               │    │
-│  │  3. Store in image_variants      (100%)                 │    │
-│  │                                                          │    │
-│  │  Input:  { imageId, filePath }                          │    │
-│  │  Output: [{ variantType, format, width, path }, ...]    │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │            processEmbeddings(job)                        │    │
-│  │                                                          │    │
-│  │  1. Get searchableText from metadata   (10%)            │    │
-│  │  2. Generate embeddings via OpenRouter (90%)            │    │
-│  │  3. Index in LanceDB vector store                       │    │
-│  │  4. Update image status to "completed" (100%)           │    │
-│  │                                                          │    │
-│  │  Input:  { imageId, metadata, filePath }                │    │
-│  │  Output: { indexed: true }                              │    │
-│  │                                                          │    │
-│  │  Note: Embeddings failure doesn't fail the pipeline     │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                    JOB PROCESSOR PIPELINE                     │
+│                                                               │
+│  Upload Complete                                              │
+│       │                                                       │
+│       ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │              processMetadata(job)                       │  │
+│  │                                                         │  │
+│  │  1. Read file from disk          (10%)                  │  │
+│  │  2. Generate metadata via GPT-4o (50%)                  │  │
+│  │  3. Store in image_metadata      (80%)                  │  │
+│  │  4. Queue embeddings job         (100%)                 │  │
+│  │                                                         │  │
+│  │  Input:  { imageId, filePath }                          │  │
+│  │  Output: { description, tags, colors, mood, ... }       │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│       │                                                       │
+│       ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │              processVariants(job)                       │  │
+│  │                                                         │  │
+│  │  1. Read original image          (10%)                  │  │
+│  │  2. Generate 6 variants          (60%)                  │  │
+│  │     • 640w, 1024w, 1920w                                │  │
+│  │     • WebP + AVIF formats                               │  │
+│  │  3. Store in image_variants      (100%)                 │  │
+│  │                                                         │  │
+│  │  Input:  { imageId, filePath }                          │  │
+│  │  Output: [{ variantType, format, width, path }, ...]    │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│       │                                                       │
+│       ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │            processEmbeddings(job)                       │  │
+│  │                                                         │  │
+│  │  1. Get searchableText from metadata   (10%)            │  │
+│  │  2. Generate embeddings via OpenRouter (90%)            │  │
+│  │  3. Index in LanceDB vector store                       │  │
+│  │  4. Update image status to "completed" (100%)           │  │
+│  │                                                         │  │
+│  │  Input:  { imageId, metadata, filePath }                │  │
+│  │  Output: { indexed: true }                              │  │
+│  │                                                         │  │
+│  │  Note: Embeddings failure doesn't fail the pipeline     │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ---

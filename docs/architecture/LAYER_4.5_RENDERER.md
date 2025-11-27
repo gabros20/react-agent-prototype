@@ -50,56 +50,56 @@ const templates = fs.readdirSync("./templates");
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    RENDERER SERVICE                              │
-│                                                                  │
+│                    RENDERER SERVICE                             │
+│                                                                 │
 │  renderPage(pageSlug, locale, pageService)                      │
-│       │                                                          │
-│       ▼                                                          │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                  RendererService                         │    │
-│  │                                                          │    │
-│  │  Nunjucks Environment:                                   │    │
+│  │                  RendererService                        │    │
+│  │                                                         │    │
+│  │  Nunjucks Environment:                                  │    │
 │  │  ├─ autoescape: true                                    │    │
 │  │  ├─ watch: dev only                                     │    │
 │  │  └─ noCache: dev only                                   │    │
-│  │                                                          │    │
-│  │  Custom Filters:                                         │    │
+│  │                                                         │    │
+│  │  Custom Filters:                                        │    │
 │  │  ├─ markdown  → marked.parse()                          │    │
-│  │  ├─ truncate  → str.slice(0, n) + "..."                │    │
+│  │  ├─ truncate  → str.slice(0, n) + "..."                 │    │
 │  │  ├─ asset     → "/assets/" + path                       │    │
 │  │  ├─ normalizeLink → { href, type }                      │    │
 │  │  └─ date      → format(date, pattern)                   │    │
-│  │                                                          │    │
-│  │  Template Registry (auto-built):                         │    │
-│  │  ├─ hero      → { variants: [default, centered], path }│    │
-│  │  ├─ features  → { variants: [default, grid], path }    │    │
-│  │  ├─ cta       → { variants: [default], path }          │    │
-│  │  └─ ...                                                  │    │
+│  │                                                         │    │
+│  │  Template Registry (auto-built):                        │    │
+│  │  ├─ hero      → { variants: [default, centered], path } │    │
+│  │  ├─ features  → { variants: [default, grid], path }     │    │
+│  │  ├─ cta       → { variants: [default], path }           │    │
+│  │  └─ ...                                                 │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                Template Directory                        │    │
-│  │                                                          │    │
-│  │  server/templates/                                       │    │
-│  │  ├─ layout/                                              │    │
+│  │                Template Directory                       │    │
+│  │                                                         │    │
+│  │  server/templates/                                      │    │
+│  │  ├─ layout/                                             │    │
 │  │  │   └─ page.njk         (main page wrapper)            │    │
-│  │  ├─ sections/                                            │    │
-│  │  │   ├─ hero/                                            │    │
+│  │  ├─ sections/                                           │    │
+│  │  │   ├─ hero/                                           │    │
 │  │  │   │   ├─ default.njk                                 │    │
 │  │  │   │   └─ centered.njk                                │    │
-│  │  │   ├─ features/                                        │    │
+│  │  │   ├─ features/                                       │    │
 │  │  │   │   ├─ default.njk                                 │    │
 │  │  │   │   └─ grid.njk                                    │    │
-│  │  │   ├─ header/                                          │    │
+│  │  │   ├─ header/                                         │    │
 │  │  │   │   └─ default.njk                                 │    │
-│  │  │   └─ footer/                                          │    │
+│  │  │   └─ footer/                                         │    │
 │  │  │       └─ default.njk                                 │    │
-│  │  └─ posts/                                               │    │
-│  │      ├─ blog/                                            │    │
+│  │  └─ posts/                                              │    │
+│  │      ├─ blog/                                           │    │
 │  │      │   ├─ single.njk                                  │    │
 │  │      │   └─ list.njk                                    │    │
-│  │      └─ layout/                                          │    │
+│  │      └─ layout/                                         │    │
 │  │          └─ post.njk                                    │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘

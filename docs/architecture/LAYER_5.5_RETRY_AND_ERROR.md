@@ -56,38 +56,38 @@ throw error;  // Can't debug which image, which step
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ERROR HANDLING FLOW                           │
-│                                                                  │
-│  Job Execution                                                   │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                 Try Processing                           │    │
-│  │                                                          │    │
-│  │  try {                                                   │    │
-│  │    await processMetadata(job);                          │    │
-│  │    return { success: true };                            │    │
-│  │  } catch (error) {                                       │    │
-│  │    throw error;  // Let BullMQ handle                   │    │
-│  │  }                                                       │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│              ┌─────────┴─────────┐                              │
-│              │                   │                              │
-│          Success              Error                             │
-│              │                   │                              │
-│              ▼                   ▼                              │
+┌────────────────────────────────────────────────────────────────┐
+│                    ERROR HANDLING FLOW                         │
+│                                                                │
+│  Job Execution                                                 │
+│       │                                                        │
+│       ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                 Try Processing                          │   │
+│  │                                                         │   │
+│  │  try {                                                  │   │
+│  │    await processMetadata(job);                          │   │
+│  │    return { success: true };                            │   │
+│  │  } catch (error) {                                      │   │
+│  │    throw error;  // Let BullMQ handle                   │   │
+│  │  }                                                      │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                        │                                       │
+│              ┌─────────┴─────────┐                             │
+│              │                   │                             │
+│          Success              Error                            │
+│              │                   │                             │
+│              ▼                   ▼                             │
 │  ┌───────────────────┐  ┌───────────────────────────────────┐  │
 │  │    Completed      │  │        BullMQ Retry               │  │
 │  │                   │  │                                   │  │
-│  │  worker.on(       │  │  Attempt 1 → Wait 2s  → Retry    │  │
-│  │    "completed"    │  │  Attempt 2 → Wait 4s  → Retry    │  │
-│  │  )                │  │  Attempt 3 → Wait 8s  → Retry    │  │
-│  └───────────────────┘  │  Attempt 4 → FINAL FAILURE       │  │
+│  │  worker.on(       │  │  Attempt 1 → Wait 2s  → Retry     │  │
+│  │    "completed"    │  │  Attempt 2 → Wait 4s  → Retry     │  │
+│  │  )                │  │  Attempt 3 → Wait 8s  → Retry     │  │
+│  └───────────────────┘  │  Attempt 4 → FINAL FAILURE        │  │
 │                         └───────────────────────────────────┘  │
-│                                        │                        │
-│                                        ▼                        │
+│                                        │                       │
+│                                        ▼                       │
 │                         ┌───────────────────────────────────┐  │
 │                         │      Final Failure Handler        │  │
 │                         │                                   │  │
@@ -98,7 +98,7 @@ throw error;  // Can't debug which image, which step
 │                         │    });                            │  │
 │                         │  }                                │  │
 │                         └───────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---

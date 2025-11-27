@@ -48,54 +48,54 @@ process.exit(0);  // Jobs in progress lost
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    WORKER LIFECYCLE                              │
-│                                                                  │
-│  pnpm worker:dev                                                 │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                     Worker                               │    │
-│  │             Worker("image-processing")                   │    │
-│  │                                                          │    │
-│  │  Configuration:                                          │    │
-│  │  ├─ connection: Redis                                   │    │
-│  │  ├─ concurrency: 5                                      │    │
-│  │  └─ limiter: 10 jobs / 60s                             │    │
-│  │                                                          │    │
-│  │  Job Processor:                                          │    │
-│  │  ├─ generate-metadata → processMetadata()               │    │
-│  │  ├─ generate-variants → processVariants()               │    │
-│  │  └─ generate-embeddings → processEmbeddings()           │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                  Event Handlers                          │    │
-│  │                                                          │    │
-│  │  active    → ⚙️  Processing job...                      │    │
-│  │  completed → ✅ Job completed (duration)                │    │
-│  │  failed    → ❌ Job failed (error)                      │    │
-│  │  error     → ❌ Worker error                            │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │               Graceful Shutdown                          │    │
-│  │                                                          │    │
-│  │  SIGINT/SIGTERM received                                 │    │
-│  │       │                                                  │    │
-│  │       ▼                                                  │    │
-│  │  await worker.close()                                    │    │
-│  │       │                                                  │    │
-│  │       ├─ Wait for active jobs to complete               │    │
-│  │       ├─ Stop accepting new jobs                        │    │
-│  │       └─ Close Redis connection                         │    │
-│  │       │                                                  │    │
-│  │       ▼                                                  │    │
-│  │  process.exit(0)                                        │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                    WORKER LIFECYCLE                           │
+│                                                               │
+│  pnpm worker:dev                                              │
+│       │                                                       │
+│       ▼                                                       │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                     Worker                              │  │
+│  │             Worker("image-processing")                  │  │
+│  │                                                         │  │
+│  │  Configuration:                                         │  │
+│  │  ├─ connection: Redis                                   │  │
+│  │  ├─ concurrency: 5                                      │  │
+│  │  └─ limiter: 10 jobs / 60s                              │  │
+│  │                                                         │  │
+│  │  Job Processor:                                         │  │
+│  │  ├─ generate-metadata → processMetadata()               │  │
+│  │  ├─ generate-variants → processVariants()               │  │
+│  │  └─ generate-embeddings → processEmbeddings()           │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                  Event Handlers                         │  │
+│  │                                                         │  │
+│  │  active    → ⚙️  Processing job...                      │  │
+│  │  completed → ✅ Job completed (duration)                │  │
+│  │  failed    → ❌ Job failed (error)                      │  │
+│  │  error     → ❌ Worker error                            │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                        │                                      │
+│                        ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │               Graceful Shutdown                         │  │
+│  │                                                         │  │
+│  │  SIGINT/SIGTERM received                                │  │
+│  │       │                                                 │  │
+│  │       ▼                                                 │  │
+│  │  await worker.close()                                   │  │
+│  │       │                                                 │  │
+│  │       ├─ Wait for active jobs to complete               │  │
+│  │       ├─ Stop accepting new jobs                        │  │
+│  │       └─ Close Redis connection                         │  │
+│  │       │                                                 │  │
+│  │       ▼                                                 │  │
+│  │  process.exit(0)                                        │  │
+│  └─────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ---

@@ -50,23 +50,23 @@ setSessionId(data.traceId);  // Wrong! traceId ≠ sessionId
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    SSE STREAMING FLOW                            │
-│                                                                  │
-│  User Input                                                      │
-│       │                                                          │
-│       ▼                                                          │
+│                    SSE STREAMING FLOW                           │
+│                                                                 │
+│  User Input                                                     │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   sendMessage(prompt)                    │    │
-│  │                                                          │    │
+│  │                   sendMessage(prompt)                   │    │
+│  │                                                         │    │
 │  │  1. setIsStreaming(true)                                │    │
 │  │  2. addMessage(userMessage)                             │    │
 │  │  3. fetch('/api/agent', { prompt, sessionId })          │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                 SSE Stream Parsing                       │    │
-│  │                                                          │    │
+│  │                 SSE Stream Parsing                      │    │
+│  │                                                         │    │
 │  │  while (true) {                                         │    │
 │  │    const { done, value } = await reader.read();         │    │
 │  │    if (done) break;                                     │    │
@@ -76,11 +76,11 @@ setSessionId(data.traceId);  // Wrong! traceId ≠ sessionId
 │  │    for (const line of lines) { ... }                    │    │
 │  │  }                                                      │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                 Event Type Dispatch                      │    │
-│  │                                                          │    │
+│  │                 Event Type Dispatch                     │    │
+│  │                                                         │    │
 │  │  switch (eventType) {                                   │    │
 │  │    case 'log'              → logStore.addLog()          │    │
 │  │    case 'text-delta'       → accumulate text            │    │
@@ -93,11 +93,11 @@ setSessionId(data.traceId);  // Wrong! traceId ≠ sessionId
 │  │    case 'done'/'finish'    → cleanup                    │    │
 │  │  }                                                      │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    Cleanup                               │    │
-│  │                                                          │    │
+│  │                    Cleanup                              │    │
+│  │                                                         │    │
 │  │  finally {                                              │    │
 │  │    setIsStreaming(false);                               │    │
 │  │  }                                                      │    │

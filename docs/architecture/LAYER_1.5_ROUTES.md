@@ -53,48 +53,48 @@ router.get("/pages/:id", async (req, res) => {
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ROUTE ARCHITECTURE                           │
-│                                                                  │
-│  server/index.ts                                                 │
-│       │                                                          │
-│       ├─ app.use("/api", uploadRoutes)                          │
-│       ├─ app.use("/api", imageRoutes)                           │
-│       ├─ app.use("/v1/teams/:team/.../", createCMSRoutes())     │
-│       ├─ app.use("/v1/agent", createAgentRoutes())              │
-│       └─ app.use("/v1/sessions", createSessionRoutes())         │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    FACTORY PATTERN                       │    │
-│  │                                                          │    │
-│  │  export function createCMSRoutes(services: ServiceContainer) │
-│  │  {                                                       │    │
-│  │    const router = express.Router();                      │    │
-│  │                                                          │    │
-│  │    router.post("/pages", async (req, res, next) => {     │    │
-│  │      try {                                               │    │
-│  │        // 1. Validate input                              │    │
-│  │        const input = createPageSchema.parse(req.body);   │    │
-│  │                                                          │    │
-│  │        // 2. Extract context                             │    │
-│  │        const { siteId, environmentId } = await          │    │
-│  │          getSiteAndEnv(services.db, ...);               │    │
-│  │                                                          │    │
-│  │        // 3. Call service                                │    │
-│  │        const page = await services.pageService          │    │
-│  │          .createPage({ ...input, siteId, environmentId }); │  │
-│  │                                                          │    │
-│  │        // 4. Return response                             │    │
-│  │        res.status(201).json(ApiResponse.success(page));  │    │
-│  │      } catch (error) {                                   │    │
-│  │        next(error);  // → Error handler middleware       │    │
-│  │      }                                                   │    │
-│  │    });                                                   │    │
-│  │                                                          │    │
-│  │    return router;                                        │    │
-│  │  }                                                       │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                    ROUTE ARCHITECTURE                              │
+│                                                                    │
+│  server/index.ts                                                   │
+│       │                                                            │
+│       ├─ app.use("/api", uploadRoutes)                             │
+│       ├─ app.use("/api", imageRoutes)                              │
+│       ├─ app.use("/v1/teams/:team/.../", createCMSRoutes())        │
+│       ├─ app.use("/v1/agent", createAgentRoutes())                 │
+│       └─ app.use("/v1/sessions", createSessionRoutes())            │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                    FACTORY PATTERN                           │  │
+│  │                                                              │  │
+│  │  export function createCMSRoutes(services: ServiceContainer) │  │
+│  │  {                                                           │  │
+│  │    const router = express.Router();                          │  │
+│  │                                                              │  │
+│  │    router.post("/pages", async (req, res, next) => {         │  │
+│  │      try {                                                   │  │
+│  │        // 1. Validate input                                  │  │
+│  │        const input = createPageSchema.parse(req.body);       │  │
+│  │                                                              │  │
+│  │        // 2. Extract context                                 │  │
+│  │        const { siteId, environmentId } = await               │  │
+│  │          getSiteAndEnv(services.db, ...);                    │  │
+│  │                                                              │  │
+│  │        // 3. Call service                                    │  │
+│  │        const page = await services.pageService               │  │
+│  │          .createPage({ ...input, siteId, environmentId });   │  │
+│  │                                                              │  │
+│  │        // 4. Return response                                 │  │
+│  │        res.status(201).json(ApiResponse.success(page));      │  │
+│  │      } catch (error) {                                       │  │
+│  │        next(error);  // → Error handler middleware           │  │
+│  │      }                                                       │  │
+│  │    });                                                       │  │
+│  │                                                              │  │
+│  │    return router;                                            │  │
+│  │  }                                                           │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ---

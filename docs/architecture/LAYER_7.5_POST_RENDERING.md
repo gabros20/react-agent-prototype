@@ -45,50 +45,50 @@ renderPage(post.slug);  // Posts don't have sections
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    POST RENDERING FLOW                           │
-│                                                                  │
-│  Request: GET /posts/blog/my-article                            │
-│       │                                                          │
-│       ▼                                                          │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                 Route Handler                              │  │
-│  │                                                            │  │
-│  │  router.get("/:collectionSlug/:postSlug", async (req) => { │  │
-│  │    const collection = await getCollectionDef(collectionSlug)│  │
-│  │    const entry = await getEntryBySlug(postSlug, locale);   │  │
-│  │    const html = await renderer.renderPost(entry, locale,   │  │
-│  │                                           collectionSlug); │  │
-│  │  })                                                        │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │              renderPost(entry, locale, collectionSlug)     │  │
-│  │                                                            │  │
-│  │  1. Fetch global navigation items                         │  │
-│  │  2. Render header (sections/header/default.njk)           │  │
-│  │  3. Render footer (sections/footer/default.njk)           │  │
-│  │  4. Render post content (posts/{collection}/single.njk)   │  │
-│  │  5. Combine in layout (posts/layout/post.njk)             │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                        │                                         │
-│                        ▼                                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Template Hierarchy                            │  │
-│  │                                                            │  │
-│  │  posts/                                                    │  │
-│  │  ├── layout/                                              │  │
-│  │  │   └── post.njk          # Base layout (like page.njk) │  │
-│  │  └── blog/                 # Collection-specific          │  │
-│  │      ├── single.njk        # Single post template        │  │
-│  │      └── list.njk          # Post list template          │  │
-│  │                                                            │  │
-│  │  sections/                 # Reused for header/footer     │  │
-│  │  ├── header/default.njk                                   │  │
-│  │  └── footer/default.njk                                   │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                    POST RENDERING FLOW                             │
+│                                                                    │
+│  Request: GET /posts/blog/my-article                               │
+│       │                                                            │
+│       ▼                                                            │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                 Route Handler                                │  │
+│  │                                                              │  │
+│  │  router.get("/:collectionSlug/:postSlug", async (req) => {   │  │
+│  │    const collection = await getCollectionDef(collectionSlug) │  │
+│  │    const entry = await getEntryBySlug(postSlug, locale);     │  │
+│  │    const html = await renderer.renderPost(entry, locale,     │  │
+│  │                                           collectionSlug);   │  │
+│  │  })                                                          │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                        │                                           │
+│                        ▼                                           │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │              renderPost(entry, locale, collectionSlug)       │  │
+│  │                                                              │  │
+│  │  1. Fetch global navigation items                            │  │
+│  │  2. Render header (sections/header/default.njk)              │  │
+│  │  3. Render footer (sections/footer/default.njk)              │  │
+│  │  4. Render post content (posts/{collection}/single.njk)      │  │
+│  │  5. Combine in layout (posts/layout/post.njk)                │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                        │                                           │
+│                        ▼                                           │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │              Template Hierarchy                              │  │
+│  │                                                              │  │
+│  │  posts/                                                      │  │
+│  │  ├── layout/                                                 │  │
+│  │  │   └── post.njk          # Base layout (like page.njk)     │  │
+│  │  └── blog/                 # Collection-specific             │  │
+│  │      ├── single.njk        # Single post template            │  │
+│  │      └── list.njk          # Post list template              │  │
+│  │                                                              │  │
+│  │  sections/                 # Reused for header/footer        │  │
+│  │  ├── header/default.njk                                      │  │
+│  │  └── footer/default.njk                                      │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ---

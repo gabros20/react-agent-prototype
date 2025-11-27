@@ -53,53 +53,53 @@ pendingApprovals.set(id, promise);
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    APPROVAL QUEUE FLOW                           │
-│                                                                  │
-│  Agent Execution                                                 │
-│       │                                                          │
-│       ▼                                                          │
+│                    APPROVAL QUEUE FLOW                          │
+│                                                                 │
+│  Agent Execution                                                │
+│       │                                                         │
+│       ▼                                                         │
 │  Tool needs approval (cms_deletePage)                           │
-│       │                                                          │
-│       ▼                                                          │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   ApprovalQueue                          │    │
-│  │                                                          │    │
+│  │                   ApprovalQueue                         │    │
+│  │                                                         │    │
 │  │  pendingRequests: Map<approvalId, ApprovalRequest>      │    │
 │  │  resolvers: Map<approvalId, (response) => void>         │    │
 │  │  responses: Map<approvalId, ApprovalResponse>           │    │
-│  │                                                          │    │
-│  │  requestApproval(request):                               │    │
+│  │                                                         │    │
+│  │  requestApproval(request):                              │    │
 │  │  ├─ 1. Store request in pendingRequests                 │    │
 │  │  ├─ 2. Create promise with resolver                     │    │
 │  │  ├─ 3. Store resolver in resolvers map                  │    │
 │  │  ├─ 4. Set 5-minute timeout                             │    │
 │  │  └─ 5. Return Promise.race(response, timeout)           │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
+│                        │                                        │
 │      BLOCKED  ◀────────┴────────▶  WAITING                      │
 │    (Server waits)            (Frontend polls)                   │
-│                                                                  │
+│                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    Frontend                              │    │
-│  │                                                          │    │
+│  │                    Frontend                             │    │
+│  │                                                         │    │
 │  │  1. Receive approval_required SSE event                 │    │
 │  │  2. Show confirmation dialog                            │    │
 │  │  3. User clicks Approve/Reject                          │    │
 │  │  4. POST /v1/approvals/:id/respond                      │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │              respondToApproval(id, approved)             │    │
-│  │                                                          │    │
+│  │              respondToApproval(id, approved)            │    │
+│  │                                                         │    │
 │  │  1. Get resolver from map                               │    │
 │  │  2. Create ApprovalResponse                             │    │
 │  │  3. Store response in responses map                     │    │
 │  │  4. Call resolver(response)  ◀─── UNBLOCKS SERVER       │    │
 │  │  5. Schedule cleanup (1 minute)                         │    │
 │  └─────────────────────────────────────────────────────────┘    │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  Agent resumes with { approved: true/false }                    │
 └─────────────────────────────────────────────────────────────────┘
 ```

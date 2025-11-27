@@ -47,59 +47,59 @@ execute: async (input, { experimental_context }) => {
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Context Injection System                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    Request Arrives                          ││
-│  │                                                             ││
-│  │   POST /v1/agent/stream                                     ││
-│  │   { sessionId, message, cmsTarget? }                        ││
-│  └───────────────────────────┬─────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                 Context Assembly                            ││
-│  │                                                             ││
-│  │  AgentContext = {                                           ││
-│  │    // From ServiceContainer (singleton)                     ││
-│  │    db,                                                      ││
-│  │    vectorIndex,                                             ││
-│  │    services: { page, section, entry, image, post, ... },   ││
-│  │                                                             ││
-│  │    // Created per-request                                   ││
-│  │    logger,       ← Streams to SSE                           ││
-│  │    stream,       ← SSE writer                               ││
-│  │    traceId,      ← UUID for this request                    ││
-│  │    sessionId,    ← From request body                        ││
-│  │                                                             ││
-│  │    // Multi-tenant targeting                                ││
-│  │    cmsTarget: { siteId, environmentId }                     ││
-│  │  }                                                          ││
-│  └───────────────────────────┬─────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    Agent Execution                          ││
-│  │                                                             ││
-│  │  new ToolLoopAgent({                                        ││
-│  │    experimental_context: agentContext,  ← Passed here      ││
-│  │    tools: ALL_TOOLS,                                        ││
-│  │    ...                                                      ││
-│  │  })                                                         ││
-│  └───────────────────────────┬─────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    Tool Execution                           ││
-│  │                                                             ││
-│  │  execute: async (input, { experimental_context }) => {     ││
-│  │    const ctx = experimental_context as AgentContext;        ││
-│  │    // Full access to all context                            ││
-│  │  }                                                          ││
-│  └─────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                     Context Injection System                      │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                    Request Arrives                          │  │
+│  │                                                             │  │
+│  │   POST /v1/agent/stream                                     │  │
+│  │   { sessionId, message, cmsTarget? }                        │  │ 
+│  └───────────────────────────┬─────────────────────────────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                 Context Assembly                            │  │
+│  │                                                             │  │
+│  │  AgentContext = {                                           │  │
+│  │    // From ServiceContainer (singleton)                     │  │
+│  │    db,                                                      │  │
+│  │    vectorIndex,                                             │  │
+│  │    services: { page, section, entry, image, post, ... },    │  │
+│  │                                                             │  │
+│  │    // Created per-request                                   │  │
+│  │    logger,       ← Streams to SSE                           │  │
+│  │    stream,       ← SSE writer                               │  │
+│  │    traceId,      ← UUID for this request                    │  │
+│  │    sessionId,    ← From request body                        │  │
+│  │                                                             │  │
+│  │    // Multi-tenant targeting                                │  │
+│  │    cmsTarget: { siteId, environmentId }                     │  │
+│  │  }                                                          │  │
+│  └───────────────────────────┬─────────────────────────────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                    Agent Execution                          │  │
+│  │                                                             │  │
+│  │  new ToolLoopAgent({                                        │  │
+│  │    experimental_context: agentContext,  ← Passed here       │  │
+│  │    tools: ALL_TOOLS,                                        │  │
+│  │    ...                                                      │  │
+│  │  })                                                         │  │
+│  └───────────────────────────┬─────────────────────────────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                    Tool Execution                           │  │
+│  │                                                             │  │
+│  │  execute: async (input, { experimental_context }) => {      │  │
+│  │    const ctx = experimental_context as AgentContext;        │  │
+│  │    // Full access to all context                            │  │
+│  │  }                                                          │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---

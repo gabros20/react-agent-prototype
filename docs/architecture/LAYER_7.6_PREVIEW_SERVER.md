@@ -50,25 +50,25 @@ Without a preview server:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PREVIEW SERVER                                │
-│                                                                  │
+│                    PREVIEW SERVER                               │
+│                                                                 │
 │  pnpm preview → server/preview.ts                               │
-│       │                                                          │
-│       ▼                                                          │
+│       │                                                         │
+│       ▼                                                         │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                 Initialization                             │  │
-│  │                                                            │  │
+│  │                 Initialization                            │  │
+│  │                                                           │  │
 │  │  1. ServiceContainer.initialize(db)                       │  │
 │  │  2. new RendererService(TEMPLATE_DIR)                     │  │
 │  │  3. Configure middleware                                  │  │
 │  │  4. Mount routes                                          │  │
 │  │  5. Start listening on PORT                               │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   Route Handlers                           │  │
-│  │                                                            │  │
+│  │                   Route Handlers                          │  │
+│  │                                                           │  │
 │  │  GET /                    → Redirect to /pages/home       │  │
 │  │  GET /pages/:slug         → Render page HTML              │  │
 │  │  GET /pages/:slug/raw     → Return page JSON              │  │
@@ -76,19 +76,19 @@ Without a preview server:
 │  │  GET /posts/:coll/:slug   → Render single post            │  │
 │  │  GET /health              → Server status + registry      │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   Static Serving                           │  │
-│  │                                                            │  │
+│  │                   Static Serving                          │  │
+│  │                                                           │  │
 │  │  /assets/*  → server/templates/assets/                    │  │
 │  │  /uploads/* → uploads/ (env: UPLOADS_DIR)                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                        │                                         │
-│                        ▼                                         │
+│                        │                                        │
+│                        ▼                                        │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   Error Handling                           │  │
-│  │                                                            │  │
+│  │                   Error Handling                          │  │
+│  │                                                           │  │
 │  │  app.use((err, req, res, next) => {                       │  │
 │  │    res.status(500).send(`                                 │  │
 │  │      <h1>Preview Error</h1>                               │  │

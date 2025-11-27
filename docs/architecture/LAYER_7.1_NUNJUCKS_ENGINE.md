@@ -47,33 +47,33 @@ nunjucks.configure('templates', { noCache: false });
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    NUNJUCKS ENGINE                               │
-│                                                                  │
+│                    NUNJUCKS ENGINE                              │
+│                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   Configuration                            │  │
-│  │                                                            │  │
+│  │                   Configuration                           │  │
+│  │                                                           │  │
 │  │  nunjucks.configure(templateDir, {                        │  │
 │  │    autoescape: true,          // XSS protection           │  │
 │  │    watch: isDev,              // Auto-reload templates    │  │
 │  │    noCache: isDev,            // Fresh compile in dev     │  │
 │  │  })                                                       │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                              ▼                                   │
+│                              │                                  │
+│                              ▼                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   Custom Filters                           │  │
-│  │                                                            │  │
+│  │                   Custom Filters                          │  │
+│  │                                                           │  │
 │  │  markdown    │ str → marked.parse(str)                    │  │
 │  │  truncate    │ str, len → str.slice(0, len) + '...'       │  │
 │  │  date        │ date, fmt → formatted date string          │  │
 │  │  asset       │ path → '/assets/' + path                   │  │
 │  │  normalizeLink│ link → { href, type } object              │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                              ▼                                   │
+│                              │                                  │
+│                              ▼                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   Template Rendering                       │  │
-│  │                                                            │  │
+│  │                   Template Rendering                      │  │
+│  │                                                           │  │
 │  │  env.render('layout/page.njk', {                          │  │
 │  │    page: { ... },                                         │  │
 │  │    content: sectionHtmlList.join('\n'),                   │  │
