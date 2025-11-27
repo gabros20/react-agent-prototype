@@ -353,6 +353,17 @@ export async function streamAgentWithApproval(
 				workingMemory: workingContext.toContextString(), // NEW: Inject working memory
 			});
 
+			// Emit system prompt for debugging
+			if (context.stream) {
+				context.stream.write({
+					type: "system-prompt",
+					prompt: systemPrompt,
+					promptLength: systemPrompt.length,
+					workingMemory: workingContext.toContextString(),
+					timestamp: new Date().toISOString(),
+				});
+			}
+
 			// Use streamText directly (more reliable than ToolLoopAgent.stream())
 			const streamResult = streamText({
 				model: openrouter.languageModel(AGENT_CONFIG.modelId),

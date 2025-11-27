@@ -297,23 +297,23 @@ export async function* streamAgentWithApproval(messages: CoreMessage[], context:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Message Assembly                            │
+│                      Message Assembly                           │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
+│                                                                 │
 │  1. System Prompt (compiled from react.xml)                     │
 │     ├── Role definition                                         │
 │     ├── Available tools list                                    │
 │     ├── Working memory state                                    │
 │     └── Instructions & examples                                 │
-│                                                                  │
+│                                                                 │
 │  2. Conversation History                                        │
 │     ├── Previous user messages                                  │
 │     ├── Previous assistant responses                            │
 │     └── Previous tool calls & results                           │
-│                                                                  │
+│                                                                 │
 │  3. Current User Message                                        │
 │     └── "Create an About page with a hero section"              │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -325,27 +325,27 @@ export async function* streamAgentWithApproval(messages: CoreMessage[], context:
 ```
 Step N:
 ┌─────────────────────────────────────────────────────────────────┐
-│ 1. prepareStep()                                                 │
+│ 1. prepareStep()                                                │
 │    ├── Trim messages if > 20                                    │
 │    └── Save checkpoint if step % 3 === 0                        │
 ├─────────────────────────────────────────────────────────────────┤
-│ 2. LLM Call                                                      │
+│ 2. LLM Call                                                     │
 │    ├── Send: system + history + user message                    │
 │    └── Receive: text and/or tool calls                          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 3. Tool Execution (if tool calls present)                        │
+│ 3. Tool Execution (if tool calls present)                       │
 │    ├── For each tool call:                                      │
 │    │   ├── Validate input against Zod schema                    │
 │    │   ├── Execute tool with AgentContext                       │
 │    │   └── Collect result                                       │
 │    └── Append tool results to messages                          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 4. onStepFinish()                                                │
+│ 4. onStepFinish()                                               │
 │    ├── Extract entities from tool results                       │
 │    ├── Update working memory                                    │
 │    └── Stream step-completed event                              │
 ├─────────────────────────────────────────────────────────────────┤
-│ 5. stopWhen() Check                                              │
+│ 5. stopWhen() Check                                             │
 │    ├── FINAL_ANSWER in text? → Stop                             │
 │    ├── Max steps reached? → Stop                                │
 │    └── Otherwise → Continue to Step N+1                         │

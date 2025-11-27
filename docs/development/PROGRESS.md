@@ -4379,3 +4379,184 @@ pnpm tsx scripts/test-exa-search.ts fetch https://exa.ai
 ✅ **Comprehensive** - Quick facts to deep research covered
 
 ---
+
+## Sprint 22: Enhanced Debug Panel (LangSmith-Inspired) ✅
+
+**Status**: Completed
+**Started**: 2025-11-27
+**Completed**: 2025-11-27
+
+### Objective
+
+Build a professional-grade debug panel for agent tracing and prompt inspection, inspired by LangSmith's observability features. Enable developers to inspect every aspect of agent execution including prompts, tool calls, responses, working memory, and background jobs.
+
+### Problems Addressed
+
+1. **Limited visibility**: Basic log view didn't show full context of agent decisions
+2. **No prompt inspection**: Couldn't see compiled system prompt sent to LLM
+3. **Missing working memory tracking**: No visibility into entity extraction
+4. **Incomplete trace types**: Many backend events not captured in frontend
+5. **Poor large content handling**: No way to view large JSON payloads comfortably
+6. **No retry visibility**: Exponential backoff events not visible
+7. **Confirmation vs HITL confusion**: No distinction between confirmation flag pattern and HITL approval
+
+### Implementation
+
+Tasks:
+
+-   [x] Create comprehensive trace store with 23 entry types
+-   [x] Build enhanced debug panel component hierarchy
+-   [x] Add working memory panel with entity grouping
+-   [x] Add system prompt emission from backend
+-   [x] Parse backend log patterns for detailed trace entries
+-   [x] Create collapsible JSON viewer with full-screen modal
+-   [x] Add filter system with type groups and level filtering
+-   [x] Implement timing/duration tracking for tool calls
+-   [x] Add copy all logs functionality
+-   [x] Export trace as JSON feature
+
+### Files Created (9 files)
+
+1. **app/assistant/_components/enhanced-debug/index.tsx** - Main panel with working memory toggle
+2. **app/assistant/_components/enhanced-debug/trace-header.tsx** - Metrics bar and actions
+3. **app/assistant/_components/enhanced-debug/trace-filters.tsx** - Type/level filters with search
+4. **app/assistant/_components/enhanced-debug/trace-timeline.tsx** - Scrollable timeline view
+5. **app/assistant/_components/enhanced-debug/timeline-entry.tsx** - Individual trace entry component
+6. **app/assistant/_components/enhanced-debug/trace-detail-modal.tsx** - Full-screen JSON viewer
+7. **app/assistant/_components/enhanced-debug/json-viewer.tsx** - Collapsible JSON display
+8. **app/assistant/_components/enhanced-debug/working-memory-panel.tsx** - Entity tracking display
+9. **components/ui/switch.tsx** - Radix UI switch component
+
+### Files Modified (5 files)
+
+1. **app/assistant/_stores/trace-store.ts** - Added 23 trace entry types with colors/labels
+2. **app/assistant/_hooks/use-agent.ts** - Enhanced SSE event handling with pattern detection
+3. **app/assistant/page.tsx** - Integrated EnhancedDebugPanel
+4. **server/agent/orchestrator.ts** - Added system-prompt SSE emission
+5. **components/ui/label.tsx** - Radix UI label component
+
+### Trace Entry Types (23 total)
+
+**Core Events:**
+- `trace-start` - Trace initialization
+- `prompt-sent` - User prompt to LLM
+- `llm-response` - LLM response received
+- `trace-complete` - Trace finished
+
+**Tool Events:**
+- `tool-call` - Tool invocation with args
+- `tool-result` - Tool execution result
+- `tool-error` - Tool execution failed
+- `confirmation-required` - Tool asks for confirmation (flag pattern)
+
+**Flow Events:**
+- `step-complete` - Agent step completed
+- `approval-request` - HITL approval needed
+- `approval-response` - HITL decision made
+
+**Memory Events:**
+- `working-memory-update` - Entity extraction
+- `memory-trimmed` - Message history trimmed
+- `session-loaded` - Previous messages loaded
+- `checkpoint-saved` - Session checkpoint
+
+**System Events:**
+- `system-prompt` - Compiled prompt (for inspection)
+- `system-log` - General backend log
+- `retry-attempt` - Retry with backoff
+- `error` - General error
+
+**Job Events:**
+- `job-queued` - Background job queued
+- `job-progress` - Job progress update
+- `job-complete` - Job finished
+- `job-failed` - Job failed
+
+### Filter Groups
+
+| Group | Entry Types |
+|-------|------------|
+| LLM | system-prompt, prompt-sent, llm-response |
+| Tools | tool-call, tool-result, tool-error, confirmation-required |
+| Flow | trace-start, step-complete, trace-complete |
+| Memory | working-memory-update, memory-trimmed, session-loaded, checkpoint-saved |
+| Approval | approval-request, approval-response |
+| Jobs | job-queued, job-progress, job-complete, job-failed |
+| System | system-log, retry-attempt, error |
+
+### Working Memory Panel
+
+- Collapsible section showing extracted entities
+- Groups entities by type (page, section, collection, media, entry, task)
+- Color-coded badges with icons
+- Timestamp tracking for most recent access
+- Parsed from `working-memory-update` trace entries
+
+### System Prompt Inspection
+
+- Backend emits `system-prompt` SSE event with compiled prompt
+- Shows prompt length in trace summary
+- Full prompt viewable in expandable detail or modal
+- Includes working memory context injected into prompt
+
+### Log Pattern Detection
+
+The use-agent hook now parses backend log messages to create detailed trace entries:
+
+```typescript
+// Detected patterns:
+"Extracted entities to working memory" → working-memory-update
+"Trimming message history" → memory-trimmed
+"Checkpoint saved" → checkpoint-saved
+"Retry X/Y" → retry-attempt
+"Loaded session history" → session-loaded
+"Creating agent" → system-log (with tool count, model)
+"Step X starting" → system-log (with step context)
+```
+
+### UI Features
+
+- **Compact Timeline**: Color-coded badges, icons, duration tags
+- **Expandable Details**: Collapsible input/output JSON
+- **Full-Screen Modal**: View large payloads comfortably
+- **Search**: Filter entries by content
+- **Type Filters**: Quick toggle for entry types
+- **Level Filters**: debug, info, warn, error
+- **Job Toggle**: Show/hide background job events
+- **Copy All**: Copy formatted logs to clipboard
+- **Export JSON**: Download trace as JSON file
+- **Clear Trace**: Reset current trace data
+
+### Dependencies Added
+
+- `@radix-ui/react-switch` - Toggle switches
+- `@radix-ui/react-label` - Form labels
+
+### TypeScript Status
+
+✅ **Zero Errors in Application Code**: All debug panel components type-safe
+
+### Deliverables
+
+✅ **23 trace entry types** - Comprehensive event coverage
+✅ **Working memory panel** - Entity tracking visualization
+✅ **System prompt inspection** - View compiled prompts
+✅ **Pattern detection** - Extract meaning from logs
+✅ **JSON viewer** - Collapsible + full-screen modal
+✅ **Filter system** - 7 type groups + levels + search
+✅ **Timing tracking** - Duration calculation for tools
+✅ **Export features** - Copy all + JSON export
+✅ **Professional UI** - LangSmith-inspired design
+✅ **0 TypeScript errors** - Clean build
+
+### Benefits
+
+✅ **Full Observability**: See every step of agent execution
+✅ **Prompt Debugging**: Inspect exactly what LLM receives
+✅ **Memory Insight**: Track entity extraction and trimming
+✅ **Performance Monitoring**: Duration tracking for tools
+✅ **Easy Sharing**: Copy/export logs for debugging
+✅ **Filtered Views**: Focus on specific event types
+✅ **Large Payload Handling**: Modal view for JSON
+
+---

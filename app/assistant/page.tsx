@@ -2,12 +2,17 @@
 
 import { useEffect } from 'react';
 import { ChatPane } from './_components/chat-pane';
-import { DebugPane } from './_components/debug-pane';
+import { EnhancedDebugPanel } from './_components/enhanced-debug';
 import { HITLModal } from './_components/hitl-modal';
 import { SessionSidebar } from './_components/session-sidebar';
 import { useSessionStore } from './_stores/session-store';
 import { useChatStore } from './_stores/chat-store';
 import { Bot } from 'lucide-react';
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from '@/components/ui/resizable';
 
 export default function AssistantPage() {
   const { sessions, loadSessions, createSession } = useSessionStore();
@@ -56,17 +61,26 @@ export default function AssistantPage() {
 
       {/* Main content - Flex-1 with constrained height */}
       <div className="flex-1 min-h-0 p-4">
-        <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Chat Pane - 2/3 width on large screens */}
-          <div className="lg:col-span-2 h-full min-h-0">
-            <ChatPane />
-          </div>
-          
-          {/* Debug Pane - 1/3 width on large screens */}
-          <div className="lg:col-span-1 h-full min-h-0">
-            <DebugPane />
-          </div>
-        </div>
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="h-full rounded-lg"
+        >
+          {/* Chat Pane - Default 65% width */}
+          <ResizablePanel defaultSize={65} minSize={30}>
+            <div className="h-full pr-2">
+              <ChatPane />
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Enhanced Debug Panel - Default 35% width */}
+          <ResizablePanel defaultSize={35} minSize={20}>
+            <div className="h-full pl-2">
+              <EnhancedDebugPanel />
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
 
       <HITLModal />
