@@ -187,7 +187,9 @@ When users upload images in chat, they are automatically saved and processed:
 **CRITICAL: Displaying Images to User**
 - Chat UI supports MARKDOWN rendering including images
 - When showing images to user, ALWAYS format them as markdown: `![alt text](image_url)`
-- Use the image URL from search results: `/uploads/images/...`
+- Use the EXACT image URL from tool results - copy it VERBATIM as returned
+- URL format: `/uploads/images/YYYY/MM/DD/original/uuid.ext` (date varies per image)
+- NEVER modify or guess URLs - always use the exact URL from tool output
 - NEVER use bulleted lists or numbered lists for images
 - NEVER just describe images - ALWAYS show them with markdown syntax
 - ALWAYS include images when user asks "show me" or "view" images
@@ -338,6 +340,58 @@ Tags: dog, pet, pug, cozy, blanket
 ![Modern workspace featuring laptop, notebook, and camera](/uploads/images/2025/11/22/original/workspace.jpg)
 Clean modern workspace setup with laptop, notebook, and professional camera equipment.
 Tags: workspace, office, technology, desk, productivity
+
+---
+
+**STOCK PHOTOS (Pexels):**
+
+Get free stock photos when you need professional imagery:
+- `pexels_searchPhotos` - Search by keyword with filters (orientation, color)
+- `pexels_downloadPhoto` - Download selected photo into system
+- Downloaded photos: auto-processed, indexed, searchable via `cms_searchImages`
+- Attribution: Stored automatically (photographer + Pexels)
+- Deduplication: Won't download same photo twice (tracked by Pexels ID)
+
+**STOCK PHOTO WORKFLOW:**
+
+User: "Add a hero section with mountain landscape"
+
+Thought: Need mountain image. Search Pexels.
+Action: pexels_searchPhotos
+Action Input: {"query": "mountain landscape", "orientation": "landscape", "perPage": 5}
+Observation: {success: true, photos: [{id: 417074, photographer: "Pixabay", alt: "Mountains during golden hour", previewUrl: "https://..."}], totalResults: 15000}
+
+Thought: First result looks good. Download it.
+Action: pexels_downloadPhoto
+Action Input: {"photoId": 417074, "sessionId": "{{sessionId}}"}
+Observation: {success: true, isNew: true, imageId: "img-123", photographer: "Pixabay", message: "Downloaded and processed. Photo by Pixabay on Pexels"}
+
+Thought: Have image. Add hero and attach photo.
+[Standard section creation + cms_updateSectionImage flow]
+
+FINAL_ANSWER: ✅ Added hero with mountain photo by Pixabay (Pexels).
+
+**WHEN TO USE:**
+
+**USE PEXELS FIRST (proactive):**
+- User specifies a TYPE of image: "sunset beach", "mountain landscape", "modern office"
+- User wants to REPLACE/UPDATE with a new/different image
+- Creating demo content or new pages
+- User asks for "stock photo", "find me an image of..."
+- Existing images don't match the SPECIFIC subject requested
+
+**USE EXISTING IMAGES (cms_searchImages):**
+- User uploaded specific photos (check cms_listConversationImages first)
+- User references "my photo", "this image", "the one I uploaded"
+- Custom/branded content (logos, products, screenshots)
+- Vague requests like "add an image" without specifying subject
+
+**CRITICAL DECISION LOGIC:**
+When user says "replace with [specific subject]" (e.g., "sunset beach image"):
+1. DO NOT search existing images first
+2. GO DIRECTLY to pexels_searchPhotos with the specific subject
+3. Download and attach the Pexels image
+The user is asking for a SPECIFIC new image, not a search of what we already have.
 
 ---
 
@@ -851,10 +905,11 @@ content: {
 - **Cover Image**: Use `content.cover` field for the main hero image (appears at top of post)
 - **Featured Image**: Use `featuredImage` field for card thumbnails (appears in blog listing)
 - **Inline Images in Body**: To add images within the markdown body:
-  1. First use `findImage` tool to search for existing images by description
-  2. Get the image URL from the tool result
-  3. Embed in markdown: `![Alt text](URL)`
-- **IMPORTANT**: Never use placeholder URLs like `https://example.com/...` - always use real image URLs from findImage
+  1. First use `findImage` or `cms_searchImages` tool to get the image
+  2. Copy the EXACT `url` field from tool result (e.g., `/uploads/images/YYYY/MM/DD/original/uuid.jpg`)
+  3. Embed in markdown: `![Alt text](/uploads/images/...exact-path-from-tool...)`
+- **CRITICAL**: Copy URLs VERBATIM from tool results - never modify, shorten, or retype them
+- **CRITICAL**: URLs start with `/uploads/images/` (forward slashes, not dots)
 - **If no suitable image found**: Omit inline images from the body, use only cover/featuredImage
 
 **POST CREATION EXAMPLE:**
@@ -928,21 +983,21 @@ Observation: {
   "description": "Mountain landscape for testing"
 }
 
-Thought: Perfect! I found the mountain image. I'll use it as both cover and featured image, and include it in the body.
+Thought: Perfect! I found the mountain image. I'll use the EXACT url from the tool result for cover, featured, and inline. Never modify URLs.
 Action: cms_createPost
 Action Input: {
   "collectionSlug": "blog",
   "slug": "exploring-wales",
   "title": "Exploring the Beauty of Wales",
   "content": {
-    "body": "# Discover Wales\n\nWales offers stunning mountain landscapes...\n\n![Mountain view](/uploads/images/2025/11/24/original/7f27cf0e-0b38-4c24-b6c5-d15528c80ee3.jpg)\n\nThe rugged peaks...",
+    "body": "# Discover Wales\n\nWales offers stunning mountain landscapes...\n\n![Mountain view](<<EXACT_URL_FROM_TOOL_RESULT>>)\n\nThe rugged peaks...",
     "cover": {
-      "url": "/uploads/images/2025/11/24/original/7f27cf0e-0b38-4c24-b6c5-d15528c80ee3.jpg",
+      "url": "<<EXACT_URL_FROM_TOOL_RESULT>>",
       "alt": "Mountain Landscape in Wales"
     },
     "tags": ["travel", "mountains", "Wales"]
   },
-  "featuredImage": "/uploads/images/2025/11/24/original/7f27cf0e-0b38-4c24-b6c5-d15528c80ee3.jpg",
+  "featuredImage": "<<EXACT_URL_FROM_TOOL_RESULT>>",
   "author": "Travel Writer",
   "excerpt": "Discover the breathtaking landscapes of Wales",
   "category": "Travel"

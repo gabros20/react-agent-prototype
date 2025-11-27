@@ -7,9 +7,10 @@
 Working Memory enables the agent to remember entities mentioned during a conversation. When a user says "delete that page" or "add an image to it," the system resolves these references to actual entity IDs without requiring the user to repeat details.
 
 **Key Files:**
-- `server/services/working-memory/working-context.ts` - Main implementation
-- `server/services/working-memory/entity-extractor.ts` - Extraction logic
-- `server/services/working-memory/types.ts` - Type definitions
+
+-   `server/services/working-memory/working-context.ts` - Main implementation
+-   `server/services/working-memory/entity-extractor.ts` - Extraction logic
+-   `server/services/working-memory/types.ts` - Type definitions
 
 ---
 
@@ -42,46 +43,46 @@ Agent: [Resolves "it" → page-123]
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Working Memory                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                   WorkingContext                            ││
-│  │                                                             ││
-│  │   entities: Entity[]     ← Max 10, MRU ordered             ││
-│  │                                                             ││
-│  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐          ││
-│  │   │  page   │ │ section │ │  image  │ │  post   │          ││
-│  │   │About Us │ │  Hero   │ │mountain │ │ Blog #1 │          ││
-│  │   │page-123 │ │ sec-456 │ │ img-789 │ │post-012 │          ││
-│  │   └─────────┘ └─────────┘ └─────────┘ └─────────┘          ││
-│  │                                                             ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                  Entity Extractor                           ││
-│  │                                                             ││
-│  │   Tool Result → Infer Type → Extract Entities               ││
-│  │                                                             ││
-│  │   cms_createPage → 'page' → { id, name, type }             ││
-│  │   cms_searchImages → 'image' → [{ id, name, type }, ...]   ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                  Prompt Injection                           ││
-│  │                                                             ││
-│  │   [WORKING MEMORY]                                          ││
-│  │   pages:                                                    ││
-│  │     - "About Us" (page-123)                                 ││
-│  │   sections:                                                 ││
-│  │     - "Hero" (sec-456)                                      ││
-│  │   images:                                                   ││
-│  │     - "mountain.jpg" (img-789)                              ││
-│  └─────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                        Working Memory                             │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                     WorkingContext                          │  │
+│  │                                                             │  │
+│  │   entities: Entity[]     ← Max 10, MRU ordered              │  │
+│  │                                                             │  │
+│  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │  │
+│  │   │  page   │ │ section │ │  image  │ │  post   │           │  │
+│  │   │About Us │ │  Hero   │ │mountain │ │ Blog #1 │           │  │
+│  │   │page-123 │ │ sec-456 │ │ img-789 │ │post-012 │           │  │
+│  │   └─────────┘ └─────────┘ └─────────┘ └─────────┘           │  │
+│  │                                                             │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                    Entity Extractor                         │  │
+│  │                                                             │  │
+│  │   Tool Result → Infer Type → Extract Entities               │  │
+│  │                                                             │  │
+│  │   cms_createPage → 'page' → { id, name, type }              │  │
+│  │   cms_searchImages → 'image' → [{ id, name, type }, ...]    │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                    Prompt Injection                         │  │
+│  │                                                             │  │
+│  │   [WORKING MEMORY]                                          │  │
+│  │   pages:                                                    │  │
+│  │     - "About Us" (page-123)                                 │  │
+│  │   sections:                                                 │  │
+│  │     - "Hero" (sec-456)                                      │  │
+│  │   images:                                                   │  │
+│  │     - "mountain.jpg" (img-789)                              │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -94,20 +95,20 @@ An entity represents something the agent has encountered:
 
 ```typescript
 interface Entity {
-  id: string;           // Unique identifier (e.g., "page-123")
-  name: string;         // Human-readable name (e.g., "About Us")
-  type: EntityType;     // Category: 'page' | 'section' | 'image' | 'post' | ...
+	id: string; // Unique identifier (e.g., "page-123")
+	name: string; // Human-readable name (e.g., "About Us")
+	type: EntityType; // Category: 'page' | 'section' | 'image' | 'post' | ...
 }
 
 type EntityType =
-  | 'page'
-  | 'section'
-  | 'collection'
-  | 'entry'
-  | 'media'      // Images, files
-  | 'image'      // Alias for media
-  | 'post'
-  | 'task';
+	| "page"
+	| "section"
+	| "collection"
+	| "entry"
+	| "media" // Images, files
+	| "image" // Alias for media
+	| "post"
+	| "task";
 ```
 
 ### WorkingContext
@@ -116,26 +117,26 @@ The main class managing entities:
 
 ```typescript
 class WorkingContext {
-  private entities: Entity[] = [];
-  private readonly MAX_ENTITIES = 10;
+	private entities: Entity[] = [];
+	private readonly MAX_ENTITIES = 10;
 
-  // Add entities (maintains MRU order, deduplicates)
-  addEntities(newEntities: Entity[]): void;
+	// Add entities (maintains MRU order, deduplicates)
+	addEntities(newEntities: Entity[]): void;
 
-  // Get all entities
-  getEntities(): Entity[];
+	// Get all entities
+	getEntities(): Entity[];
 
-  // Get entities by type
-  getEntitiesByType(type: EntityType): Entity[];
+	// Get entities by type
+	getEntitiesByType(type: EntityType): Entity[];
 
-  // Format for prompt injection
-  toContextString(): string;
+	// Format for prompt injection
+	toContextString(): string;
 
-  // Serialize for checkpointing
-  serialize(): SerializedContext;
+	// Serialize for checkpointing
+	serialize(): SerializedContext;
 
-  // Restore from checkpoint
-  static restore(data: SerializedContext): WorkingContext;
+	// Restore from checkpoint
+	static restore(data: SerializedContext): WorkingContext;
 }
 ```
 
@@ -169,11 +170,11 @@ addEntities(newEntities: Entity[]): void {
 
 ### Why 10?
 
-| Size | Tradeoff |
-|------|----------|
-| 5 | Too few - loses context in multi-step workflows |
-| 10 | Good balance - covers typical page+sections+images workflow |
-| 20 | Too many - wastes tokens, rarely needed |
+| Size | Tradeoff                                                    |
+| ---- | ----------------------------------------------------------- |
+| 5    | Too few - loses context in multi-step workflows             |
+| 10   | Good balance - covers typical page+sections+images workflow |
+| 20   | Too many - wastes tokens, rarely needed                     |
 
 ### MRU (Most Recently Used) Ordering
 
@@ -199,13 +200,13 @@ The extractor infers entity type from tool name:
 ```typescript
 // server/services/working-memory/entity-extractor.ts
 function inferTypeFromToolName(toolName: string): EntityType | null {
-  if (toolName.includes('Page')) return 'page';
-  if (toolName.includes('Section')) return 'section';
-  if (toolName.includes('Image')) return 'image';
-  if (toolName.includes('Post')) return 'post';
-  if (toolName.includes('Entry')) return 'entry';
-  if (toolName.includes('Collection')) return 'collection';
-  return null;
+	if (toolName.includes("Page")) return "page";
+	if (toolName.includes("Section")) return "section";
+	if (toolName.includes("Image")) return "image";
+	if (toolName.includes("Post")) return "post";
+	if (toolName.includes("Entry")) return "entry";
+	if (toolName.includes("Collection")) return "collection";
+	return null;
 }
 ```
 
@@ -215,59 +216,60 @@ Different result structures are handled:
 
 ```typescript
 function extract(toolName: string, result: unknown): Entity[] {
-  const type = inferTypeFromToolName(toolName);
-  if (!type) return [];
+	const type = inferTypeFromToolName(toolName);
+	if (!type) return [];
 
-  const entities: Entity[] = [];
+	const entities: Entity[] = [];
 
-  // Pattern 1: Single resource (e.g., { page: { id, title } })
-  if (result[type]) {
-    const resource = result[type];
-    if (resource.id) {
-      entities.push({
-        id: resource.id,
-        name: resource.title || resource.name || resource.slug || resource.filename,
-        type
-      });
-    }
-  }
+	// Pattern 1: Single resource (e.g., { page: { id, title } })
+	if (result[type]) {
+		const resource = result[type];
+		if (resource.id) {
+			entities.push({
+				id: resource.id,
+				name: resource.title || resource.name || resource.slug || resource.filename,
+				type,
+			});
+		}
+	}
 
-  // Pattern 2: Plural array (e.g., { pages: [...] })
-  const pluralKey = type + 's';
-  if (Array.isArray(result[pluralKey])) {
-    const items = result[pluralKey].slice(0, 3);  // Max 3 from lists
-    for (const item of items) {
-      if (item.id) {
-        entities.push({
-          id: item.id,
-          name: item.title || item.name || item.slug || item.filename,
-          type
-        });
-      }
-    }
-  }
+	// Pattern 2: Plural array (e.g., { pages: [...] })
+	const pluralKey = type + "s";
+	if (Array.isArray(result[pluralKey])) {
+		const items = result[pluralKey].slice(0, 3); // Max 3 from lists
+		for (const item of items) {
+			if (item.id) {
+				entities.push({
+					id: item.id,
+					name: item.title || item.name || item.slug || item.filename,
+					type,
+				});
+			}
+		}
+	}
 
-  // Pattern 3: Matches array (e.g., { matches: [...] })
-  if (Array.isArray(result.matches)) {
-    const items = result.matches.slice(0, 3);
-    for (const item of items) {
-      if (item.id) {
-        entities.push({
-          id: item.id,
-          name: item.title || item.name || item.slug,
-          type
-        });
-      }
-    }
-  }
+	// Pattern 3: Matches array (e.g., { matches: [...] })
+	if (Array.isArray(result.matches)) {
+		const items = result.matches.slice(0, 3);
+		for (const item of items) {
+			if (item.id) {
+				entities.push({
+					id: item.id,
+					name: item.title || item.name || item.slug,
+					type,
+				});
+			}
+		}
+	}
 
-  return entities;
+	return entities;
 }
 ```
 
 ### Extraction Examples
 
 **Single Page Created:**
+
 ```typescript
 // Tool: cms_createPage
 // Result: { success: true, page: { id: "page-123", title: "About Us", slug: "about" } }
@@ -275,6 +277,7 @@ function extract(toolName: string, result: unknown): Entity[] {
 ```
 
 **Multiple Images Found:**
+
 ```typescript
 // Tool: cms_searchImages
 // Result: { matches: [{ id: "img-1", filename: "hero.jpg" }, { id: "img-2", filename: "bg.jpg" }, ...] }
@@ -283,6 +286,7 @@ function extract(toolName: string, result: unknown): Entity[] {
 ```
 
 **Section Content Retrieved:**
+
 ```typescript
 // Tool: cms_getSectionContent
 // Result: { section: { id: "sec-456", heading: "Welcome" } }
@@ -423,16 +427,13 @@ Entities are extracted after each tool result in `onStepFinish`:
 ```typescript
 // In orchestrator.ts
 onStepFinish: async ({ step }) => {
-  if (step.toolResults) {
-    for (const result of step.toolResults) {
-      const entities = entityExtractor.extract(
-        result.toolName,
-        result.result
-      );
-      workingContext.addEntities(entities);
-    }
-  }
-}
+	if (step.toolResults) {
+		for (const result of step.toolResults) {
+			const entities = entityExtractor.extract(result.toolName, result.result);
+			workingContext.addEntities(entities);
+		}
+	}
+};
 ```
 
 ### When Working Memory Is Injected
@@ -442,8 +443,8 @@ Before each LLM call, the system prompt is compiled with current memory:
 ```typescript
 // In orchestrator.ts
 const compiledPrompt = compilePrompt({
-  // ... other context
-  workingMemory: workingContext.toContextString()
+	// ... other context
+	workingMemory: workingContext.toContextString(),
 });
 ```
 
@@ -454,14 +455,14 @@ Working memory is saved with session checkpoints:
 ```typescript
 // Saving
 await sessionService.saveCheckpoint(sessionId, {
-  messages: currentMessages,
-  workingMemory: workingContext.serialize()
+	messages: currentMessages,
+	workingMemory: workingContext.serialize(),
 });
 
 // Restoring
 const checkpoint = await sessionService.loadCheckpoint(sessionId);
 if (checkpoint?.workingMemory) {
-  workingContext = WorkingContext.restore(checkpoint.workingMemory);
+	workingContext = WorkingContext.restore(checkpoint.workingMemory);
 }
 ```
 
@@ -469,12 +470,12 @@ if (checkpoint?.workingMemory) {
 
 ```typescript
 interface SerializedContext {
-  entities: Array<{
-    id: string;
-    name: string;
-    type: EntityType;
-  }>;
-  version: number;  // For future migrations
+	entities: Array<{
+		id: string;
+		name: string;
+		type: EntityType;
+	}>;
+	version: number; // For future migrations
 }
 ```
 
@@ -486,22 +487,24 @@ interface SerializedContext {
 
 Working memory is session-scoped and ephemeral:
 
-| Storage | Tradeoff |
-|---------|----------|
+| Storage   | Tradeoff                      |
+| --------- | ----------------------------- |
 | In-memory | Fast, simple, lost on restart |
-| Redis | Persistent, adds complexity |
-| Database | Persistent, slower, overkill |
+| Redis     | Persistent, adds complexity   |
+| Database  | Persistent, slower, overkill  |
 
 **Our choice:** In-memory with checkpoint serialization. Speed matters for every LLM call, and checkpoints handle persistence.
 
 ### Why No Explicit Reference Map?
 
 Some systems maintain:
+
 ```typescript
-references: Map<string, string>  // "the page" → "page-123"
+references: Map<string, string>; // "the page" → "page-123"
 ```
 
 **We don't because:**
+
 1. LLM handles natural language resolution well
 2. Avoids maintaining fragile mappings
 3. Works across languages without translation
@@ -516,6 +519,7 @@ const items = result.matches.slice(0, 3);
 ```
 
 **Reasons:**
+
 1. Prevents flooding memory with one operation
 2. Top results are usually most relevant
 3. User can search again if needed
@@ -531,11 +535,11 @@ Same entity from different operations:
 
 ```typescript
 // Operation 1: Get page
-cms_getPage({ slug: "about" })
+cms_getPage({ slug: "about" });
 // Memory: [{ id: "page-123", name: "About Us", type: "page" }]
 
 // Operation 2: Update same page
-cms_updatePage({ pageId: "page-123", title: "About Our Team" })
+cms_updatePage({ pageId: "page-123", title: "About Our Team" });
 // Memory: [{ id: "page-123", name: "About Our Team", type: "page" }]
 // Entity moved to front, name updated
 ```
@@ -557,6 +561,7 @@ User: "Delete that page"
 **Resolution:** Most recent (About Us) unless user specifies otherwise.
 
 **Prompt guidance:**
+
 ```xml
 <ambiguity>
 If multiple entities of the same type exist and the reference is ambiguous:
@@ -579,12 +584,12 @@ User: "Update that page"
 
 ## Integration Points
 
-| Connects To | How |
-|-------------|-----|
-| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | onStepFinish extracts entities |
-| [3.2 Tools](./LAYER_3.2_TOOLS.md) | Tool results → entity extraction |
-| [3.4 Prompts](./LAYER_3.4_PROMPTS.md) | Memory injected into system prompt |
-| Session Service | Serialized in checkpoints |
+| Connects To                                 | How                                |
+| ------------------------------------------- | ---------------------------------- |
+| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | onStepFinish extracts entities     |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md)           | Tool results → entity extraction   |
+| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)       | Memory injected into system prompt |
+| Session Service                             | Serialized in checkpoints          |
 
 ---
 
@@ -594,22 +599,22 @@ User: "Update that page"
 
 ```typescript
 // In tool or orchestrator
-console.log('Working Memory:', workingContext.toContextString());
+console.log("Working Memory:", workingContext.toContextString());
 ```
 
 ### Common Issues
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Entity not found | Extraction failed | Check tool result structure |
-| Wrong entity resolved | MRU ordering | Have user be more specific |
-| Memory empty | No extractions succeeded | Verify entity extractor patterns |
-| Memory full of same type | Many operations on one type | Expected behavior, uses MRU |
+| Issue                    | Cause                       | Solution                         |
+| ------------------------ | --------------------------- | -------------------------------- |
+| Entity not found         | Extraction failed           | Check tool result structure      |
+| Wrong entity resolved    | MRU ordering                | Have user be more specific       |
+| Memory empty             | No extractions succeeded    | Verify entity extractor patterns |
+| Memory full of same type | Many operations on one type | Expected behavior, uses MRU      |
 
 ---
 
 ## Further Reading
 
-- [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - When extraction happens
-- [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool result structures
-- [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - How memory is injected
+-   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - When extraction happens
+-   [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool result structures
+-   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - How memory is injected

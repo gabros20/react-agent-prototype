@@ -265,6 +265,9 @@ export const imageMetadata = sqliteTable("image_metadata", {
   altText: text("alt_text"),
   caption: text("caption"),
 
+  // External source tracking (for deduplication)
+  source: text("source"), // e.g., "pexels:12345", "unsplash:abc", null for uploads
+
   // Metadata about metadata
   generatedAt: integer("generated_at", { mode: "timestamp" }),
   model: text("model"), // e.g., "gpt-4o-mini"

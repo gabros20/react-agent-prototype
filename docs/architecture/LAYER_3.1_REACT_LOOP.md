@@ -15,12 +15,14 @@ The ReAct (Reasoning + Acting) pattern is the foundation of our agent system. It
 LLMs cannot execute multi-step tasks in a single call. When asked to "create a page, add an image, and update navigation," a raw LLM can only produce text - it cannot actually perform these actions or verify they succeeded.
 
 **Without ReAct:**
+
 ```
 User: "Create an About page with a hero image"
 LLM: "I would create a page called About..." (just text, no action)
 ```
 
 **With ReAct:**
+
 ```
 User: "Create an About page with a hero image"
 Agent:
@@ -43,18 +45,18 @@ Agent:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      ReAct Orchestrator                          │
+│                      ReAct Orchestrator                         │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
+│                                                                 │
 │   ┌──────────────────────────────────────────────────────────┐  │
-│   │                    ToolLoopAgent                          │  │
-│   │                   (AI SDK v6 Native)                      │  │
+│   │                    ToolLoopAgent                         │  │
+│   │                   (AI SDK v6 Native)                     │  │
 │   └──────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                              ▼                                   │
+│                              │                                  │
+│                              ▼                                  │
 │   ┌──────────────────────────────────────────────────────────┐  │
-│   │                    EXECUTION LOOP                         │  │
-│   │                                                           │  │
+│   │                    EXECUTION LOOP                        │  │
+│   │                                                          │  │
 │   │    ┌─────────┐    ┌─────────┐    ┌─────────┐             │  │
 │   │    │  THINK  │───▶│   ACT   │───▶│ OBSERVE │──┐          │  │
 │   │    │         │    │         │    │         │  │          │  │
@@ -62,24 +64,24 @@ Agent:
 │   │    │ about   │    │ tool    │    │ result  │  │          │  │
 │   │    │ next    │    │         │    │         │  │          │  │
 │   │    └─────────┘    └─────────┘    └─────────┘  │          │  │
-│   │         ▲                                      │          │  │
-│   │         └──────────────────────────────────────┘          │  │
-│   │                                                           │  │
-│   │    Stop Conditions:                                       │  │
-│   │    • FINAL_ANSWER detected                                │  │
-│   │    • Max steps reached (15)                               │  │
-│   │    • Error threshold exceeded                             │  │
+│   │         ▲                                     │          │  │
+│   │         └─────────────────────────────────────┘          │  │
+│   │                                                          │  │
+│   │    Stop Conditions:                                      │  │
+│   │    • FINAL_ANSWER detected                               │  │
+│   │    • Max steps reached (15)                              │  │
+│   │    • Error threshold exceeded                            │  │
 │   └──────────────────────────────────────────────────────────┘  │
-│                              │                                   │
+│                              │                                  │
 │         ┌────────────────────┼────────────────────┐             │
 │         ▼                    ▼                    ▼             │
-│   ┌───────────┐       ┌───────────┐        ┌───────────┐       │
-│   │ Lifecycle │       │   Retry   │        │ Checkpoint│       │
-│   │   Hooks   │       │   Logic   │        │   System  │       │
-│   │           │       │           │        │           │       │
-│   │ prepareStep│      │ Exponential│       │ Every 3   │       │
-│   │ onStepFinish│     │ backoff   │        │ steps     │       │
-│   └───────────┘       └───────────┘        └───────────┘       │
+│   ┌───────────┐       ┌───────────┐        ┌───────────┐        │
+│   │ Lifecycle │       │   Retry   │        │ Checkpoint│        │
+│   │   Hooks   │       │   Logic   │        │   System  │        │
+│   │           │       │           │        │           │        │
+│   │ prepareStep│      │ Exponential│       │ Every 3   │        │
+│   │ onStepFinish│     │ backoff   │        │ steps     │        │
+│   └───────────┘       └───────────┘        └───────────┘        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -91,45 +93,45 @@ Agent:
 
 ```typescript
 // server/agent/orchestrator.ts
-import { ToolLoopAgent } from 'ai';
+import { ToolLoopAgent } from "ai";
 
 const agent = new ToolLoopAgent({
-  // Model configuration
-  model: openrouter('openai/gpt-4o-mini'),
-  maxOutputTokens: 4096,
+	// Model configuration
+	model: openrouter("openai/gpt-4o-mini"),
+	maxOutputTokens: 4096,
 
-  // Tool availability - ALL tools always available
-  tools: ALL_TOOLS,
+	// Tool availability - ALL tools always available
+	tools: ALL_TOOLS,
 
-  // Loop control
-  maxSteps: 15,
+	// Loop control
+	maxSteps: 15,
 
-  // Context injection for tools
-  experimental_context: agentContext,
+	// Context injection for tools
+	experimental_context: agentContext,
 
-  // System prompt (compiled from template)
-  system: compiledSystemPrompt,
+	// System prompt (compiled from template)
+	system: compiledSystemPrompt,
 
-  // Stop condition
-  stopWhen: ({ steps, text }) => {
-    // Stop if max steps reached
-    if (steps.length >= 15) return true;
+	// Stop condition
+	stopWhen: ({ steps, text }) => {
+		// Stop if max steps reached
+		if (steps.length >= 15) return true;
 
-    // Stop if FINAL_ANSWER detected
-    if (text?.includes('FINAL_ANSWER:')) return true;
+		// Stop if FINAL_ANSWER detected
+		if (text?.includes("FINAL_ANSWER:")) return true;
 
-    return false;
-  }
+		return false;
+	},
 });
 ```
 
 ### Key Configuration Values
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| `maxSteps` | 15 | Higher than typical (10) for complex multi-step CMS tasks |
-| `maxOutputTokens` | 4096 | Allows detailed reasoning and explanations |
-| `model` | gpt-4o-mini | Good balance of capability, speed, and cost |
+| Parameter         | Value       | Rationale                                                 |
+| ----------------- | ----------- | --------------------------------------------------------- |
+| `maxSteps`        | 15          | Higher than typical (10) for complex multi-step CMS tasks |
+| `maxOutputTokens` | 4096        | Allows detailed reasoning and explanations                |
+| `model`           | gpt-4o-mini | Good balance of capability, speed, and cost               |
 
 ---
 
@@ -141,21 +143,21 @@ Called before each step executes:
 
 ```typescript
 prepareStep: async ({ messages, stepNumber }) => {
-  // 1. Memory trimming (prevent token overflow)
-  if (messages.length > 20) {
-    const systemPrompt = messages[0];  // Keep system prompt
-    const recentMessages = messages.slice(-10);  // Keep last 10
-    return [systemPrompt, ...recentMessages];  // Total: 11 messages
-  }
+	// 1. Memory trimming (prevent token overflow)
+	if (messages.length > 20) {
+		const systemPrompt = messages[0]; // Keep system prompt
+		const recentMessages = messages.slice(-10); // Keep last 10
+		return [systemPrompt, ...recentMessages]; // Total: 11 messages
+	}
 
-  // 2. Auto-checkpoint every 3 steps
-  if (stepNumber % 3 === 0) {
-    await sessionService.saveMessages(sessionId, messages);
-    logger.info(`Checkpoint saved at step ${stepNumber}`);
-  }
+	// 2. Auto-checkpoint every 3 steps
+	if (stepNumber % 3 === 0) {
+		await sessionService.saveMessages(sessionId, messages);
+		logger.info(`Checkpoint saved at step ${stepNumber}`);
+	}
 
-  return messages;
-}
+	return messages;
+};
 ```
 
 ### onStepFinish
@@ -164,30 +166,30 @@ Called after each step completes:
 
 ```typescript
 onStepFinish: async ({ step, stepNumber, usage }) => {
-  // 1. Extract entities for working memory
-  if (step.toolResults) {
-    for (const result of step.toolResults) {
-      const entities = entityExtractor.extract(result.toolName, result.result);
-      workingContext.addEntities(entities);
-    }
-  }
+	// 1. Extract entities for working memory
+	if (step.toolResults) {
+		for (const result of step.toolResults) {
+			const entities = entityExtractor.extract(result.toolName, result.result);
+			workingContext.addEntities(entities);
+		}
+	}
 
-  // 2. Stream progress to frontend
-  stream.write({
-    type: 'step-completed',
-    stepNumber,
-    usage: {
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens
-    }
-  });
+	// 2. Stream progress to frontend
+	stream.write({
+		type: "step-completed",
+		stepNumber,
+		usage: {
+			promptTokens: usage.promptTokens,
+			completionTokens: usage.completionTokens,
+		},
+	});
 
-  // 3. Log for debugging
-  logger.info(`Step ${stepNumber} completed`, {
-    toolsCalled: step.toolCalls?.map(tc => tc.name),
-    tokensUsed: usage.totalTokens
-  });
-}
+	// 3. Log for debugging
+	logger.info(`Step ${stepNumber} completed`, {
+		toolsCalled: step.toolCalls?.map((tc) => tc.name),
+		tokensUsed: usage.totalTokens,
+	});
+};
 ```
 
 ---
@@ -202,12 +204,13 @@ The agent signals task completion:
 
 ```typescript
 // In stopWhen callback
-if (text?.includes('FINAL_ANSWER:')) {
-  return true;  // Stop the loop
+if (text?.includes("FINAL_ANSWER:")) {
+	return true; // Stop the loop
 }
 ```
 
 **Prompt Instruction:**
+
 ```xml
 <instruction>
 When the task is complete, respond with:
@@ -223,8 +226,8 @@ Hard limit prevents infinite loops:
 
 ```typescript
 if (steps.length >= 15) {
-  logger.warn('Max steps reached, forcing stop');
-  return true;
+	logger.warn("Max steps reached, forcing stop");
+	return true;
 }
 ```
 
@@ -241,23 +244,20 @@ After multiple failures, the retry logic stops and surfaces the error.
 For background tasks or when streaming isn't needed:
 
 ```typescript
-export async function executeAgentWithRetry(
-  messages: CoreMessage[],
-  context: AgentContext
-): Promise<AgentResult> {
-  const agent = createAgent(context);
+export async function executeAgentWithRetry(messages: CoreMessage[], context: AgentContext): Promise<AgentResult> {
+	const agent = createAgent(context);
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const result = await agent.run(messages);
-      return result;
-    } catch (error) {
-      if (!isRetryable(error) || attempt === MAX_RETRIES) {
-        throw error;
-      }
-      await sleep(calculateBackoff(attempt));
-    }
-  }
+	for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+		try {
+			const result = await agent.run(messages);
+			return result;
+		} catch (error) {
+			if (!isRetryable(error) || attempt === MAX_RETRIES) {
+				throw error;
+			}
+			await sleep(calculateBackoff(attempt));
+		}
+	}
 }
 ```
 
@@ -266,29 +266,26 @@ export async function executeAgentWithRetry(
 For interactive use with real-time feedback:
 
 ```typescript
-export async function* streamAgentWithApproval(
-  messages: CoreMessage[],
-  context: AgentContext
-): AsyncGenerator<StreamEvent> {
-  const agent = createAgent(context);
+export async function* streamAgentWithApproval(messages: CoreMessage[], context: AgentContext): AsyncGenerator<StreamEvent> {
+	const agent = createAgent(context);
 
-  for await (const chunk of agent.stream(messages)) {
-    // Handle approval requests
-    if (chunk.type === 'tool-approval-request') {
-      yield { type: 'approval-required', ...chunk };
+	for await (const chunk of agent.stream(messages)) {
+		// Handle approval requests
+		if (chunk.type === "tool-approval-request") {
+			yield { type: "approval-required", ...chunk };
 
-      // Wait for user decision
-      const approved = await approvalQueue.waitForApproval(chunk.approvalId);
+			// Wait for user decision
+			const approved = await approvalQueue.waitForApproval(chunk.approvalId);
 
-      if (!approved) {
-        yield { type: 'tool-result', result: { cancelled: true } };
-        continue;
-      }
-    }
+			if (!approved) {
+				yield { type: "tool-result", result: { cancelled: true } };
+				continue;
+			}
+		}
 
-    // Forward all other events
-    yield chunk;
-  }
+		// Forward all other events
+		yield chunk;
+	}
 }
 ```
 
@@ -362,28 +359,31 @@ Step N:
 ### Why Trimming Matters
 
 Without trimming, long conversations cause:
-- Token limit exceeded errors
-- Slow response times
-- Increased costs
+
+-   Token limit exceeded errors
+-   Slow response times
+-   Increased costs
 
 ### Trimming Strategy
 
 ```typescript
 // Keep system prompt + last 10 messages
 if (messages.length > 20) {
-  const systemPrompt = messages[0];
-  const recentMessages = messages.slice(-10);
-  return [systemPrompt, ...recentMessages];
+	const systemPrompt = messages[0];
+	const recentMessages = messages.slice(-10);
+	return [systemPrompt, ...recentMessages];
 }
 ```
 
 **Preserved:**
-- System prompt (always index 0)
-- Last 10 messages (most recent context)
+
+-   System prompt (always index 0)
+-   Last 10 messages (most recent context)
 
 **Dropped:**
-- Middle messages (old context)
-- Old tool calls/results
+
+-   Middle messages (old context)
+-   Old tool calls/results
 
 **Result:** Maximum 11 messages (manageable token count)
 
@@ -396,22 +396,24 @@ Checkpoints enable recovery from failures:
 ```typescript
 // Every 3 steps, save state
 if (stepNumber % 3 === 0) {
-  await sessionService.saveMessages(sessionId, messages);
+	await sessionService.saveMessages(sessionId, messages);
 }
 ```
 
 **What's Saved:**
-- Full message history
-- Current step number
-- Working memory state (serialized)
+
+-   Full message history
+-   Current step number
+-   Working memory state (serialized)
 
 **Recovery:**
+
 ```typescript
 // On session resume
 const checkpoint = await sessionService.loadCheckpoint(sessionId);
 if (checkpoint) {
-  messages = checkpoint.messages;
-  workingMemory.restore(checkpoint.workingMemory);
+	messages = checkpoint.messages;
+	workingMemory.restore(checkpoint.workingMemory);
 }
 ```
 
@@ -419,14 +421,14 @@ if (checkpoint) {
 
 ## Integration Points
 
-| Connects To | How |
-|-------------|-----|
-| [3.2 Tools](./LAYER_3.2_TOOLS.md) | Executes tool calls from LLM |
+| Connects To                                         | How                                 |
+| --------------------------------------------------- | ----------------------------------- |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | Executes tool calls from LLM        |
 | [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Updates entities after tool results |
-| [3.4 Prompts](./LAYER_3.4_PROMPTS.md) | Receives compiled system prompt |
-| [3.5 HITL](./LAYER_3.5_HITL.md) | Pauses for approval when needed |
-| [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | Retry logic wraps execution |
-| [3.7 Streaming](./LAYER_3.7_STREAMING.md) | Emits events for frontend |
+| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)               | Receives compiled system prompt     |
+| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Pauses for approval when needed     |
+| [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | Retry logic wraps execution         |
+| [3.7 Streaming](./LAYER_3.7_STREAMING.md)           | Emits events for frontend           |
 
 ---
 
@@ -435,6 +437,7 @@ if (checkpoint) {
 ### Why All Tools Always Available?
 
 We don't filter tools based on context because:
+
 1. **Simplicity** - No complex tool selection logic
 2. **Flexibility** - Agent can pivot if initial approach fails
 3. **LLM Capability** - Modern LLMs handle large tool sets well
@@ -442,15 +445,15 @@ We don't filter tools based on context because:
 
 ### Why 15 Max Steps?
 
-- **10 steps** - Too few for complex CMS workflows (page + sections + images + nav)
-- **15 steps** - Handles most real-world tasks
-- **20+ steps** - Diminishing returns, risk of loops
+-   **10 steps** - Too few for complex CMS workflows (page + sections + images + nav)
+-   **15 steps** - Handles most real-world tasks
+-   **20+ steps** - Diminishing returns, risk of loops
 
 ### Why Checkpoint Every 3 Steps?
 
-- **Every step** - Too much I/O overhead
-- **Every 3 steps** - Good balance of safety vs performance
-- **Every 5+ steps** - Too much work lost on failure
+-   **Every step** - Too much I/O overhead
+-   **Every 3 steps** - Good balance of safety vs performance
+-   **Every 5+ steps** - Too much work lost on failure
 
 ---
 
@@ -458,11 +461,11 @@ We don't filter tools based on context because:
 
 For clarity, we explicitly don't use:
 
-| Pattern | Reason |
-|---------|--------|
-| Plan-then-execute | Adds latency, reduces flexibility |
-| Tool filtering | LLM handles full tool set well |
-| Multi-agent routing | Single agent sufficient for CMS domain |
+| Pattern             | Reason                                  |
+| ------------------- | --------------------------------------- |
+| Plan-then-execute   | Adds latency, reduces flexibility       |
+| Tool filtering      | LLM handles full tool set well          |
+| Multi-agent routing | Single agent sufficient for CMS domain  |
 | Parallel tool calls | Sequential is simpler, more predictable |
 
 ---
@@ -473,29 +476,29 @@ For clarity, we explicitly don't use:
 
 ```typescript
 const agent = new ToolLoopAgent({
-  // ... config
-  onStepFinish: async ({ step, stepNumber }) => {
-    console.log(`=== Step ${stepNumber} ===`);
-    console.log('Text:', step.text);
-    console.log('Tool calls:', step.toolCalls);
-    console.log('Tool results:', step.toolResults);
-  }
+	// ... config
+	onStepFinish: async ({ step, stepNumber }) => {
+		console.log(`=== Step ${stepNumber} ===`);
+		console.log("Text:", step.text);
+		console.log("Tool calls:", step.toolCalls);
+		console.log("Tool results:", step.toolResults);
+	},
 });
 ```
 
 ### Common Issues
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Agent loops indefinitely | Missing FINAL_ANSWER | Check prompt instructions |
-| Agent stops too early | FINAL_ANSWER in wrong place | Adjust stop condition |
-| Token limit exceeded | Long conversation | Verify trimming works |
-| Tools not called | Prompt unclear | Add examples to prompt |
+| Issue                    | Cause                       | Solution                  |
+| ------------------------ | --------------------------- | ------------------------- |
+| Agent loops indefinitely | Missing FINAL_ANSWER        | Check prompt instructions |
+| Agent stops too early    | FINAL_ANSWER in wrong place | Adjust stop condition     |
+| Token limit exceeded     | Long conversation           | Verify trimming works     |
+| Tools not called         | Prompt unclear              | Add examples to prompt    |
 
 ---
 
 ## Further Reading
 
-- [3.2 Tools](./LAYER_3.2_TOOLS.md) - How tools are structured and executed
-- [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - System prompt composition
-- [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Retry logic details
+-   [3.2 Tools](./LAYER_3.2_TOOLS.md) - How tools are structured and executed
+-   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - System prompt composition
+-   [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Retry logic details

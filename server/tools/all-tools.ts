@@ -40,6 +40,10 @@ import {
   webFetchContentTool
 } from './web-research-tools'
 import {
+  pexelsSearchPhotosTool,
+  pexelsDownloadPhotoTool
+} from './pexels-tools'
+import {
   generateHeroContent,
   generateMetadata,
   generateSlug
@@ -858,7 +862,11 @@ export const ALL_TOOLS = {
   // Web Research (Exa AI)
   'web_quickSearch': webQuickSearchTool,
   'web_deepResearch': webDeepResearchTool,
-  'web_fetchContent': webFetchContentTool
+  'web_fetchContent': webFetchContentTool,
+
+  // Stock Photos (Pexels)
+  'pexels_searchPhotos': pexelsSearchPhotosTool,
+  'pexels_downloadPhoto': pexelsDownloadPhotoTool
 }
 
 // ============================================================================
@@ -1129,5 +1137,17 @@ export const TOOL_METADATA = {
     riskLevel: 'safe',
     requiresApproval: false,
     tags: ['read', 'fetch', 'web', 'external']
+  },
+  'pexels_searchPhotos': {
+    category: 'stock-images',
+    riskLevel: 'safe',
+    requiresApproval: false,
+    tags: ['read', 'search', 'external', 'pexels']
+  },
+  'pexels_downloadPhoto': {
+    category: 'stock-images',
+    riskLevel: 'moderate',
+    requiresApproval: false,
+    tags: ['write', 'download', 'external', 'pexels']
   }
 } as const

@@ -201,7 +201,7 @@ For quick lookups, use web_quickSearch instead.`,
 			});
 
 			return {
-				success: response.status === "complete",
+				success: response.status === "completed",
 				researchId: response.researchId,
 				status: response.status,
 				report: response.report,
