@@ -14,7 +14,7 @@ export interface ChatMessage {
 }
 
 export function useAgent() {
-  const { messages, addMessage, setIsStreaming, sessionId, setSessionId, setCurrentTraceId } =
+  const { messages, addMessage, setIsStreaming, sessionId, setSessionId, setCurrentTraceId, setAgentStatus } =
     useChatStore();
   const { addLog } = useLogStore();
   const { setPendingApproval } = useApprovalStore();
@@ -26,6 +26,7 @@ export function useAgent() {
 
       setError(null);
       setIsStreaming(true);
+      setAgentStatus({ state: 'thinking' });
 
       // Add user message
       const userMessage: ChatMessage = {
@@ -106,6 +107,7 @@ export function useAgent() {
 
                 case 'tool-call':
                   // Tool is being called
+                  setAgentStatus({ state: 'tool-call', toolName: data.toolName });
                   addLog({
                     id: crypto.randomUUID(),
                     traceId: currentTraceId,
@@ -118,7 +120,8 @@ export function useAgent() {
                   break;
 
                 case 'tool-result':
-                  // Tool execution completed
+                  // Tool execution completed - back to thinking
+                  setAgentStatus({ state: 'thinking' });
                   addLog({
                     id: crypto.randomUUID(),
                     traceId: currentTraceId,
@@ -246,9 +249,10 @@ export function useAgent() {
         });
       } finally {
         setIsStreaming(false);
+        setAgentStatus(null);
       }
     },
-    [sessionId, addMessage, setIsStreaming, setSessionId, setCurrentTraceId, addLog, setPendingApproval]
+    [sessionId, addMessage, setIsStreaming, setSessionId, setCurrentTraceId, setAgentStatus, addLog, setPendingApproval]
   );
 
   return {

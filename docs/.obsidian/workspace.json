@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "architecture/LAYER_7.5_POST_RENDERING.md",
-                "mode": "source",
+                "file": "architecture/LAYER_3.1_REACT_LOOP.md",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "LAYER_7.5_POST_RENDERING"
+              "title": "LAYER_3.1_REACT_LOOP"
             }
           }
         ]
@@ -78,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 544.5
+    "width": 442.5
   },
   "right": {
     "id": "21b6a6d77a0d8894",
@@ -194,6 +194,9 @@
   },
   "active": "974d0433f089a4b1",
   "lastOpenFiles": [
+    "architecture/_ INDEX.md",
+    "architecture/LAYER_3.2_TOOLS.md",
+    "architecture/LAYER_7.5_POST_RENDERING.md",
     "architecture/LAYER_7.2_TEMPLATE_REGISTRY.md",
     "architecture/LAYER_6.4_CHAT_COMPONENTS.md",
     "architecture/LAYER_5.5_RETRY_AND_ERROR.md",
@@ -217,9 +220,6 @@
     "architecture/LAYER_5.1_REDIS_CONNECTION.md",
     "architecture/LAYER_5_BACKGROUND.md",
     "architecture/LAYER_4.6_WORKING_MEMORY.md",
-    "architecture/LAYER_4.5_RENDERER.md",
-    "architecture/LAYER_4.4_IMAGE_PROCESSING.md",
-    "architecture/LAYER_4.3_VECTOR_INDEX.md",
     "architecture",
     "C - Brease Assistant.canvas",
     "C - Brease Assistant - IMAGE 20251109.png",

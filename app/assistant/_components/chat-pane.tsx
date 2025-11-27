@@ -10,6 +10,7 @@ import { useChatStore } from "../_stores/chat-store";
 import { useSessionStore } from "../_stores/session-store";
 import { Button } from "@/components/ui/button";
 import { Trash2, MessageSquare } from "lucide-react";
+import { AgentStatusIndicator } from "@/components/ai-elements/agent-status";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -89,13 +90,17 @@ export function ChatPane() {
 								</div>
 							</div>
 						) : (
-							messages.map((message) => (
-								<Message from={message.role} key={message.id}>
-									<MessageContent>
-										<Markdown className='text-xs sm:text-sm'>{message.content}</Markdown>
-									</MessageContent>
-								</Message>
-							))
+							<>
+								{messages.map((message) => (
+									<Message from={message.role} key={message.id}>
+										<MessageContent>
+											<Markdown className='text-xs sm:text-sm'>{message.content}</Markdown>
+										</MessageContent>
+									</Message>
+								))}
+								{/* Status indicator at end of messages during streaming */}
+								<AgentStatusIndicator />
+							</>
 						)}
 					</ConversationContent>
 					<ConversationScrollButton />
@@ -124,7 +129,7 @@ export function ChatPane() {
 					</PromptInputBody>
 					<PromptInputFooter>
 						<div className='flex items-center justify-between w-full'>
-							<span className='text-xs text-muted-foreground'>{isStreaming ? "Agent is thinking..." : "Press Enter to send"}</span>
+							<span className='text-xs text-muted-foreground'>Press Enter to send</span>
 							<PromptInputSubmit disabled={isStreaming || !input.trim()} />
 						</div>
 					</PromptInputFooter>

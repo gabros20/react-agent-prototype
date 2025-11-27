@@ -33,6 +33,7 @@
 		"reindex": "tsx scripts/reindex-vector.ts",
 		"generate:placeholders": "tsx scripts/generate-placeholders.ts",
 		"worker": "tsx scripts/start-worker.ts",
+		"retry:images": "tsx scripts/retry-failed-images.ts",
 		"format": "biome format --write .",
 		"lint": "biome check .",
 		"typecheck": "tsc --noEmit",

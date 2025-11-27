@@ -95,23 +95,43 @@ async function processMetadata(job: any) {
 
 	await job.updateProgress(50);
 
-	// Store in database
-	await db.insert(imageMetadata).values({
-		id: randomUUID(),
-		imageId,
-		description: metadata.description,
-		detailedDescription: metadata.detailedDescription,
-		tags: JSON.stringify(metadata.tags),
-		categories: JSON.stringify(metadata.categories),
-		objects: JSON.stringify(metadata.objects),
-		colors: JSON.stringify(metadata.colors),
-		mood: metadata.mood,
-		style: metadata.style,
-		composition: JSON.stringify(metadata.composition),
-		searchableText: metadata.searchableText,
-		generatedAt: new Date(),
-		model: "gpt-4o-mini",
-	});
+	// Store in database (upsert - preserve source attribution from Pexels if exists)
+	await db
+		.insert(imageMetadata)
+		.values({
+			id: randomUUID(),
+			imageId,
+			description: metadata.description,
+			detailedDescription: metadata.detailedDescription,
+			tags: JSON.stringify(metadata.tags),
+			categories: JSON.stringify(metadata.categories),
+			objects: JSON.stringify(metadata.objects),
+			colors: JSON.stringify(metadata.colors),
+			mood: metadata.mood,
+			style: metadata.style,
+			composition: JSON.stringify(metadata.composition),
+			searchableText: metadata.searchableText,
+			generatedAt: new Date(),
+			model: "gpt-4o-mini",
+		})
+		.onConflictDoUpdate({
+			target: imageMetadata.imageId,
+			set: {
+				// Update with AI-generated metadata, but preserve source attribution
+				description: metadata.description,
+				detailedDescription: metadata.detailedDescription,
+				tags: JSON.stringify(metadata.tags),
+				categories: JSON.stringify(metadata.categories),
+				objects: JSON.stringify(metadata.objects),
+				colors: JSON.stringify(metadata.colors),
+				mood: metadata.mood,
+				style: metadata.style,
+				composition: JSON.stringify(metadata.composition),
+				searchableText: metadata.searchableText,
+				generatedAt: new Date(),
+				model: "gpt-4o-mini",
+			},
+		});
 
 	await job.updateProgress(80);
 

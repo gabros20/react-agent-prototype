@@ -75,13 +75,13 @@ Agent:
 │                              │                                  │
 │         ┌────────────────────┼────────────────────┐             │
 │         ▼                    ▼                    ▼             │
-│   ┌───────────┐       ┌───────────┐        ┌───────────┐        │
-│   │ Lifecycle │       │   Retry   │        │ Checkpoint│        │
-│   │   Hooks   │       │   Logic   │        │   System  │        │
-│   │           │       │           │        │           │        │
-│   │ prepareStep│      │ Exponential│       │ Every 3   │        │
-│   │ onStepFinish│     │ backoff   │        │ steps     │        │
-│   └───────────┘       └───────────┘        └───────────┘        │
+│   ┌─────────────┐     ┌────────────┐        ┌───────────┐       │
+│   │ Lifecycle   │     │   Retry    │        │ Checkpoint│       │
+│   │   Hooks     │     │   Logic    │        │   System  │       │
+│   │             │     │            │        │           │       │
+│   │ prepareStep │     │ Exponential│        │ Every 3   │       │
+│   │ onStepFinish│     │ backoff    │        │ steps     │       │
+│   └─────────────┘     └────────────┘        └───────────┘       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

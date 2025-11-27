@@ -26,6 +26,187 @@ Tools bridge the gap between language and action.
 
 ---
 
+## How Tool Calling Works
+
+This section explains the fundamental mechanics of how an LLM "calling a function" actually results in code execution. Understanding this is crucial for grasping the entire agent system.
+
+### The Key Insight
+
+When we say the agent "calls" `cms_createPage({title: "About"})`, the LLM doesn't execute JavaScript. Instead:
+
+1. **LLM returns structured tool calls** (not just text)
+2. **AI SDK intercepts and executes** the actual functions
+3. **Results go back to LLM** as observations
+
+### Step 1: LLM Sees Tools as JSON Schema
+
+When creating the agent, tools are registered and converted to JSON schema:
+
+```typescript
+// server/agent/orchestrator.ts
+return new ToolLoopAgent({
+	model: openrouter.languageModel(AGENT_CONFIG.modelId),
+	tools: ALL_TOOLS, // All tools available
+	// ...
+});
+```
+
+The AI SDK converts each tool definition to JSON schema for the LLM. The LLM prompt includes something like:
+
+```json
+{
+	"name": "cms_createPage",
+	"description": "Create a new page with optional sections",
+	"parameters": {
+		"type": "object",
+		"properties": {
+			"title": { "type": "string", "description": "Page title" },
+			"slug": { "type": "string", "description": "URL slug" }
+		}
+	}
+}
+```
+
+### Step 2: LLM Returns Tool Calls (Not Just Text)
+
+When the LLM decides to use a tool, it returns a **structured response** with `tool_calls`, not plain text. Modern LLMs (GPT-4, Claude, etc.) support native function calling:
+
+```json
+{
+	"role": "assistant",
+	"content": "I need to create a page first.",
+	"tool_calls": [
+		{
+			"id": "call_abc123",
+			"type": "function",
+			"function": {
+				"name": "cms_createPage",
+				"arguments": "{\"title\": \"About\"}"
+			}
+		}
+	]
+}
+```
+
+> **Critical Distinction:** This is NOT prompt engineering magic. Native function calling is a trained capability of modern LLMs - they're explicitly trained to output structured `tool_calls` in their response format.
+
+### Step 3: AI SDK Intercepts and Executes
+
+The AI SDK framework intercepts the `tool_calls` from the LLM response:
+
+```typescript
+// Inside streamText() or ToolLoopAgent.generate()
+case "tool-call":
+  // 1. Extract tool name and arguments
+  const { toolName, input, toolCallId } = chunk;
+
+  // 2. Look up the tool from ALL_TOOLS registry
+  const tool = ALL_TOOLS[toolName];
+
+  // 3. Validate input against Zod schema
+  const validated = tool.inputSchema.parse(input);
+
+  // 4. Execute the tool's execute() function
+  const result = await tool.execute(validated, { experimental_context: context });
+```
+
+At this point, **real code runs**:
+
+```typescript
+// Inside cms_createPage.execute()
+const page = await ctx.services.pageService.createPage(ctx.cmsTarget.siteId, ctx.cmsTarget.environmentId, input);
+// → Database INSERT actually happens here!
+```
+
+### Step 4: Results Return to LLM
+
+The tool result is appended to the conversation as a `tool` message:
+
+```json
+{
+	"role": "tool",
+	"tool_call_id": "call_abc123",
+	"content": "{\"success\": true, \"page\": {\"id\": \"page-123\", \"title\": \"About\"}}"
+}
+```
+
+The LLM sees this in the next iteration and can reason about it (OBSERVE phase).
+
+### Step 5: Loop Continues
+
+With the tool result in context, the LLM decides what to do next:
+
+-   More tool calls needed? → Return another `tool_calls` response
+-   Task complete? → Return text with `FINAL_ANSWER:`
+
+### Visual Summary
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. User: "Create About page"                                │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 2. LLM Thinks & Returns Structured Response                 │
+│                                                             │
+│    {                                                        │
+│      content: "I'll create a page",                         │
+│      tool_calls: [{                                         │
+│        name: "cms_createPage",                              │
+│        arguments: '{"title": "About"}'                      │
+│      }]                                                     │
+│    }                                                        │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 3. AI SDK Intercepts Tool Call                              │
+│    - Looks up tool in ALL_TOOLS registry                    │
+│    - Validates input via Zod schema                         │
+│    - Calls tool.execute(input, context)                     │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 4. Tool Executes Real Code                                  │
+│    await pageService.createPage(...)                        │
+│    → Database INSERT                                        │
+│    → Returns: { id: "page-123", title: "About" }            │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 5. Result Appended to Messages                              │
+│    messages.push({                                          │
+│      role: "tool",                                          │
+│      tool_call_id: "call_abc123",                           │
+│      content: '{"success": true, "page": {...}}'            │
+│    })                                                       │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 6. Next LLM Call (Loop Continues)                           │
+│    LLM sees tool result, decides next action or stops       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### This Pattern Is Universal
+
+Every modern agentic framework works this way:
+
+| Framework     | Approach                                          |
+| ------------- | ------------------------------------------------- |
+| AI SDK v6     | Native `tool()` function with automatic execution |
+| LangChain     | Tools → LLM → Tool execution → Loop               |
+| AutoGPT       | Same pattern with custom JSON parsing             |
+| Anthropic SDK | `tools` parameter in API calls                    |
+
+The "magic" is that modern LLMs are **trained** to output structured function calls, not just text. The framework's job is to intercept these calls and execute real code.
+
+---
+
 ## Architecture
 
 ```
