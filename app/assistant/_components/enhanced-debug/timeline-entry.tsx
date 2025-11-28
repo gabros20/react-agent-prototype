@@ -73,17 +73,68 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 interface TimelineEntryProps {
 	entry: TraceEntry;
 	isSelected?: boolean;
+	isTraceComplete?: boolean;
+	hasMatchingResult?: boolean; // Whether this tool-call has a corresponding tool-result
+	linkedToolName?: string; // Tool name for result entries (looked up from tool-call)
 	onSelect?: () => void;
 	onOpenModal?: () => void;
 }
 
-export function TimelineEntry({ entry, isSelected, onSelect, onOpenModal }: TimelineEntryProps) {
+// Status indicator types for tool calls
+type ToolCallStatus = 'in-progress' | 'failed' | 'stale' | null;
+
+// Stale threshold: 30 seconds without completion
+const STALE_THRESHOLD_MS = 30_000;
+
+function getToolCallStatus(
+	entry: TraceEntry,
+	isTraceComplete: boolean,
+	hasMatchingResult: boolean
+): ToolCallStatus {
+	// Only applies to tool-call entries
+	if (entry.type !== 'tool-call') {
+		return null;
+	}
+
+	// If we have duration set OR a matching result exists, the tool completed successfully
+	if (entry.duration !== undefined || hasMatchingResult) {
+		return null;
+	}
+
+	// Failed: has error attached
+	if (entry.error) {
+		return 'failed';
+	}
+
+	// Stale: trace is complete but this tool never got a result, or it's been too long
+	const elapsed = Date.now() - entry.timestamp;
+	if (isTraceComplete || elapsed > STALE_THRESHOLD_MS) {
+		return 'stale';
+	}
+
+	// In progress: actively waiting for result
+	return 'in-progress';
+}
+
+export function TimelineEntry({
+	entry,
+	isSelected,
+	isTraceComplete = false,
+	hasMatchingResult = false,
+	linkedToolName,
+	onSelect,
+	onOpenModal
+}: TimelineEntryProps) {
 	const [isExpanded, setIsExpanded] = useState(false);
 	const Icon = ENTRY_TYPE_ICONS[entry.type];
 	const hasExpandableContent = entry.input !== undefined || entry.output !== undefined;
 
 	const isError = entry.type === "error" || entry.type === "tool-error" || entry.type === "job-failed";
-	const isInProgress = entry.type === "job-progress" || (entry.type === "tool-call" && !entry.duration);
+	const toolCallStatus = getToolCallStatus(entry, isTraceComplete, hasMatchingResult);
+	const isJobInProgress = entry.type === "job-progress";
+
+	// For result entries, show the linked tool name
+	const displayToolName = entry.toolName || linkedToolName;
 
 	return (
 		<Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
@@ -109,10 +160,21 @@ export function TimelineEntry({ entry, isSelected, onSelect, onOpenModal }: Time
 								"text-white text-[10px] sm:text-xs flex-shrink-0 gap-1 px-1.5 relative overflow-visible"
 							)}
 						>
-							{isInProgress && (
+							{/* Status indicators for tool calls and jobs */}
+							{(toolCallStatus === 'in-progress' || isJobInProgress) && (
 								<span className='absolute -top-1 -left-1 flex h-2.5 w-2.5'>
 									<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
 									<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
+								</span>
+							)}
+							{toolCallStatus === 'failed' && (
+								<span className='absolute -top-1 -left-1 flex h-2.5 w-2.5'>
+									<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500' />
+								</span>
+							)}
+							{toolCallStatus === 'stale' && (
+								<span className='absolute -top-1 -left-1 flex h-2.5 w-2.5'>
+									<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-gray-400' />
 								</span>
 							)}
 							<Icon className='h-3 w-3' />
@@ -133,8 +195,8 @@ export function TimelineEntry({ entry, isSelected, onSelect, onOpenModal }: Time
 							</Badge>
 						)}
 
-						{/* Tool name */}
-						{entry.toolName && <span className='font-mono text-xs sm:text-sm text-primary flex-shrink-0'>{entry.toolName}</span>}
+						{/* Tool name - shows linked tool name for results */}
+						{displayToolName && <span className='font-mono text-xs sm:text-sm text-primary flex-shrink-0'>{displayToolName}</span>}
 
 						{/* Summary */}
 						<span className='flex-1 text-xs sm:text-sm truncate text-muted-foreground'>{entry.summary}</span>
@@ -207,9 +269,18 @@ export function TimelineEntry({ entry, isSelected, onSelect, onOpenModal }: Time
 }
 
 // Compact variant for dense timeline view
-export function TimelineEntryCompact({ entry, onClick }: { entry: TraceEntry; onClick?: () => void }) {
+export function TimelineEntryCompact({
+	entry,
+	linkedToolName,
+	onClick
+}: {
+	entry: TraceEntry;
+	linkedToolName?: string;
+	onClick?: () => void;
+}) {
 	const Icon = ENTRY_TYPE_ICONS[entry.type];
 	const isError = entry.type === "error" || entry.type === "tool-error" || entry.type === "job-failed";
+	const displayToolName = entry.toolName || linkedToolName;
 
 	return (
 		<button
@@ -223,7 +294,7 @@ export function TimelineEntryCompact({ entry, onClick }: { entry: TraceEntry; on
 		>
 			<span className='text-[10px] text-muted-foreground font-mono w-16'>{formatTimestamp(entry.timestamp).slice(-8)}</span>
 			<Icon className={cn("h-3 w-3", ENTRY_TYPE_COLORS[entry.type].replace("bg-", "text-"))} />
-			{entry.toolName && <span className='font-mono text-[10px] text-primary'>{entry.toolName}</span>}
+			{displayToolName && <span className='font-mono text-[10px] text-primary'>{displayToolName}</span>}
 			<span className='text-[10px] text-muted-foreground truncate flex-1'>{entry.summary}</span>
 			{entry.duration !== undefined && <span className='text-[10px] text-muted-foreground'>{formatDuration(entry.duration)}</span>}
 		</button>

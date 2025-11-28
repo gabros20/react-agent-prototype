@@ -171,7 +171,7 @@ export function TraceDetailModal() {
 									Copy
 								</Button>
 								<div className='h-full overflow-scroll p-4'>
-									<pre className={cn("text-sm font-mono whitespace-pre", !isInputString && "text-xs")}>
+									<pre className={cn("text-sm font-mono whitespace-pre-wrap", !isInputString && "text-xs")}>
 										<code
 											dangerouslySetInnerHTML={{
 												__html: isInputString ? highlightXml(formattedInput) : highlightJson(formattedInput),
@@ -194,7 +194,7 @@ export function TraceDetailModal() {
 									Copy
 								</Button>
 								<div className='h-[90vh] overflow-scroll p-4'>
-									<pre className={cn("text-sm font-mono whitespace-pre", !isOutputString && "text-xs")}>
+									<pre className={cn("text-sm font-mono whitespace-pre-wrap", !isOutputString && "text-xs")}>
 										<code
 											dangerouslySetInnerHTML={{
 												__html: isOutputString ? highlightXml(formattedOutput) : highlightJson(formattedOutput),
@@ -217,7 +217,7 @@ export function TraceDetailModal() {
 									Copy
 								</Button>
 								<div className='h-full overflow-scroll p-4'>
-									<pre className='text-xs font-mono whitespace-pre'>
+									<pre className='text-xs font-mono whitespace-pre-wrap'>
 										<code dangerouslySetInnerHTML={{ __html: highlightJson(JSON.stringify(filteredMetadata, null, 2)) }} />
 									</pre>
 								</div>

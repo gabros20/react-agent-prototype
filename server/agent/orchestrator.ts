@@ -413,6 +413,7 @@ export async function streamAgentWithApproval(
 							context.stream.write({
 								type: "tool-call",
 								toolName: chunk.toolName,
+								toolCallId: chunk.toolCallId,
 								args: chunk.input,
 								timestamp: new Date().toISOString(),
 							});

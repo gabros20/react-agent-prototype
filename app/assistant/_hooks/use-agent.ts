@@ -288,6 +288,11 @@ export function useAgent() {
                   const duration = startTime ? Date.now() - startTime : undefined;
                   toolTimings.current.delete(toolCallId);
 
+                  // Update the original tool-call entry with duration (stops the in-progress indicator)
+                  if (toolCallId) {
+                    completeEntry(toolCallId, data.result, undefined);
+                  }
+
                   // Check if result requires confirmation (explicit confirmation flag pattern)
                   const result = data.result || {};
                   const requiresConfirmation = result.requiresConfirmation === true;
