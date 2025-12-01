@@ -18,7 +18,7 @@ import {
 // Group entry types for better UX
 const TYPE_GROUPS = {
   'LLM': ['system-prompt', 'prompt-sent', 'llm-response'] as TraceEntryType[],
-  'Tools': ['tool-call', 'tool-result', 'tool-error', 'confirmation-required'] as TraceEntryType[],
+  'Tools': ['tool-call', 'confirmation-required'] as TraceEntryType[],
   'Flow': ['trace-start', 'step-complete', 'trace-complete'] as TraceEntryType[],
   'Memory': ['working-memory-update', 'memory-trimmed', 'session-loaded', 'checkpoint-saved'] as TraceEntryType[],
   'Approval': ['approval-request', 'approval-response'] as TraceEntryType[],
@@ -94,7 +94,7 @@ export function TraceFilters({ className, compact = false }: TraceFiltersProps) 
 
         {/* Quick type filters */}
         <div className="flex items-center gap-1">
-          {(['tool-call', 'tool-result', 'error'] as TraceEntryType[]).map((type) => (
+          {(['tool-call', 'error'] as TraceEntryType[]).map((type) => (
             <Badge
               key={type}
               variant={filters.types.includes(type) ? 'default' : 'outline'}

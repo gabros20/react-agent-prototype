@@ -184,7 +184,7 @@ export function useAgent() {
                       type: 'system-log',
                       level: 'info',
                       summary: `Agent created: ${metadata.toolCount || 0} tools, model: ${metadata.modelId || 'unknown'}`,
-                      input: metadata,
+                      output: metadata,
                     });
                   } else if (message.includes('Step') && message.includes('starting')) {
                     // Track step start for more granular timing
@@ -195,18 +195,22 @@ export function useAgent() {
                       level: 'debug',
                       stepNumber: metadata.totalSteps,
                       summary: message,
-                      input: metadata,
+                      output: metadata,
                     });
                   } else if (data.level === 'warn' || data.level === 'error') {
-                    // Always capture warnings and errors
-                    addEntry({
-                      traceId: currentTraceId,
-                      timestamp: Date.now(),
-                      type: 'system-log',
-                      level: data.level,
-                      summary: message,
-                      input: metadata,
-                    });
+                    // Skip tool failure logs - these are handled by tool-error SSE event
+                    const isToolFailure = message.includes('Tool') && message.includes('failed');
+                    if (!isToolFailure) {
+                      // Capture other warnings and errors as system logs
+                      addEntry({
+                        traceId: currentTraceId,
+                        timestamp: Date.now(),
+                        type: 'system-log',
+                        level: data.level,
+                        summary: message,
+                        output: metadata,
+                      });
+                    }
                   }
 
                   // Legacy log store
@@ -288,11 +292,6 @@ export function useAgent() {
                   const duration = startTime ? Date.now() - startTime : undefined;
                   toolTimings.current.delete(toolCallId);
 
-                  // Update the original tool-call entry with duration (stops the in-progress indicator)
-                  if (toolCallId) {
-                    completeEntry(toolCallId, data.result, undefined);
-                  }
-
                   // Check if result requires confirmation (explicit confirmation flag pattern)
                   const result = data.result || {};
                   const requiresConfirmation = result.requiresConfirmation === true;
@@ -312,19 +311,11 @@ export function useAgent() {
                       output: result,
                     });
                   } else {
-                    // Normal tool result
-                    addEntry({
-                      traceId: currentTraceId,
-                      timestamp: Date.now(),
-                      duration,
-                      type: 'tool-result',
-                      level: 'info',
-                      toolName: data.toolName,
-                      toolCallId,
-                      stepNumber: stepCounter.current,
-                      summary: `${data.toolName || 'Tool'} completed${duration ? ` (${duration}ms)` : ''}`,
-                      output: result,
-                    });
+                    // Update the original tool-call entry with output and duration
+                    // This stops the in-progress indicator and adds the result to the same entry
+                    if (toolCallId) {
+                      completeEntry(toolCallId, result, undefined);
+                    }
                   }
 
                   // Legacy log store
@@ -336,6 +327,34 @@ export function useAgent() {
                     type: 'tool-result',
                     message: `Tool ${data.toolName || 'result'} completed`,
                     input: data.result
+                  });
+                  break;
+                }
+
+                case 'tool-error': {
+                  // Tool execution failed - update the tool-call entry with error
+                  setAgentStatus({ state: 'thinking' });
+                  const toolCallId = data.toolCallId || '';
+
+                  // Calculate duration
+                  const startTime = toolTimings.current.get(toolCallId);
+                  toolTimings.current.delete(toolCallId);
+
+                  // Update the original tool-call entry with error info
+                  if (toolCallId) {
+                    completeEntry(toolCallId, undefined, {
+                      message: data.error || 'Tool execution failed',
+                    });
+                  }
+
+                  // Legacy log store
+                  addLog({
+                    id: crypto.randomUUID(),
+                    traceId: currentTraceId,
+                    stepId: toolCallId,
+                    timestamp: new Date(),
+                    type: 'error',
+                    message: `Tool ${data.toolName || 'unknown'} failed: ${data.error}`,
                   });
                   break;
                 }
@@ -352,7 +371,7 @@ export function useAgent() {
                     level: 'info',
                     stepNumber: stepCounter.current,
                     summary: `Step ${stepCounter.current} completed`,
-                    input: data,
+                    output: data,
                   });
 
                   // Legacy log store
@@ -505,7 +524,7 @@ export function useAgent() {
                         input: data.usage.promptTokens || data.usage.inputTokens || 0,
                         output: data.usage.completionTokens || data.usage.outputTokens || 0,
                       },
-                      input: { finishReason: data.finishReason, usage: data.usage },
+                      output: { finishReason: data.finishReason, usage: data.usage },
                     });
                   }
                   break;

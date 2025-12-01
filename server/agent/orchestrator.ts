@@ -547,6 +547,16 @@ export async function streamAgentWithApproval(
 						context.logger.error(`Tool ${chunk.toolName} failed`, {
 							error: chunk.error,
 						});
+						// Send tool-error event to client so it can update the tool-call entry
+						if (context.stream) {
+							context.stream.write({
+								type: "tool-error",
+								toolCallId: chunk.toolCallId,
+								toolName: chunk.toolName,
+								error: chunk.error instanceof Error ? chunk.error.message : String(chunk.error),
+								timestamp: new Date().toISOString(),
+							});
+						}
 						// Tool errors don't stop the stream - agent can recover
 						break;
 

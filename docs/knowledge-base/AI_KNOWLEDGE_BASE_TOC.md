@@ -230,14 +230,24 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 #### 0.2 Thinking vs Non-Thinking Models
 
 -   [0.2.1 Standard Models vs Thinking Models](./kb/0-foundations/0.2.1-standard-models.md) ✅
-    -   **Status**: ✅ Complete - Updated with latest 2025 benchmarks (Nov 24, 2025)
+    -   **Status**: ✅ Complete - Updated with latest 2025 benchmarks (Nov 28, 2025)
     -   **Length**: 680+ lines with TL;DR, 3 Implementation Patterns, Production Best Practices
-    -   **Updated**: o3 (87.5% ARC-AGI-1, <3% ARC-AGI-2), o4-mini (41% ARC-AGI-1), DeepSeek-R1-0528 (91.4% AIME'24, 87.5% AIME'25), Qwen3-235B (85.7% AIME'24, 81.4% AIME'25)
-    -   **Includes**: AI SDK 6 integration (reasoningEffort, extractReasoningMiddleware, sendReasoning), hybrid routing pattern, cost analysis, 18 authoritative sources
+    -   **Updated**: o3-released (41-53% ARC-AGI-1, <3% ARC-AGI-2), o4-mini (21-41% ARC-AGI-1), DeepSeek-R1-0528 (91.4% AIME'24, 87.5% AIME'25, 81% GPQA), Qwen3-Thinking (92.3% AIME'25)
+    -   **Includes**: AI SDK 6 integration (reasoningEffort, extractReasoningMiddleware, sendReasoning, streaming reasoning), hybrid routing pattern, cost analysis, 12 authoritative sources
     -   **Format**: Standalone knowledge base (no project-specific references)
-    -   **New Research**: ARC-AGI-2 benchmark (March 2025), o4-mini cost efficiency (~5¢/task), DeepSeek-R1-0528 improvements
--   [0.2.2 Reasoning Models Deep Dive](./kb/0-foundations/0.2.2-reasoning-models.md) ⏳
--   [0.2.3 When to Use Which](./kb/0-foundations/0.2.3-model-comparison.md) ⏳
+    -   **Key Insight**: Open-source models (DeepSeek-R1-0528, Qwen3) now match commercial reasoning models on many benchmarks
+-   [0.2.2 Reasoning Models Deep Dive](./kb/0-foundations/0.2.2-reasoning-models.md) ✅
+    -   **Status**: ✅ Complete - Comprehensive guide to reasoning model architecture and training (Nov 28, 2025)
+    -   **Length**: 740+ lines with TL;DR, 4 Implementation Patterns (RL training approaches), AI SDK 6 integration
+    -   **Includes**: Process supervision vs outcome-based RL, thinking token flow diagrams, DeepSeek GRPO training, Qwen3 four-stage pipeline, distillation patterns
+    -   **Research**: OpenAI o3 (10× compute scaling), DeepSeek-R1 paper, Qwen3 Technical Report, 12 authoritative sources
+    -   **Key Insight**: Multiple training approaches exist—outcome-based RL (OpenAI), GRPO (DeepSeek), hybrid modes (Qwen3)—each with distinct trade-offs
+-   [0.2.3 When to Use Which](./kb/0-foundations/0.2.3-when-to-use-which.md) ✅
+    -   **Status**: ✅ Complete - Comprehensive model selection guide with November 2025 pricing (Nov 28, 2025)
+    -   **Length**: 820+ lines with TL;DR, 4 routing patterns, decision matrices, cost analysis
+    -   **Includes**: GPT-4.1/Claude 4.5/Gemini 2.5 pricing, complexity-based router, cascade pattern, custom provider abstraction, prompt caching
+    -   **Research**: SWE-bench results, provider strengths comparison, 10 authoritative sources
+    -   **Key Insight**: Hybrid routing saves 80-90% by using cheap models for simple tasks, premium for complex
 -   [0.2.4 Trade-offs (Cost, Latency, Capabilities)](./kb/0-foundations/0.2.4-tradeoffs.md) ⏳
 
 #### 0.3 Tokens, Embeddings, and Vector Spaces

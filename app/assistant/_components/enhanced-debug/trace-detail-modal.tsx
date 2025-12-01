@@ -14,8 +14,16 @@ function formatDataForDisplay(data: unknown): string {
 	if (data === undefined || data === null) return "";
 
 	if (typeof data === "string") {
-		// If it's a string, display it with proper line breaks
-		// Replace literal \n with actual newlines for readability
+		// Try to parse as JSON first - if it's stringified JSON, prettify it
+		try {
+			const parsed = JSON.parse(data);
+			if (typeof parsed === "object" && parsed !== null) {
+				return JSON.stringify(parsed, null, 2);
+			}
+		} catch {
+			// Not JSON, treat as plain string
+		}
+		// If it's a plain string, display it with proper line breaks
 		return data.replace(/\\n/g, "\n");
 	}
 
@@ -29,11 +37,16 @@ function formatDataForDisplay(data: unknown): string {
 // Simple syntax highlighting for JSON
 function highlightJson(text: string): string {
 	return text
+		// Keys
 		.replace(/"([^"]+)":/g, '<span class="text-blue-600 dark:text-blue-400">"$1"</span>:')
-		.replace(/: "([^"]*)"([,\n])/g, ': <span class="text-green-600 dark:text-green-400">"$1"</span>$2')
-		.replace(/: (\d+\.?\d*)([,\n])/g, ': <span class="text-amber-600 dark:text-amber-400">$1</span>$2')
-		.replace(/: (true|false)([,\n])/g, ': <span class="text-purple-600 dark:text-purple-400">$1</span>$2')
-		.replace(/: (null)([,\n])/g, ': <span class="text-gray-500">$1</span>$2');
+		// String values (handle end of line, comma, or closing brace/bracket)
+		.replace(/: "([^"]*)"([,\n\r\}\]]|$)/g, ': <span class="text-green-600 dark:text-green-400">"$1"</span>$2')
+		// Number values
+		.replace(/: (-?\d+\.?\d*)([,\n\r\}\]]|$)/g, ': <span class="text-amber-600 dark:text-amber-400">$1</span>$2')
+		// Boolean values
+		.replace(/: (true|false)([,\n\r\}\]]|$)/g, ': <span class="text-purple-600 dark:text-purple-400">$1</span>$2')
+		// Null values
+		.replace(/: (null)([,\n\r\}\]]|$)/g, ': <span class="text-gray-500">$1</span>$2');
 }
 
 // Syntax highlighting for XML/prompt content

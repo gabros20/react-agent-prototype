@@ -12,8 +12,6 @@ import {
 	MessageSquare,
 	Bot,
 	Wrench,
-	CheckCircle,
-	XCircle,
 	Layers,
 	Shield,
 	ShieldCheck,
@@ -48,8 +46,6 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	"prompt-sent": MessageSquare,
 	"llm-response": Bot,
 	"tool-call": Wrench,
-	"tool-result": CheckCircle,
-	"tool-error": XCircle,
 	"step-complete": Layers,
 	"approval-request": Shield,
 	"approval-response": ShieldCheck,
@@ -74,67 +70,73 @@ interface TimelineEntryProps {
 	entry: TraceEntry;
 	isSelected?: boolean;
 	isTraceComplete?: boolean;
-	hasMatchingResult?: boolean; // Whether this tool-call has a corresponding tool-result
-	linkedToolName?: string; // Tool name for result entries (looked up from tool-call)
 	onSelect?: () => void;
 	onOpenModal?: () => void;
 }
 
 // Status indicator types for tool calls
-type ToolCallStatus = 'in-progress' | 'failed' | 'stale' | null;
+type ToolCallStatus = "in-progress" | "failed" | "stale" | null;
 
 // Stale threshold: 30 seconds without completion
 const STALE_THRESHOLD_MS = 30_000;
 
-function getToolCallStatus(
-	entry: TraceEntry,
-	isTraceComplete: boolean,
-	hasMatchingResult: boolean
-): ToolCallStatus {
+// Check if output contains error-like content
+function hasErrorInOutput(output: unknown): boolean {
+	if (!output || typeof output !== "object") return false;
+	const obj = output as Record<string, unknown>;
+
+	// Check for common error patterns in output
+	if (obj.error !== undefined && obj.error !== null) return true;
+	if (obj.success === false) return true;
+	if (typeof obj.message === "string" && /not found|failed|error|invalid/i.test(obj.message)) return true;
+
+	return false;
+}
+
+function getToolCallStatus(entry: TraceEntry, isTraceComplete: boolean): ToolCallStatus {
 	// Only applies to tool-call entries
-	if (entry.type !== 'tool-call') {
+	if (entry.type !== "tool-call") {
 		return null;
 	}
 
-	// If we have duration set OR a matching result exists, the tool completed successfully
-	if (entry.duration !== undefined || hasMatchingResult) {
-		return null;
-	}
-
-	// Failed: has error attached
+	// Failed: has error attached directly
 	if (entry.error) {
-		return 'failed';
+		return "failed";
+	}
+
+	// Failed: output contains error-like content
+	if (entry.output !== undefined && hasErrorInOutput(entry.output)) {
+		return "failed";
+	}
+
+	// Completed successfully: has duration or output without errors
+	if (entry.duration !== undefined || entry.output !== undefined) {
+		return null;
 	}
 
 	// Stale: trace is complete but this tool never got a result, or it's been too long
 	const elapsed = Date.now() - entry.timestamp;
 	if (isTraceComplete || elapsed > STALE_THRESHOLD_MS) {
-		return 'stale';
+		return "stale";
 	}
 
 	// In progress: actively waiting for result
-	return 'in-progress';
+	return "in-progress";
 }
 
-export function TimelineEntry({
-	entry,
-	isSelected,
-	isTraceComplete = false,
-	hasMatchingResult = false,
-	linkedToolName,
-	onSelect,
-	onOpenModal
-}: TimelineEntryProps) {
+export function TimelineEntry({ entry, isSelected, isTraceComplete = false, onSelect, onOpenModal }: TimelineEntryProps) {
 	const [isExpanded, setIsExpanded] = useState(false);
 	const Icon = ENTRY_TYPE_ICONS[entry.type];
-	const hasExpandableContent = entry.input !== undefined || entry.output !== undefined;
+	const hasExpandableContent = entry.input !== undefined || entry.output !== undefined || entry.error !== undefined;
 
-	const isError = entry.type === "error" || entry.type === "tool-error" || entry.type === "job-failed";
-	const toolCallStatus = getToolCallStatus(entry, isTraceComplete, hasMatchingResult);
+	const toolCallStatus = getToolCallStatus(entry, isTraceComplete);
 	const isJobInProgress = entry.type === "job-progress";
 
-	// For result entries, show the linked tool name
-	const displayToolName = entry.toolName || linkedToolName;
+	// Only color the entire block for non-tool-call errors (error type, job-failed)
+	const isBlockError = entry.type === "error" || entry.type === "job-failed";
+
+	// Determine badge color - tool-calls with errors get red badge
+	const badgeColor = toolCallStatus === "failed" ? "bg-red-500" : toolCallStatus === "stale" ? "bg-gray-400" : ENTRY_TYPE_COLORS[entry.type];
 
 	return (
 		<Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
@@ -143,7 +145,7 @@ export function TimelineEntry({
 					"border rounded-lg transition-all group",
 					"hover:bg-accent/30",
 					isSelected && "ring-2 ring-primary/50 bg-accent/50",
-					isError && "border-red-500/30 bg-red-500/5"
+					isBlockError && "border-red-500/30 bg-red-500/5"
 				)}
 			>
 				<CollapsibleTrigger asChild disabled={!hasExpandableContent}>
@@ -153,38 +155,36 @@ export function TimelineEntry({
 							{formatTimestamp(entry.timestamp)}
 						</span>
 
-						{/* Type badge */}
+						{/* Type badge - includes tool name for tool-call entries */}
 						<Badge
-							className={cn(
-								ENTRY_TYPE_COLORS[entry.type],
-								"text-white text-[10px] sm:text-xs flex-shrink-0 gap-1 px-1.5 relative overflow-visible"
-							)}
+							className={cn(badgeColor, "text-white text-[10px] sm:text-xs flex-shrink-0 gap-1 pl-1.5 pr-2 relative overflow-visible")}
 						>
-							{/* Status indicators for tool calls and jobs */}
-							{(toolCallStatus === 'in-progress' || isJobInProgress) && (
+							{/* Status indicator for tool calls in progress */}
+							{(toolCallStatus === "in-progress" || isJobInProgress) && (
 								<span className='absolute -top-1 -left-1 flex h-2.5 w-2.5'>
 									<span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75' />
 									<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500' />
 								</span>
 							)}
-							{toolCallStatus === 'failed' && (
-								<span className='absolute -top-1 -left-1 flex h-2.5 w-2.5'>
-									<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500' />
-								</span>
-							)}
-							{toolCallStatus === 'stale' && (
-								<span className='absolute -top-1 -left-1 flex h-2.5 w-2.5'>
-									<span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-gray-400' />
-								</span>
-							)}
 							<Icon className='h-3 w-3' />
-							<span className='hidden sm:inline'>{ENTRY_TYPE_LABELS[entry.type]}</span>
+							<span className='hidden sm:inline'>
+								{entry.type === 'tool-call' && entry.toolName
+									? `Tool: ${entry.toolName}`
+									: ENTRY_TYPE_LABELS[entry.type]}
+							</span>
 						</Badge>
 
 						{/* Duration badge */}
 						{entry.duration !== undefined && (
 							<Badge variant='outline' className='text-[10px] sm:text-xs flex-shrink-0'>
 								{formatDuration(entry.duration)}
+							</Badge>
+						)}
+
+						{/* Stale indicator badge */}
+						{toolCallStatus === "stale" && (
+							<Badge variant='outline' className='text-[10px] sm:text-xs flex-shrink-0 text-gray-500 border-gray-400'>
+								stale
 							</Badge>
 						)}
 
@@ -195,14 +195,20 @@ export function TimelineEntry({
 							</Badge>
 						)}
 
-						{/* Tool name - shows linked tool name for results */}
-						{displayToolName && <span className='font-mono text-xs sm:text-sm text-primary flex-shrink-0'>{displayToolName}</span>}
+						{/* Tool name - only show separately for non-tool-call entries that have a tool name */}
+						{entry.toolName && entry.type !== 'tool-call' && (
+							<span className='font-mono text-xs sm:text-sm text-primary flex-shrink-0'>{entry.toolName}</span>
+						)}
 
-						{/* Summary */}
-						<span className='flex-1 text-xs sm:text-sm truncate text-muted-foreground'>{entry.summary}</span>
+						{/* Summary - skip for tool-calls since badge already shows tool name */}
+						{entry.type !== 'tool-call' ? (
+							<span className='flex-1 text-xs sm:text-sm truncate text-muted-foreground'>{entry.summary}</span>
+						) : (
+							<span className='flex-1' />
+						)}
 
-						{/* Actions */}
-						<div className='flex items-center gap-1 flex-shrink-0'>
+						{/* Actions - always pushed to right */}
+						<div className='flex items-center gap-1 flex-shrink-0 ml-auto'>
 							{hasExpandableContent && (
 								<ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", isExpanded && "rotate-180")} />
 							)}
@@ -269,18 +275,15 @@ export function TimelineEntry({
 }
 
 // Compact variant for dense timeline view
-export function TimelineEntryCompact({
-	entry,
-	linkedToolName,
-	onClick
-}: {
-	entry: TraceEntry;
-	linkedToolName?: string;
-	onClick?: () => void;
-}) {
+export function TimelineEntryCompact({ entry, onClick }: { entry: TraceEntry; onClick?: () => void }) {
 	const Icon = ENTRY_TYPE_ICONS[entry.type];
-	const isError = entry.type === "error" || entry.type === "tool-error" || entry.type === "job-failed";
-	const displayToolName = entry.toolName || linkedToolName;
+	// Error state includes error type, job-failed, or tool-call with error
+	const isError = entry.type === "error" || entry.type === "job-failed" || (entry.type === "tool-call" && entry.error);
+
+	// For tool-calls, show tool name; for others show summary
+	const displayText = entry.type === 'tool-call' && entry.toolName
+		? entry.toolName
+		: entry.summary;
 
 	return (
 		<button
@@ -294,8 +297,7 @@ export function TimelineEntryCompact({
 		>
 			<span className='text-[10px] text-muted-foreground font-mono w-16'>{formatTimestamp(entry.timestamp).slice(-8)}</span>
 			<Icon className={cn("h-3 w-3", ENTRY_TYPE_COLORS[entry.type].replace("bg-", "text-"))} />
-			{displayToolName && <span className='font-mono text-[10px] text-primary'>{displayToolName}</span>}
-			<span className='text-[10px] text-muted-foreground truncate flex-1'>{entry.summary}</span>
+			<span className='text-[10px] text-muted-foreground truncate flex-1'>{displayText}</span>
 			{entry.duration !== undefined && <span className='text-[10px] text-muted-foreground'>{formatDuration(entry.duration)}</span>}
 		</button>
 	);

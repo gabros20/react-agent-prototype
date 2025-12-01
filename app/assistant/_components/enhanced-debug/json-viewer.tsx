@@ -17,6 +17,18 @@ export function JsonViewer({ data, maxHeight = "200px", className, onFullView, s
 	const [copied, setCopied] = useState(false);
 
 	const formattedJson = useMemo(() => {
+		// If data is a string, try to parse it as JSON first
+		if (typeof data === "string") {
+			try {
+				const parsed = JSON.parse(data);
+				if (typeof parsed === "object" && parsed !== null) {
+					return JSON.stringify(parsed, null, 2);
+				}
+			} catch {
+				// Not JSON, return as-is with newlines normalized
+				return data.replace(/\\n/g, "\n");
+			}
+		}
 		try {
 			return JSON.stringify(data, null, 2);
 		} catch {
@@ -66,11 +78,16 @@ export function JsonViewer({ data, maxHeight = "200px", className, onFullView, s
 function JsonSyntaxHighlight({ json }: { json: string }) {
 	const highlighted = useMemo(() => {
 		return json
+			// Keys
 			.replace(/"([^"]+)":/g, '<span class="text-blue-600 dark:text-blue-400">"$1"</span>:')
-			.replace(/: "([^"]*)"([,\n])/g, ': <span class="text-green-600 dark:text-green-400">"$1"</span>$2')
-			.replace(/: (\d+\.?\d*)([,\n])/g, ': <span class="text-amber-600 dark:text-amber-400">$1</span>$2')
-			.replace(/: (true|false)([,\n])/g, ': <span class="text-purple-600 dark:text-purple-400">$1</span>$2')
-			.replace(/: (null)([,\n])/g, ': <span class="text-gray-500">$1</span>$2');
+			// String values (handle end of line, comma, or closing brace/bracket)
+			.replace(/: "([^"]*)"([,\n\r\}\]]|$)/g, ': <span class="text-green-600 dark:text-green-400">"$1"</span>$2')
+			// Number values
+			.replace(/: (-?\d+\.?\d*)([,\n\r\}\]]|$)/g, ': <span class="text-amber-600 dark:text-amber-400">$1</span>$2')
+			// Boolean values
+			.replace(/: (true|false)([,\n\r\}\]]|$)/g, ': <span class="text-purple-600 dark:text-purple-400">$1</span>$2')
+			// Null values
+			.replace(/: (null)([,\n\r\}\]]|$)/g, ': <span class="text-gray-500">$1</span>$2');
 	}, [json]);
 
 	return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
