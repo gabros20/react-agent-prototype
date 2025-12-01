@@ -5,11 +5,13 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, Brain } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { TraceHeader } from './trace-header';
 import { TraceFilters } from './trace-filters';
 import { TraceTimeline } from './trace-timeline';
 import { TraceDetailModal } from './trace-detail-modal';
 import { WorkingMemoryPanel } from './working-memory-panel';
+import { ConversationAccordion } from './conversation-accordion';
 
 interface EnhancedDebugPanelProps {
   className?: string;
@@ -61,10 +63,10 @@ export function EnhancedDebugPanel({ className }: EnhancedDebugPanelProps) {
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Timeline */}
-      <div className="flex-1 min-h-0 overflow-hidden p-3">
-        <TraceTimeline className="h-full" />
-      </div>
+      {/* Timeline - now grouped by conversation */}
+      <ScrollArea className="flex-1 min-h-0">
+        <ConversationAccordion className="h-full" />
+      </ScrollArea>
 
       {/* Modal for full view */}
       <TraceDetailModal />
@@ -80,3 +82,4 @@ export { TraceDetailModal } from './trace-detail-modal';
 export { TimelineEntry, TimelineEntryCompact } from './timeline-entry';
 export { JsonViewer, CollapsibleJson } from './json-viewer';
 export { WorkingMemoryPanel } from './working-memory-panel';
+export { ConversationAccordion } from './conversation-accordion';

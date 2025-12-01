@@ -37,12 +37,27 @@ content: {
 ```
 
 Images in posts:
-- Cover image: `content.cover` (hero at top)
-- Featured image: `featuredImage` (card thumbnail)
+- Cover image: `content.cover` (hero at top of post page)
+- Featured image: `featuredImage` (card thumbnail in listings + template rendering)
 - Inline: Use markdown `![alt](exact-url-from-tool)` - copy URL verbatim
+
+**CRITICAL - COVER IMAGE SYNC:**
+When setting/updating post images, you MUST update BOTH fields:
+- `content.cover` - stores cover data (url + alt)
+- `featuredImage` - used by templates for actual rendering
+
+If you only set `content.cover`, the image will NOT display in the post!
+Always set both in the same cms_updatePost call.
 </fields>
 
 <finding-posts>
+**CRITICAL: Always check if post exists before creating**
+
+When user mentions a post by name (e.g., "the AI Agents post", "Exploring Wales post"):
+1. FIRST: `cms_listPosts({status: "all"})` → check if post exists
+2. If found: Use `cms_updatePost` to modify it
+3. If NOT found: Ask user "No post found with that name. Create a new one?"
+
 ALWAYS use `cms_listPosts` to find slug from title.
 Never guess slug from title.
 "Getting Started with Our CMS" → slug may be "getting-started-with-cms"
@@ -76,6 +91,20 @@ Never guess slug from title.
 "Update React hooks excerpt" →
 1. cms_listPosts({status: "all"}) → find exact slug
 2. cms_updatePost(slug, {excerpt: "New excerpt..."})
+
+**Update post cover image:**
+"Add an AI image to the Exploring AI post" →
+1. cms_listPosts({status: "all"}) → find slug for "Exploring AI"
+2. pexels_searchPhotos("artificial intelligence") → find photo
+3. pexels_downloadPhoto(photoId) → {imageId, url: "/uploads/images/.../uuid.png", status: "completed"}
+4. cms_updatePost(slug, {
+     content: {cover: {url: "/uploads/images/.../uuid.png", alt: "AI description"}},
+     featuredImage: "/uploads/images/.../uuid.png"  // ← MUST include this!
+   })
+
+**CRITICAL URL RULES:**
+- Use the `url` from pexels_downloadPhoto, NOT the Pexels preview URL
+- MUST set BOTH `content.cover` AND `featuredImage` - templates use `featuredImage` for rendering
 
 **Delete post** (follows confirmation-pattern):
 "Delete getting started post" →

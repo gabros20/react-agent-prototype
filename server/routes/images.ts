@@ -86,7 +86,8 @@ router.get("/api/images/search", searchLimiter, async (req, res) => {
 			return res.status(HttpStatus.BAD_REQUEST).json(ApiResponse.error(ErrorCodes.MISSING_REQUIRED_FIELD, "Query parameter 'q' is required"));
 		}
 
-		const { default: vectorIndex } = await import("../services/vector-index");
+		const { ServiceContainer } = await import("../services/service-container");
+		const vectorIndex = ServiceContainer.get().vectorIndex;
 		const offset = (page - 1) * limit;
 		const { results, total } = await vectorIndex.searchImages(query, {
 			limit,
@@ -128,7 +129,8 @@ router.post("/api/images/find", async (req, res) => {
 			return res.status(HttpStatus.BAD_REQUEST).json(ApiResponse.error(ErrorCodes.MISSING_REQUIRED_FIELD, "Description field is required"));
 		}
 
-		const { default: vectorIndex } = await import("../services/vector-index");
+		const { ServiceContainer } = await import("../services/service-container");
+		const vectorIndex = ServiceContainer.get().vectorIndex;
 		const image = await vectorIndex.findImageByDescription(description);
 
 		res.json(ApiResponse.success(image));

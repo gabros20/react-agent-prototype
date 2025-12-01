@@ -23,7 +23,7 @@ async function fixImageTextContent() {
     console.log(`Found ${contents.length} image-text section(s)\n`);
 
     for (const row of contents) {
-      const content = JSON.parse(row.page_section_contents.content);
+      const content = JSON.parse(row.page_section_contents.content as string);
 
       // Check if image field exists and is a string (invalid format)
       if (content.image && typeof content.image === "string") {

@@ -18,7 +18,11 @@ const LOG_TYPE_COLORS: Record<LogEntry["type"], string> = {
 };
 
 export function DebugPane() {
-	const { logs, filterType, setFilterType, clearLogs } = useLogStore();
+	// Use selectors to avoid subscribing to entire store
+	const logs = useLogStore((state) => state.logs);
+	const filterType = useLogStore((state) => state.filterType);
+	const setFilterType = useLogStore((state) => state.setFilterType);
+	const clearLogs = useLogStore((state) => state.clearLogs);
 
 	const filteredLogs = filterType === "all" ? logs : logs.filter((log) => log.type === filterType);
 

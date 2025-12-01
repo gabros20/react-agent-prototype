@@ -19,6 +19,25 @@ const createMessageSchema = z.object({
   stepIdx: z.number().int().optional(),
 });
 
+const createConversationLogSchema = z.object({
+  userPrompt: z.string(),
+  entries: z.array(z.any()),
+  metrics: z.object({
+    totalDuration: z.number(),
+    toolCallCount: z.number(),
+    stepCount: z.number(),
+    tokens: z.object({ input: z.number(), output: z.number() }),
+    cost: z.number(),
+    errorCount: z.number(),
+  }),
+  modelInfo: z.object({
+    modelId: z.string(),
+    pricing: z.object({ prompt: z.number(), completion: z.number() }).nullable(),
+  }).optional(),
+  startedAt: z.string().transform((s) => new Date(s)),
+  completedAt: z.string().transform((s) => new Date(s)).optional(),
+});
+
 export function createSessionRoutes(services: ServiceContainer) {
   const router = express.Router();
 
@@ -105,6 +124,54 @@ export function createSessionRoutes(services: ServiceContainer) {
       const result = await services.sessionService.clearMessages(req.params.id);
 
       res.json(ApiResponse.success(result));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // =========================================================================
+  // CONVERSATION LOG MANAGEMENT
+  // =========================================================================
+
+  // GET /v1/sessions/:id/logs - Get all conversation logs for a session
+  router.get("/:id/logs", async (req, res, next) => {
+    try {
+      const logs = await services.conversationLogService.getSessionLogs(req.params.id);
+      res.json(ApiResponse.success(logs));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/sessions/:id/logs - Save a conversation log
+  router.post("/:id/logs", async (req, res, next) => {
+    try {
+      const input = createConversationLogSchema.parse(req.body);
+      const log = await services.conversationLogService.saveConversationLog({
+        sessionId: req.params.id,
+        ...input,
+      });
+      res.status(HttpStatus.CREATED).json(ApiResponse.success(log));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // GET /v1/sessions/:id/logs/stats - Get aggregated stats for a session
+  router.get("/:id/logs/stats", async (req, res, next) => {
+    try {
+      const stats = await services.conversationLogService.getSessionStats(req.params.id);
+      res.json(ApiResponse.success(stats));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // DELETE /v1/sessions/:id/logs - Delete all conversation logs for a session
+  router.delete("/:id/logs", async (req, res, next) => {
+    try {
+      await services.conversationLogService.deleteSessionLogs(req.params.id);
+      res.json(ApiResponse.success({ success: true }));
     } catch (error) {
       next(error);
     }

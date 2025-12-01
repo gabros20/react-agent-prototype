@@ -14,8 +14,10 @@ import {
 } from '@/components/ui/resizable';
 
 export default function AssistantPage() {
-  const { sessions, loadSessions, createSession } = useSessionStore();
-  const { sessionId, setSessionId } = useChatStore();
+  // Use selectors to avoid subscribing to entire store
+  const loadSessions = useSessionStore((state) => state.loadSessions);
+  const createSession = useSessionStore((state) => state.createSession);
+  const setSessionId = useChatStore((state) => state.setSessionId);
 
   // Initialize session on mount
   useEffect(() => {
@@ -23,19 +25,31 @@ export default function AssistantPage() {
       // Load sessions first
       await loadSessions();
 
-      // If no current sessionId, create a default session
-      if (!sessionId && sessions.length === 0) {
-        try {
-          const newSessionId = await createSession('New Session');
-          setSessionId(newSessionId);
-        } catch (error) {
-          console.error('Failed to create initial session:', error);
+      // Check current state AFTER loading (not from stale closure)
+      const currentSessionId = useChatStore.getState().sessionId;
+      const loadedSessions = useSessionStore.getState().sessions;
+
+      if (!currentSessionId) {
+        if (loadedSessions.length === 0) {
+          // No sessions exist - create a new one
+          try {
+            const newSessionId = await createSession('New Session');
+            setSessionId(newSessionId);
+          } catch (error) {
+            console.error('Failed to create initial session:', error);
+          }
+        } else {
+          // Sessions exist but none selected - select the first one
+          setSessionId(loadedSessions[0].id);
+          useSessionStore.getState().setCurrentSessionId(loadedSessions[0].id);
         }
       }
     };
 
     initializeSession();
   }, []); // Run once on mount
+
+  // Conversation logs are now fetched via TanStack Query in the components
 
   return (
     <div className="h-screen overflow-hidden bg-background flex flex-col">

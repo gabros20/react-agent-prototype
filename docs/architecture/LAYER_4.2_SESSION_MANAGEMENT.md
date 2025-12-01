@@ -1,17 +1,15 @@
 # Layer 4.2: Session Management
 
-> Chat persistence, message storage, and AI SDK v6 checkpointing
+> Chat persistence, message storage, and working context
 
 ## Overview
 
-The SessionService manages conversation state across agent interactions. It persists chat messages to SQLite, provides checkpoint/restore capabilities for AI SDK v6, auto-generates smart titles from first user message, and stores WorkingContext state for entity tracking between sessions.
+The SessionService manages conversation state across agent interactions. It persists chat messages to SQLite, auto-generates smart titles from user input, and stores WorkingContext state for entity tracking between sessions.
 
-**Key Responsibilities:**
-- Create and manage chat sessions
-- Persist messages for conversation history
-- Load/save messages for AI SDK v6 checkpointing
-- Auto-generate smart titles from user input
-- Store and restore WorkingContext state
+**Key Changes (AI SDK 6 Migration):**
+- Checkpoint system removed (was dead code)
+- Messages saved at end of execution only
+- No mid-step checkpointing needed
 
 ---
 
@@ -80,14 +78,15 @@ session.title = "Untitled Session";
 │  │  sessions                    messages                   │    │
 │  │  ├─ id (UUID)               ├─ id (UUID)                │    │
 │  │  ├─ title                   ├─ sessionId (FK)           │    │
-│  │  ├─ checkpoint (JSON)       ├─ role (enum)              │    │
-│  │  ├─ workingContext (JSON)   ├─ content (JSON)           │    │
-│  │  ├─ archived                ├─ toolName                 │    │
-│  │  ├─ createdAt               ├─ stepIdx                  │    │
+│  │  ├─ workingContext (JSON)   ├─ role (enum)              │    │
+│  │  ├─ archived                ├─ content (JSON)           │    │
+│  │  ├─ createdAt               ├─ toolName                 │    │
 │  │  └─ updatedAt               └─ createdAt                │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Note**: `checkpoint` column removed from sessions table.
 
 ---
 
@@ -115,7 +114,6 @@ export class SessionService {
     const session = {
       id: randomUUID(),
       title: input.title || "New Session",
-      checkpoint: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -129,7 +127,7 @@ export class SessionService {
       with: {
         messages: {
           orderBy: desc(schema.messages.createdAt),
-          limit: 1, // Only get last message for timestamp
+          limit: 1,
         },
       },
       orderBy: desc(schema.sessions.updatedAt),
@@ -148,23 +146,6 @@ export class SessionService {
         updatedAt: session.updatedAt,
       };
     });
-  }
-
-  async getSessionById(sessionId: string) {
-    const session = await this.db.query.sessions.findFirst({
-      where: eq(schema.sessions.id, sessionId),
-      with: {
-        messages: {
-          orderBy: schema.messages.createdAt,
-        },
-      },
-    });
-
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    return session;
   }
 
   async deleteSession(sessionId: string) {
@@ -189,7 +170,6 @@ export class SessionService {
 
 ```typescript
 async addMessage(sessionId: string, input: CreateMessageInput) {
-  // Verify session exists
   const session = await this.db.query.sessions.findFirst({
     where: eq(schema.sessions.id, sessionId),
   });
@@ -204,7 +184,6 @@ async addMessage(sessionId: string, input: CreateMessageInput) {
     role: input.role,
     content: JSON.stringify(input.content),
     toolName: input.toolName || null,
-    stepIdx: input.stepIdx || null,
     createdAt: new Date(),
   };
 
@@ -231,14 +210,6 @@ async addMessage(sessionId: string, input: CreateMessageInput) {
 }
 
 async clearMessages(sessionId: string) {
-  const session = await this.db.query.sessions.findFirst({
-    where: eq(schema.sessions.id, sessionId),
-  });
-
-  if (!session) {
-    throw new Error(`Session not found: ${sessionId}`);
-  }
-
   await this.db.delete(schema.messages)
     .where(eq(schema.messages.sessionId, sessionId));
 
@@ -246,11 +217,11 @@ async clearMessages(sessionId: string) {
     .set({ updatedAt: new Date() })
     .where(eq(schema.sessions.id, sessionId));
 
-  return { success: true, clearedSessionId: sessionId };
+  return { success: true };
 }
 ```
 
-### AI SDK v6 Checkpointing
+### Message Load/Save for AI SDK
 
 ```typescript
 /**
@@ -268,7 +239,7 @@ async loadMessages(sessionId: string): Promise<CoreMessage[]> {
 }
 
 /**
- * Save messages array (for AI SDK v6 checkpointing)
+ * Save messages array (after agent completes)
  */
 async saveMessages(sessionId: string, messages: CoreMessage[]) {
   // Create session if doesn't exist
@@ -297,15 +268,6 @@ async saveMessages(sessionId: string, messages: CoreMessage[]) {
     });
   }
 
-  // Auto-generate title from first user message
-  const userMessages = messages.filter(m => m.role === 'user');
-  if (userMessages.length > 0) {
-    const smartTitle = this.generateSmartTitle(userMessages);
-    await this.db.update(schema.sessions)
-      .set({ title: smartTitle })
-      .where(eq(schema.sessions.id, sessionId));
-  }
-
   return { success: true, messageCount: messages.length };
 }
 ```
@@ -313,9 +275,6 @@ async saveMessages(sessionId: string, messages: CoreMessage[]) {
 ### Smart Title Generation
 
 ```typescript
-/**
- * Generate smart title from first user message
- */
 generateSmartTitle(messages: any[]): string {
   const firstUserMessage = messages.find(
     (m) => typeof m === "string" || (m && m.role === "user")
@@ -342,9 +301,6 @@ generateSmartTitle(messages: any[]): string {
 ### WorkingContext Persistence
 
 ```typescript
-/**
- * Save working context to session
- */
 async saveWorkingContext(sessionId: string, context: WorkingContext): Promise<void> {
   const state = context.toJSON();
   await this.db.update(schema.sessions)
@@ -352,9 +308,6 @@ async saveWorkingContext(sessionId: string, context: WorkingContext): Promise<vo
     .where(eq(schema.sessions.id, sessionId));
 }
 
-/**
- * Load working context from session
- */
 async loadWorkingContext(sessionId: string): Promise<WorkingContext> {
   const session = await this.db.query.sessions.findFirst({
     where: eq(schema.sessions.id, sessionId),
@@ -368,7 +321,6 @@ async loadWorkingContext(sessionId: string): Promise<WorkingContext> {
     const state = JSON.parse(session.workingContext) as WorkingContextState;
     return WorkingContext.fromJSON(state);
   } catch (error) {
-    // If parsing fails, return empty context
     return new WorkingContext();
   }
 }
@@ -376,85 +328,44 @@ async loadWorkingContext(sessionId: string): Promise<WorkingContext> {
 
 ---
 
-## Design Decisions
+## Removed: Checkpoint System
 
-### Why Store Messages as JSON?
+The checkpoint system was dead code and has been removed:
 
-```typescript
-// Schema
-content: JSON.stringify(input.content)
-
-// Load
-content: JSON.parse(msg.content)
-```
-
-**Reasons:**
-1. **Flexible structure** - AI SDK messages can have complex content
-2. **Tool calls** - Content can include tool call results
-3. **Future-proof** - Schema doesn't need to change for new content types
-4. **SQLite compatibility** - SQLite stores JSON as TEXT
-
-### Why Auto-Generate Titles?
+### What Was Removed
 
 ```typescript
-if (messageCount.length === 1 && input.role === "user") {
-  const smartTitle = this.generateSmartTitle([input.content]);
-}
+// REMOVED from schema.ts
+// checkpoint: text("checkpoint"),
+
+// REMOVED from session-service.ts
+// async saveCheckpoint(sessionId: string, state: CheckpointState)
+// async loadCheckpoint(sessionId: string)
+// async clearCheckpoint(sessionId: string)
+
+// REMOVED from routes/sessions.ts
+// DELETE /:id/checkpoint
+
+// REMOVED from app/api
+// app/api/sessions/[sessionId]/checkpoint/route.ts
 ```
 
-**Reasons:**
-1. **UX improvement** - Users don't have to manually title sessions
-2. **Contextual** - Title reflects what user asked about
-3. **Discoverable** - Easy to find sessions by topic
-4. **First message only** - Title set once, not constantly changing
+### Why Removed
 
-### Why Session Auto-Creation in saveMessages?
-
-```typescript
-if (!session) {
-  await this.db.insert(schema.sessions).values({
-    id: sessionId,
-    title: 'New Session',
-    ...
-  });
-}
-```
-
-**Reasons:**
-1. **Agent route simplicity** - Agent can save without pre-creating session
-2. **Session ID from client** - Client generates UUID, server creates session
-3. **Idempotent** - Safe to call multiple times with same ID
-
-### Why Cascade Delete Messages?
-
-```sql
--- FK constraint
-messages.sessionId REFERENCES sessions.id ON DELETE CASCADE
-```
-
-**Reasons:**
-1. **Data integrity** - No orphaned messages
-2. **Simple cleanup** - Delete session, messages go with it
-3. **Atomic** - Single operation cleans up everything
+1. **Never used** - Checkpoint column was always null
+2. **CMS agent is fast** - Completes in seconds, not minutes
+3. **Messages suffice** - Saved at end of execution
+4. **Copied from wrong pattern** - Coding agents need checkpoints, CMS agents don't
 
 ---
 
-## Integration Points
-
-| Connects To | How |
-|-------------|-----|
-| Layer 1.2 (Container) | Instantiated in ServiceContainer |
-| Layer 1.5 (Routes) | Session routes call service methods |
-| Layer 3.1 (ReAct Loop) | Agent saves/loads messages |
-| Layer 4.6 (Working Memory) | Persists WorkingContext state |
-| Layer 6 (Client) | Frontend lists and selects sessions |
-
-### Agent Route Integration
+## Usage in Agent Route
 
 ```typescript
 // server/routes/agent.ts
 router.post('/stream', async (req, res) => {
   const { sessionId, prompt } = req.body;
+  const services = getContainer();
 
   // Load previous messages
   let previousMessages: CoreMessage[] = [];
@@ -466,20 +377,76 @@ router.post('/stream', async (req, res) => {
     }
   }
 
-  // Execute agent
-  const result = await streamAgentWithApproval(prompt, context, previousMessages);
+  // Load working context
+  const workingContext = sessionId
+    ? await services.sessionService.loadWorkingContext(sessionId)
+    : new WorkingContext();
 
-  // Save updated conversation
-  if (sessionId) {
-    const updatedMessages: CoreMessage[] = [
-      ...previousMessages,
-      { role: 'user', content: prompt },
-      ...result.response.messages
-    ];
-    await services.sessionService.saveMessages(sessionId, updatedMessages);
-  }
+  // Run agent
+  const result = await runAgent(
+    [...previousMessages, { role: 'user', content: prompt }],
+    options
+  );
+
+  // Save messages AFTER completion (no mid-step checkpoints)
+  const updatedMessages = [
+    ...previousMessages,
+    { role: 'user', content: prompt },
+    ...result.responseMessages,
+  ];
+  await services.sessionService.saveMessages(sessionId, updatedMessages);
+
+  // Save working context
+  await services.sessionService.saveWorkingContext(sessionId, workingContext);
 });
 ```
+
+---
+
+## Design Decisions
+
+### Why Store Messages as JSON?
+
+```typescript
+content: JSON.stringify(input.content)
+```
+
+**Reasons:**
+1. **Flexible structure** - AI SDK messages can have complex content
+2. **Tool calls** - Content can include tool call results
+3. **Future-proof** - Schema doesn't need to change for new content types
+
+### Why Auto-Generate Titles?
+
+```typescript
+if (messageCount.length === 1 && input.role === "user") {
+  const smartTitle = this.generateSmartTitle([input.content]);
+}
+```
+
+**Reasons:**
+1. **Better UX** - Users don't have to manually title sessions
+2. **Contextual** - Title reflects what user asked about
+3. **First message only** - Title set once, not constantly changing
+
+### Why Save Messages at End Only?
+
+1. **Simpler** - No checkpoint logic needed
+2. **Atomic** - All-or-nothing saves
+3. **Fast** - CMS agent completes in seconds
+4. **Reliable** - No partial state issues
+
+---
+
+## Integration Points
+
+| Connects To | How |
+|-------------|-----|
+| Layer 1.2 (Container) | Instantiated in ServiceContainer |
+| Layer 1.5 (Routes) | Session routes call service methods |
+| Layer 3.1 (ReAct Loop) | Agent saves messages at end |
+| Layer 4.6 (Working Memory) | Persists WorkingContext state |
+| Layer 6 (Client) | Frontend lists and selects sessions |
 
 ---
 
@@ -491,15 +458,7 @@ router.post('/stream', async (req, res) => {
 Error: Session not found: abc-123
 ```
 
-**Cause:** Session ID doesn't exist in database.
-
-**Fix:** Check if session was created:
-
-```typescript
-// Create session first
-const session = await sessionService.createSession();
-// Then use session.id for messages
-```
+**Fix:** Session auto-creates on first saveMessages call now.
 
 ### Messages Not Persisting
 
@@ -509,21 +468,9 @@ const session = await sessionService.createSession();
 
 **Cause:** Using in-memory state instead of service.
 
-**Fix:** Always use SessionService:
+**Fix:** Always use SessionService.saveMessages after agent completes.
 
-```typescript
-// WRONG: In-memory array
-const messages = [];
-messages.push(newMessage);
-
-// RIGHT: Persist via service
-await sessionService.addMessage(sessionId, {
-  role: 'user',
-  content: 'Hello',
-});
-```
-
-### JSON Parse Error on Load
+### JSON Parse Error
 
 ```
 SyntaxError: Unexpected token in JSON
@@ -531,52 +478,15 @@ SyntaxError: Unexpected token in JSON
 
 **Cause:** Content stored as non-JSON string.
 
-**Debug:**
-
-```typescript
-const session = await getSessionById(id);
-console.log('Raw content:', session.messages[0].content);
-console.log('Type:', typeof session.messages[0].content);
-```
-
-**Fix:** Ensure content is stringified on save:
-
-```typescript
-content: JSON.stringify(input.content)
-```
+**Fix:** Ensure content is stringified on save.
 
 ### WorkingContext Lost
 
-```
-// Entity references not available after reload
-```
+**Cause:** WorkingContext not saved after agent execution.
 
-**Cause:** WorkingContext not saved to session.
-
-**Fix:** Save after agent execution:
-
+**Fix:**
 ```typescript
-// After agent completes
 await sessionService.saveWorkingContext(sessionId, workingContext);
-
-// On next request
-const context = await sessionService.loadWorkingContext(sessionId);
-```
-
-### Title Not Updating
-
-```
-// Session still shows "New Session"
-```
-
-**Cause:** First message wasn't a user message, or content was empty.
-
-**Debug:**
-
-```typescript
-const messages = await sessionService.loadMessages(sessionId);
-console.log('First message:', messages[0]);
-console.log('Role:', messages[0].role);
 ```
 
 ---
@@ -584,7 +494,6 @@ console.log('Role:', messages[0].role);
 ## Further Reading
 
 - [Layer 2.3: Content Model](./LAYER_2.3_CONTENT_MODEL.md) - Database schema
-- [Layer 3.1: ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Agent checkpointing
+- [Layer 3.1: ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Agent execution
 - [Layer 4.6: Working Memory](./LAYER_4.6_WORKING_MEMORY.md) - Entity state persistence
 - [Layer 6: Client](./LAYER_6_CLIENT.md) - Session selection UI
-- [AI SDK v6 Checkpointing](https://sdk.vercel.ai/docs/ai-sdk-core/agents)

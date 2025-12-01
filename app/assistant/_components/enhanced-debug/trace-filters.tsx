@@ -33,7 +33,9 @@ interface TraceFiltersProps {
 }
 
 export function TraceFilters({ className, compact = false }: TraceFiltersProps) {
-	const { filters, setFilters } = useTraceStore();
+	// Use selectors to avoid subscribing to entire store
+	const filters = useTraceStore((state) => state.filters);
+	const setFilters = useTraceStore((state) => state.setFilters);
 
 	const toggleType = (type: TraceEntryType) => {
 		const newTypes = filters.types.includes(type) ? filters.types.filter((t) => t !== type) : [...filters.types, type];

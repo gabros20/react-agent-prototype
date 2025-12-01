@@ -278,9 +278,8 @@ export class ImageProcessingService {
 
 		// Delete from vector index if available
 		try {
-			const { default: vectorIndex } = await import(
-				"../vector-index"
-			);
+			const { ServiceContainer } = await import("../service-container");
+			const vectorIndex = ServiceContainer.get().vectorIndex;
 			await vectorIndex.deleteImage(imageId);
 		} catch (error) {
 			console.warn("Failed to delete from vector index:", error);

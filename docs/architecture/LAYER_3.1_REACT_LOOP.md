@@ -1,12 +1,15 @@
-# Layer 3.1: ReAct Loop & Orchestrator
+# Layer 3.1: ReAct Loop (AI SDK 6 Native)
 
-> The core execution loop that enables multi-step autonomous task completion
+> The core execution loop using native AI SDK 6 `generateText` with `maxSteps`
 
 ## Overview
 
-The ReAct (Reasoning + Acting) pattern is the foundation of our agent system. It enables the LLM to break complex tasks into steps, execute tools, observe results, and iterate until the task is complete.
+The ReAct (Reasoning + Acting) pattern enables the LLM to break complex tasks into steps, execute tools, observe results, and iterate until complete. Since the AI SDK 6 migration, the loop uses native `generateText` with `maxSteps` instead of custom orchestration.
 
-**Key File:** `server/agent/orchestrator.ts`
+**Key Files:**
+- `server/agent/cms-agent.ts` - Agent module
+- `server/agent/system-prompt.ts` - Prompt compilation
+- `server/routes/agent.ts` - Route handler
 
 ---
 
@@ -45,17 +48,22 @@ Agent:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      ReAct Orchestrator                         │
+│                      AI SDK 6 Agent Loop                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌──────────────────────────────────────────────────────────┐  │
-│   │                    ToolLoopAgent                         │  │
+│   │                    generateText()                        │  │
 │   │                   (AI SDK v6 Native)                     │  │
+│   │                                                          │  │
+│   │    maxSteps: 15                                          │  │
+│   │    maxRetries: 2 (native exponential backoff)            │  │
+│   │    maxTokens: 4096                                       │  │
 │   └──────────────────────────────────────────────────────────┘  │
 │                              │                                  │
 │                              ▼                                  │
 │   ┌──────────────────────────────────────────────────────────┐  │
 │   │                    EXECUTION LOOP                        │  │
+│   │                  (SDK-managed internally)                │  │
 │   │                                                          │  │
 │   │    ┌─────────┐    ┌─────────┐    ┌─────────┐             │  │
 │   │    │  THINK  │───▶│   ACT   │───▶│ OBSERVE │──┐          │  │
@@ -67,20 +75,19 @@ Agent:
 │   │         ▲                                     │          │  │
 │   │         └─────────────────────────────────────┘          │  │
 │   │                                                          │  │
-│   │    Stop Conditions:                                      │  │
-│   │    • FINAL_ANSWER detected                               │  │
+│   │    Stop Conditions (Native):                             │  │
+│   │    • No more tool calls                                  │  │
 │   │    • Max steps reached (15)                              │  │
-│   │    • Error threshold exceeded                            │  │
+│   │    • maxRetries exceeded                                 │  │
 │   └──────────────────────────────────────────────────────────┘  │
 │                              │                                  │
 │         ┌────────────────────┼────────────────────┐             │
 │         ▼                    ▼                    ▼             │
 │   ┌─────────────┐     ┌────────────┐        ┌───────────┐       │
-│   │ Lifecycle   │     │   Retry    │        │ Checkpoint│       │
-│   │   Hooks     │     │   Logic    │        │   System  │       │
-│   │             │     │            │        │           │       │
-│   │ prepareStep │     │ Exponential│        │ Every 3   │       │
-│   │ onStepFinish│     │ backoff    │        │ steps     │       │
+│   │ Callbacks   │     │   Native   │        │  Token    │       │
+│   │             │     │   Retry    │        │  Tracking │       │
+│   │ onStepFinish│     │            │        │           │       │
+│   │ onFinish    │     │ maxRetries │        │ usage     │       │
 │   └─────────────┘     └────────────┘        └───────────┘       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -89,204 +96,216 @@ Agent:
 
 ## Core Implementation
 
-### ToolLoopAgent Configuration
+### CMS Agent Module
 
 ```typescript
-// server/agent/orchestrator.ts
-import { ToolLoopAgent } from "ai";
+// server/agent/cms-agent.ts
+import { generateText, type CoreMessage } from 'ai';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { ALL_TOOLS } from '../tools/all-tools';
+import { getSystemPrompt } from './system-prompt';
+import type { AgentContext } from '../tools/types';
 
-const agent = new ToolLoopAgent({
-	// Model configuration
-	model: openrouter("openai/gpt-4o-mini"),
-	maxOutputTokens: 4096,
-
-	// Tool availability - ALL tools always available
-	tools: ALL_TOOLS,
-
-	// Loop control
-	maxSteps: 15,
-
-	// Context injection for tools
-	experimental_context: agentContext,
-
-	// System prompt (compiled from template)
-	system: compiledSystemPrompt,
-
-	// Stop condition
-	stopWhen: ({ steps, text }) => {
-		// Stop if max steps reached
-		if (steps.length >= 15) return true;
-
-		// Stop if FINAL_ANSWER detected
-		if (text?.includes("FINAL_ANSWER:")) return true;
-
-		return false;
-	},
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
 });
+
+const AGENT_CONFIG = {
+  maxSteps: 15,
+  modelId: 'openai/gpt-4o-mini',
+  maxRetries: 2,
+  maxTokens: 4096,
+};
+
+export interface AgentOptions {
+  sessionId: string;
+  traceId: string;
+  workingMemory: string;
+  cmsTarget: { siteId: string; environmentId: string };
+  db: any;
+  services: any;
+  sessionService: any;
+  vectorIndex: any;
+  logger: any;
+}
+
+export async function runAgent(
+  messages: CoreMessage[],
+  options: AgentOptions
+) {
+  const systemPrompt = getSystemPrompt({
+    toolsList: Object.keys(ALL_TOOLS),
+    toolCount: Object.keys(ALL_TOOLS).length,
+    sessionId: options.sessionId,
+    currentDate: new Date().toISOString().split('T')[0],
+    workingMemory: options.workingMemory,
+  });
+
+  const agentContext: AgentContext = {
+    db: options.db,
+    services: options.services,
+    sessionService: options.sessionService,
+    vectorIndex: options.vectorIndex,
+    logger: options.logger,
+    traceId: options.traceId,
+    sessionId: options.sessionId,
+    cmsTarget: options.cmsTarget,
+  };
+
+  return generateText({
+    model: openrouter(AGENT_CONFIG.modelId),
+    system: systemPrompt,
+    messages,
+    tools: ALL_TOOLS,
+    maxSteps: AGENT_CONFIG.maxSteps,
+    maxRetries: AGENT_CONFIG.maxRetries,
+    maxTokens: AGENT_CONFIG.maxTokens,
+    experimental_context: agentContext,
+  });
+}
 ```
 
 ### Key Configuration Values
 
-| Parameter         | Value       | Rationale                                                 |
-| ----------------- | ----------- | --------------------------------------------------------- |
-| `maxSteps`        | 15          | Higher than typical (10) for complex multi-step CMS tasks |
-| `maxOutputTokens` | 4096        | Allows detailed reasoning and explanations                |
-| `model`           | gpt-4o-mini | Good balance of capability, speed, and cost               |
+| Parameter    | Value         | Rationale                                                 |
+| ------------ | ------------- | --------------------------------------------------------- |
+| `maxSteps`   | 15            | Higher than typical (10) for complex multi-step CMS tasks |
+| `maxTokens`  | 4096          | Allows detailed reasoning and explanations                |
+| `maxRetries` | 2             | Native SDK default, exponential backoff for 429/5xx       |
+| `model`      | gpt-4o-mini   | Good balance of capability, speed, and cost               |
 
 ---
 
-## Lifecycle Hooks
+## Changes from Pre-Migration
 
-### prepareStep
-
-Called before each step executes:
+### Before (Custom Orchestrator)
 
 ```typescript
-prepareStep: async ({ messages, stepNumber }) => {
-	// 1. Memory trimming (prevent token overflow)
-	if (messages.length > 20) {
-		const systemPrompt = messages[0]; // Keep system prompt
-		const recentMessages = messages.slice(-10); // Keep last 10
-		return [systemPrompt, ...recentMessages]; // Total: 11 messages
-	}
+// OLD: server/agent/orchestrator.ts
+const agent = new ToolLoopAgent({
+  model: openrouter('gpt-4o-mini'),
+  tools: ALL_TOOLS,
+  maxSteps: 15,
+  experimental_context: context,
+  system: compiledSystemPrompt,
+  stopWhen: ({ steps, text }) => {
+    if (steps.length >= 15) return true;
+    if (text?.includes('FINAL_ANSWER:')) return true;
+    return false;
+  },
+});
 
-	// 2. Auto-checkpoint every 3 steps
-	if (stepNumber % 3 === 0) {
-		await sessionService.saveMessages(sessionId, messages);
-		logger.info(`Checkpoint saved at step ${stepNumber}`);
-	}
-
-	return messages;
-};
+// Custom retry loop
+for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  try {
+    const result = await agent.run(messages);
+    return result;
+  } catch (error) {
+    if (!isRetryable(error) || attempt === MAX_RETRIES) throw error;
+    await sleep(calculateBackoff(attempt));
+  }
+}
 ```
 
-### onStepFinish
-
-Called after each step completes:
+### After (AI SDK 6 Native)
 
 ```typescript
-onStepFinish: async ({ step, stepNumber, usage }) => {
-	// 1. Extract entities for working memory
-	if (step.toolResults) {
-		for (const result of step.toolResults) {
-			const entities = entityExtractor.extract(result.toolName, result.result);
-			workingContext.addEntities(entities);
-		}
-	}
-
-	// 2. Stream progress to frontend
-	stream.write({
-		type: "step-completed",
-		stepNumber,
-		usage: {
-			promptTokens: usage.promptTokens,
-			completionTokens: usage.completionTokens,
-		},
-	});
-
-	// 3. Log for debugging
-	logger.info(`Step ${stepNumber} completed`, {
-		toolsCalled: step.toolCalls?.map((tc) => tc.name),
-		tokensUsed: usage.totalTokens,
-	});
-};
+// NEW: server/agent/cms-agent.ts
+return generateText({
+  model: openrouter(AGENT_CONFIG.modelId),
+  system: systemPrompt,
+  messages,
+  tools: ALL_TOOLS,
+  maxSteps: AGENT_CONFIG.maxSteps,
+  maxRetries: AGENT_CONFIG.maxRetries,  // Native retry!
+  maxTokens: AGENT_CONFIG.maxTokens,
+  experimental_context: agentContext,
+});
 ```
+
+### Migration Summary
+
+| Feature | Before | After |
+|---------|--------|-------|
+| Loop control | Custom `ToolLoopAgent` | Native `generateText` with `maxSteps` |
+| Retry logic | Custom `executeWithRetry` | Native `maxRetries: 2` |
+| Stop conditions | Custom `stopWhen` callback | SDK stops when no more tool calls |
+| Checkpointing | Every 3 steps | End of execution only |
+| HITL | Custom `ApprovalQueue` | Native `needsApproval` on tools |
+| Entry points | `executeAgentWithRetry`, `streamAgentWithApproval` | Single `runAgent` function |
 
 ---
 
 ## Stop Conditions
 
-The loop terminates when any condition is met:
+The SDK stops the loop when:
 
-### 1. FINAL_ANSWER Detection
+1. **No more tool calls** - LLM responds without calling tools
+2. **Max steps reached** - `maxSteps: 15` limit hit
+3. **Max retries exceeded** - After `maxRetries: 2` failed attempts
 
-The agent signals task completion:
+### Prompt-Guided Completion
 
-```typescript
-// In stopWhen callback
-if (text?.includes("FINAL_ANSWER:")) {
-	return true; // Stop the loop
-}
-```
-
-**Prompt Instruction:**
+The agent is instructed to signal completion clearly:
 
 ```xml
 <instruction>
-When the task is complete, respond with:
-FINAL_ANSWER: [your response to the user]
-
-Do NOT use FINAL_ANSWER until all requested actions are completed.
+When the task is complete, provide a clear summary to the user.
+If you need to perform multiple actions, execute them one by one.
+Always verify each action succeeded before proceeding.
 </instruction>
 ```
 
-### 2. Max Steps Reached
-
-Hard limit prevents infinite loops:
-
-```typescript
-if (steps.length >= 15) {
-	logger.warn("Max steps reached, forcing stop");
-	return true;
-}
-```
-
-### 3. Error Threshold (Implicit)
-
-After multiple failures, the retry logic stops and surfaces the error.
+**Note**: The `FINAL_ANSWER:` pattern is no longer required - the SDK naturally stops when the LLM stops calling tools.
 
 ---
 
-## Two Entry Points
+## Callbacks
 
-### 1. executeAgentWithRetry (Non-Streaming)
+### onStepFinish (If Needed)
 
-For background tasks or when streaming isn't needed:
+For telemetry or entity extraction, use the result's steps:
 
 ```typescript
-export async function executeAgentWithRetry(messages: CoreMessage[], context: AgentContext): Promise<AgentResult> {
-	const agent = createAgent(context);
+const result = await runAgent(messages, options);
 
-	for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-		try {
-			const result = await agent.run(messages);
-			return result;
-		} catch (error) {
-			if (!isRetryable(error) || attempt === MAX_RETRIES) {
-				throw error;
-			}
-			await sleep(calculateBackoff(attempt));
-		}
-	}
+// Process steps after completion
+for (const step of result.steps) {
+  if (step.toolResults) {
+    for (const toolResult of step.toolResults) {
+      const entities = entityExtractor.extract(
+        toolResult.toolName,
+        toolResult.result
+      );
+      workingContext.addMany(entities);
+    }
+  }
 }
 ```
 
-### 2. streamAgentWithApproval (Streaming + HITL)
+### onFinish (Streaming)
 
-For interactive use with real-time feedback:
+When streaming, use `onFinish` in `streamText`:
 
 ```typescript
-export async function* streamAgentWithApproval(messages: CoreMessage[], context: AgentContext): AsyncGenerator<StreamEvent> {
-	const agent = createAgent(context);
+const result = streamText({
+  // ...config
+  onFinish: async ({ usage, text, finishReason }) => {
+    // Save messages
+    await sessionService.saveMessages(sessionId, [
+      ...previousMessages,
+      { role: 'user', content: prompt },
+      { role: 'assistant', content: text },
+    ]);
 
-	for await (const chunk of agent.stream(messages)) {
-		// Handle approval requests
-		if (chunk.type === "tool-approval-request") {
-			yield { type: "approval-required", ...chunk };
-
-			// Wait for user decision
-			const approved = await approvalQueue.waitForApproval(chunk.approvalId);
-
-			if (!approved) {
-				yield { type: "tool-result", result: { cancelled: true } };
-				continue;
-			}
-		}
-
-		// Forward all other events
-		yield chunk;
-	}
-}
+    // Track usage
+    logger.info('Agent completed', {
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      finishReason,
+    });
+  },
+});
 ```
 
 ---
@@ -317,38 +336,29 @@ export async function* streamAgentWithApproval(messages: CoreMessage[], context:
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
-                      ToolLoopAgent.run()
+                      generateText({...})
 ```
 
-### Per-Step Flow
+### Per-Step Flow (SDK Internal)
 
 ```
-Step N:
+Step N (handled by SDK):
 ┌─────────────────────────────────────────────────────────────────┐
-│ 1. prepareStep()                                                │
-│    ├── Trim messages if > 20                                    │
-│    └── Save checkpoint if step % 3 === 0                        │
-├─────────────────────────────────────────────────────────────────┤
-│ 2. LLM Call                                                     │
+│ 1. LLM Call                                                     │
 │    ├── Send: system + history + user message                    │
 │    └── Receive: text and/or tool calls                          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 3. Tool Execution (if tool calls present)                       │
+│ 2. Tool Execution (if tool calls present)                       │
 │    ├── For each tool call:                                      │
 │    │   ├── Validate input against Zod schema                    │
-│    │   ├── Execute tool with AgentContext                       │
+│    │   ├── Execute tool with experimental_context               │
 │    │   └── Collect result                                       │
 │    └── Append tool results to messages                          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 4. onStepFinish()                                               │
-│    ├── Extract entities from tool results                       │
-│    ├── Update working memory                                    │
-│    └── Stream step-completed event                              │
-├─────────────────────────────────────────────────────────────────┤
-│ 5. stopWhen() Check                                             │
-│    ├── FINAL_ANSWER in text? → Stop                             │
+│ 3. Continue Check                                               │
+│    ├── More tool calls? → Continue to Step N+1                  │
 │    ├── Max steps reached? → Stop                                │
-│    └── Otherwise → Continue to Step N+1                         │
+│    └── No more calls? → Stop and return                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -356,66 +366,61 @@ Step N:
 
 ## Memory Management
 
-### Why Trimming Matters
+### SDK Handles Context Window
 
-Without trimming, long conversations cause:
-
--   Token limit exceeded errors
--   Slow response times
--   Increased costs
-
-### Trimming Strategy
+The SDK manages message history. For very long conversations, implement trimming in the route:
 
 ```typescript
-// Keep system prompt + last 10 messages
+// server/routes/agent.ts
+let messages = await sessionService.loadMessages(sessionId);
+
+// Trim if too long
 if (messages.length > 20) {
-	const systemPrompt = messages[0];
-	const recentMessages = messages.slice(-10);
-	return [systemPrompt, ...recentMessages];
+  messages = messages.slice(-10);  // Keep last 10
 }
+
+// Add new user message
+messages.push({ role: 'user', content: prompt });
+
+const result = await runAgent(messages, options);
 ```
-
-**Preserved:**
-
--   System prompt (always index 0)
--   Last 10 messages (most recent context)
-
-**Dropped:**
-
--   Middle messages (old context)
--   Old tool calls/results
-
-**Result:** Maximum 11 messages (manageable token count)
 
 ---
 
-## Automatic Checkpointing
+## Message Persistence
 
-Checkpoints enable recovery from failures:
-
-```typescript
-// Every 3 steps, save state
-if (stepNumber % 3 === 0) {
-	await sessionService.saveMessages(sessionId, messages);
-}
-```
-
-**What's Saved:**
-
--   Full message history
--   Current step number
--   Working memory state (serialized)
-
-**Recovery:**
+Messages saved at end of execution only (no mid-step checkpointing):
 
 ```typescript
-// On session resume
-const checkpoint = await sessionService.loadCheckpoint(sessionId);
-if (checkpoint) {
-	messages = checkpoint.messages;
-	workingMemory.restore(checkpoint.workingMemory);
-}
+// server/routes/agent.ts
+const result = await runAgent(messages, options);
+
+// Save complete conversation
+await sessionService.saveMessages(sessionId, [
+  ...previousMessages,
+  { role: 'user', content: prompt },
+  ...result.responseMessages,
+]);
 ```
+
+**Note**: Checkpoint system removed - it was dead code never actually used.
+
+---
+
+## Native Retry Logic
+
+AI SDK 6 handles retries automatically:
+
+```typescript
+maxRetries: 2,  // Default
+```
+
+**Retry Behavior:**
+- **429 (Rate Limit)** → Exponential backoff, retry
+- **5xx (Server Error)** → Retry with backoff
+- **4xx (Client Error)** → No retry, surface immediately
+
+No custom retry code needed!
 
 ---
 
@@ -423,20 +428,27 @@ if (checkpoint) {
 
 | Connects To                                         | How                                 |
 | --------------------------------------------------- | ----------------------------------- |
-| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | Executes tool calls from LLM        |
-| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Updates entities after tool results |
-| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)               | Receives compiled system prompt     |
-| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Pauses for approval when needed     |
-| [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | Retry logic wraps execution         |
-| [3.7 Streaming](./LAYER_3.7_STREAMING.md)           | Emits events for frontend           |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | SDK executes tools from `ALL_TOOLS` |
+| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Extract entities from result.steps  |
+| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)               | System prompt passed to generateText |
+| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Native `needsApproval` on tools     |
+| [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | Native `maxRetries` handles errors  |
+| [3.7 Streaming](./LAYER_3.7_STREAMING.md)           | Use `streamText` for real-time      |
 
 ---
 
 ## Key Design Decisions
 
-### Why All Tools Always Available?
+### Why generateText over ToolLoopAgent?
 
-We don't filter tools based on context because:
+AI SDK 6 made `generateText` with `maxSteps` the preferred pattern:
+
+1. **Simpler** - No custom agent class needed
+2. **Native retry** - Built-in exponential backoff
+3. **Better typing** - Full TypeScript inference
+4. **SDK-maintained** - Bug fixes and improvements from Vercel
+
+### Why All Tools Always Available?
 
 1. **Simplicity** - No complex tool selection logic
 2. **Flexibility** - Agent can pivot if initial approach fails
@@ -445,60 +457,55 @@ We don't filter tools based on context because:
 
 ### Why 15 Max Steps?
 
--   **10 steps** - Too few for complex CMS workflows (page + sections + images + nav)
--   **15 steps** - Handles most real-world tasks
--   **20+ steps** - Diminishing returns, risk of loops
+- **10 steps** - Too few for complex CMS workflows
+- **15 steps** - Handles most real-world tasks
+- **20+ steps** - Diminishing returns, risk of loops
 
-### Why Checkpoint Every 3 Steps?
+### Why No Mid-Step Checkpointing?
 
--   **Every step** - Too much I/O overhead
--   **Every 3 steps** - Good balance of safety vs performance
--   **Every 5+ steps** - Too much work lost on failure
-
----
-
-## Patterns NOT Used
-
-For clarity, we explicitly don't use:
-
-| Pattern             | Reason                                  |
-| ------------------- | --------------------------------------- |
-| Plan-then-execute   | Adds latency, reduces flexibility       |
-| Tool filtering      | LLM handles full tool set well          |
-| Multi-agent routing | Single agent sufficient for CMS domain  |
-| Parallel tool calls | Sequential is simpler, more predictable |
+- CMS agent completes in seconds, not minutes
+- Messages saved at end is sufficient
+- Reduces I/O overhead
+- Original checkpoint code was never used (dead code)
 
 ---
 
 ## Debugging Tips
 
-### Enable Verbose Logging
+### View Step Details
 
 ```typescript
-const agent = new ToolLoopAgent({
-	// ... config
-	onStepFinish: async ({ step, stepNumber }) => {
-		console.log(`=== Step ${stepNumber} ===`);
-		console.log("Text:", step.text);
-		console.log("Tool calls:", step.toolCalls);
-		console.log("Tool results:", step.toolResults);
-	},
-});
+const result = await runAgent(messages, options);
+
+console.log('=== Agent Result ===');
+console.log('Steps:', result.steps.length);
+console.log('Final text:', result.text);
+
+for (const step of result.steps) {
+  console.log('Step:', {
+    toolCalls: step.toolCalls?.map(tc => tc.toolName),
+    toolResults: step.toolResults?.map(tr => tr.toolName),
+  });
+}
+
+console.log('Usage:', result.usage);
 ```
 
 ### Common Issues
 
-| Issue                    | Cause                       | Solution                  |
-| ------------------------ | --------------------------- | ------------------------- |
-| Agent loops indefinitely | Missing FINAL_ANSWER        | Check prompt instructions |
-| Agent stops too early    | FINAL_ANSWER in wrong place | Adjust stop condition     |
-| Token limit exceeded     | Long conversation           | Verify trimming works     |
-| Tools not called         | Prompt unclear              | Add examples to prompt    |
+| Issue                    | Cause                       | Solution                         |
+| ------------------------ | --------------------------- | -------------------------------- |
+| Agent loops indefinitely | Too many tool calls         | Check maxSteps is set            |
+| Agent stops too early    | LLM not calling tools       | Improve prompt with examples     |
+| Token limit exceeded     | Long conversation history   | Implement message trimming       |
+| Tools not called         | Prompt unclear              | Add explicit tool usage examples |
+| 429 errors               | Rate limited                | SDK handles with maxRetries      |
 
 ---
 
 ## Further Reading
 
--   [3.2 Tools](./LAYER_3.2_TOOLS.md) - How tools are structured and executed
--   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - System prompt composition
--   [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Retry logic details
+- [3.2 Tools](./LAYER_3.2_TOOLS.md) - How tools are structured and executed
+- [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - System prompt composition
+- [3.5 HITL](./LAYER_3.5_HITL.md) - Native approval flow
+- [AI SDK 6 Agents](https://ai-sdk.dev/docs/agents/building-agents) - Official docs

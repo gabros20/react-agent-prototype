@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Sheet,
   SheetContent,
@@ -17,8 +16,16 @@ import { useChatStore } from '../_stores/chat-store';
 import { SessionItem } from './session-item';
 
 export function SessionSidebar() {
-  const { sessions, currentSessionId, isLoading, loadSessions, createSession } = useSessionStore();
-  const { setSessionId, setMessages } = useChatStore();
+  // Use selectors to avoid subscribing to entire store
+  const sessions = useSessionStore((state) => state.sessions);
+  const currentSessionId = useSessionStore((state) => state.currentSessionId);
+  const isLoading = useSessionStore((state) => state.isLoading);
+  const loadSessions = useSessionStore((state) => state.loadSessions);
+  const createSession = useSessionStore((state) => state.createSession);
+
+  const setSessionId = useChatStore((state) => state.setSessionId);
+  const setMessages = useChatStore((state) => state.setMessages);
+
   const [open, setOpen] = useState(false);
 
   // Load sessions on mount
@@ -66,7 +73,7 @@ export function SessionSidebar() {
           </div>
 
           {/* Session List */}
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <div className="space-y-1 p-2">
               {sessions.length === 0 && !isLoading && (
                 <div className="animate-in fade-in-50 duration-300 py-8 text-center text-sm text-muted-foreground">
@@ -96,7 +103,7 @@ export function SessionSidebar() {
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

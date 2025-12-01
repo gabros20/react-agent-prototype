@@ -1,8 +1,24 @@
 # Architecture Documentation Index
 
 > **ReAct AI Agent CMS** - Full-stack TypeScript architecture overview
+> **Updated**: 2025-12-01 (AI SDK 6 Migration)
 
 This index provides a high-level view of the system's major architectural layers. Each layer document is self-contained but references related layers where integration occurs.
+
+---
+
+## AI SDK 6 Migration Summary
+
+The codebase was migrated to **AI SDK v6 native patterns** in commit `1e1963e`. Key changes:
+
+| Component | Before | After |
+|-----------|--------|-------|
+| Agent Loop | Custom `ToolLoopAgent` | Native `generateText` + `maxSteps` |
+| Retry Logic | Custom `executeWithRetry` | Native `maxRetries: 2` |
+| HITL | `confirmed` flag + `ApprovalQueue` | Native `needsApproval` on tools |
+| Checkpoints | Every 3 steps (dead code) | Removed - messages at end only |
+| Cost Tracking | None | Tokenizer + OpenRouter pricing |
+| Tool States | Multiple events | Consolidated states |
 
 ---
 
@@ -11,16 +27,16 @@ This index provides a high-level view of the system's major architectural layers
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CLIENT LAYER                             │
-│  Next.js 16 • React 19 • Zustand • SSE Streaming                │
+│  Next.js 16 • React 19 • Zustand • AI SDK UI Protocol           │
 ├─────────────────────────────────────────────────────────────────┤
 │                      RENDERING LAYER                            │
 │  Nunjucks Templates • Section Variants • Asset Pipeline         │
 ├─────────────────────────────────────────────────────────────────┤
 │                        AGENT LAYER                              │
-│  ReAct Loop • Tool Registry • Working Memory • Confirmed Flag   │
+│  AI SDK 6 generateText • maxSteps • Native needsApproval        │
 ├─────────────────────────────────────────────────────────────────┤
 │                       SERVICES LAYER                            │
-│  PageService • SectionService • SessionService • VectorIndex    │
+│  PageService • SessionService • Tokenizer • Pricing • Vector    │
 ├─────────────────────────────────────────────────────────────────┤
 │                    BACKGROUND LAYER                             │
 │  BullMQ • Redis • Image Worker • Async Processing               │
@@ -264,17 +280,19 @@ The Rendering layer handles server-side HTML generation using Nunjucks templates
 
 ### Tech Stack
 
-| Component    | Technology                           |
-| ------------ | ------------------------------------ |
-| Server       | Express.js (port 8787)               |
-| Database     | SQLite + Drizzle ORM (WAL mode)      |
-| Vector Store | LanceDB                              |
-| Queue        | BullMQ + Redis                       |
-| Agent        | AI SDK v6 + OpenRouter (GPT-4o-mini) |
-| Templates    | Nunjucks                             |
-| Frontend     | Next.js 16 + React 19 (port 3000)    |
-| State        | Zustand                              |
-| UI           | Radix UI + Tailwind CSS              |
+| Component    | Technology                              |
+| ------------ | --------------------------------------- |
+| Server       | Express.js (port 8787)                  |
+| Database     | SQLite + Drizzle ORM (WAL mode)         |
+| Vector Store | LanceDB                                 |
+| Queue        | BullMQ + Redis                          |
+| Agent        | AI SDK v6 + OpenRouter (GPT-4o-mini)    |
+| Tokenizer    | js-tiktoken (NEW)                       |
+| Pricing      | OpenRouter pricing service (NEW)        |
+| Templates    | Nunjucks                                |
+| Frontend     | Next.js 16 + React 19 (port 3000)       |
+| State        | Zustand                                 |
+| UI           | Radix UI + Tailwind CSS                 |
 
 ### Process Architecture
 
@@ -293,24 +311,33 @@ External:
 
 ```
 server/
-├── agent/           # ReAct orchestrator
+├── agent/           # CMS Agent module (AI SDK 6)
+│   ├── cms-agent.ts     # Agent definition (NEW)
+│   └── system-prompt.ts # Prompt compilation (NEW)
 ├── db/              # Schema, migrations
 ├── middleware/      # Express middleware
 ├── prompts/         # System prompts (Handlebars)
 ├── queues/          # BullMQ job definitions
 ├── routes/          # API endpoints
 ├── services/        # Business logic
+│   ├── openrouter-pricing.ts # Cost calculation (NEW)
+│   └── ...
 ├── templates/       # Nunjucks templates
 ├── tools/           # Agent tools (21 total)
 ├── utils/           # Shared utilities
 └── workers/         # Background processors
 
+lib/
+├── tokenizer.ts     # Token counting (NEW)
+└── ...
+
 app/
 ├── assistant/       # Chat UI (main interface)
 │   ├── _components/ # React components
-│   ├── _hooks/      # Custom hooks
-│   └── _stores/     # Zustand stores
+│   ├── _hooks/      # Custom hooks (useAgent with AI SDK 6)
+│   └── _stores/     # Zustand stores (+ usage store)
 ├── api/             # Next.js API routes
+│   └── agent/approve/ # HITL approval endpoint (NEW)
 └── components/      # Shared UI components
 
 scripts/

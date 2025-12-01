@@ -27,7 +27,7 @@ async function fixImage() {
   }
 
   // Parse and update
-  const data = JSON.parse(content.content);
+  const data = JSON.parse(content.content as string);
 
   const newBody = `# Discover the Majestic Landscapes of Wales
 

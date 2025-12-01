@@ -391,6 +391,52 @@ export const messages = sqliteTable("messages", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
+// Conversation logs store detailed trace entries for each user->agent exchange
+export const conversationLogs = sqliteTable("conversation_logs", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id")
+    .notNull()
+    .references(() => sessions.id, { onDelete: "cascade" }),
+  conversationIndex: integer("conversation_index").notNull(), // 1, 2, 3... ordering within session
+  userPrompt: text("user_prompt").notNull(),
+  startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
+  completedAt: integer("completed_at", { mode: "timestamp" }),
+  // Metrics: tokens, cost, duration, toolCalls, steps, errors
+  metrics: text("metrics", { mode: "json" }).$type<{
+    totalDuration: number;
+    toolCallCount: number;
+    stepCount: number;
+    tokens: { input: number; output: number };
+    cost: number;
+    errorCount: number;
+  }>(),
+  // Model info: modelId, pricing
+  modelInfo: text("model_info", { mode: "json" }).$type<{
+    modelId: string;
+    pricing: { prompt: number; completion: number } | null;
+  }>(),
+  // All trace entries for this conversation as JSON array
+  entries: text("entries", { mode: "json" }).$type<Array<{
+    id: string;
+    traceId: string;
+    parentId?: string;
+    timestamp: number;
+    duration?: number;
+    type: string;
+    level: string;
+    stepNumber?: number;
+    toolName?: string;
+    toolCallId?: string;
+    summary: string;
+    input?: unknown;
+    output?: unknown;
+    tokens?: { input: number; output: number };
+    error?: { message: string; stack?: string };
+    jobId?: string;
+    jobProgress?: number;
+  }>>(),
+});
+
 // ============================================================================
 // RELATIONS
 // ============================================================================
@@ -469,10 +515,15 @@ export const entryContentsRelations = relations(entryContents, ({ one }) => ({
 
 export const sessionsRelations = relations(sessions, ({ many }) => ({
   messages: many(messages),
+  conversationLogs: many(conversationLogs),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   session: one(sessions, { fields: [messages.sessionId], references: [sessions.id] }),
+}));
+
+export const conversationLogsRelations = relations(conversationLogs, ({ one }) => ({
+  session: one(sessions, { fields: [conversationLogs.sessionId], references: [sessions.id] }),
 }));
 
 export const imagesRelations = relations(images, ({ one, many }) => ({

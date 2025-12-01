@@ -3,8 +3,9 @@
 import { useCallback, useState, useRef } from "react";
 import { useChatStore } from "../_stores/chat-store";
 import { useLogStore } from "../_stores/log-store";
-import { useTraceStore, type TraceEntryType } from "../_stores/trace-store";
-import { countTokens, formatTokenCount } from "@/lib/tokenizer";
+import { useTraceStore, type TraceMetrics } from "../_stores/trace-store";
+import { useSessionStore } from "../_stores/session-store";
+import { formatTokenCount } from "@/lib/tokenizer";
 
 // Custom message type that's simpler than UIMessage
 export interface ChatMessage {
@@ -15,13 +16,38 @@ export interface ChatMessage {
 }
 
 export function useAgent() {
-	const { messages, addMessage, setIsStreaming, sessionId, setSessionId, setCurrentTraceId, setAgentStatus } = useChatStore();
-	const { addLog } = useLogStore();
-	const { addEntry, completeEntry, setActiveTrace, setModelInfo } = useTraceStore();
+	// Use selectors to avoid subscribing to entire store
+	const messages = useChatStore((state) => state.messages);
+	const sessionId = useChatStore((state) => state.sessionId);
+	const addMessage = useChatStore((state) => state.addMessage);
+	const setIsStreaming = useChatStore((state) => state.setIsStreaming);
+	const setSessionId = useChatStore((state) => state.setSessionId);
+	const setCurrentTraceId = useChatStore((state) => state.setCurrentTraceId);
+	const setAgentStatus = useChatStore((state) => state.setAgentStatus);
+
+	const addLog = useLogStore((state) => state.addLog);
+
+	const addEntry = useTraceStore((state) => state.addEntry);
+	const updateEntry = useTraceStore((state) => state.updateEntry);
+	const deleteEntry = useTraceStore((state) => state.deleteEntry);
+	const completeEntry = useTraceStore((state) => state.completeEntry);
+	const setActiveTrace = useTraceStore((state) => state.setActiveTrace);
+	const setModelInfo = useTraceStore((state) => state.setModelInfo);
+	const addConversationLog = useTraceStore((state) => state.addConversationLog);
+
+	const loadSessions = useSessionStore((state) => state.loadSessions);
+
 	const [error, setError] = useState<Error | null>(null);
 
 	// Track tool call timings for duration calculation
 	const toolTimings = useRef<Map<string, number>>(new Map());
+
+	// Track streaming entry for text-delta updates
+	const streamingEntryId = useRef<string | null>(null);
+	const streamingText = useRef<string>("");
+
+	// Track user prompt for saving conversation log
+	const currentUserPrompt = useRef<string>("");
 
 	const sendMessage = useCallback(
 		async (prompt: string) => {
@@ -33,6 +59,9 @@ export function useAgent() {
 
 			// Reset timings for new trace
 			toolTimings.current.clear();
+
+			// Store user prompt for conversation log
+			currentUserPrompt.current = prompt;
 
 			// Add user message
 			const userMessage: ChatMessage = {
@@ -99,24 +128,34 @@ export function useAgent() {
 										currentTraceId = data.traceId;
 										setActiveTrace(currentTraceId);
 
-										// Add trace-start entry
+										// Add trace-start entry (sessionId only, prompt shown in user-prompt)
 										addEntry({
 											traceId: currentTraceId,
 											timestamp: traceStartTime,
 											type: "trace-start",
 											level: "info",
-											summary: `Trace started: ${prompt.slice(0, 50)}${prompt.length > 50 ? "..." : ""}`,
-											input: { prompt, sessionId },
+											summary: `Trace started`,
+											input: { sessionId },
 										});
 
-										// Add prompt-sent entry
-										addEntry({
-											traceId: currentTraceId,
-											timestamp: Date.now(),
-											type: "prompt-sent",
-											level: "info",
-											summary: "User prompt sent to LLM",
-											input: prompt,
+										// Add a live conversation log entry
+										const traceStore = useTraceStore.getState();
+										const existingLogs = traceStore.conversationLogs;
+										// Calculate next index from max existing index (not length, to handle gaps)
+										const maxIndex = existingLogs.length > 0
+											? Math.max(...existingLogs.map(l => l.conversationIndex))
+											: 0;
+										addConversationLog({
+											id: currentTraceId,
+											sessionId: sessionId || "",
+											conversationIndex: maxIndex + 1,
+											userPrompt: currentUserPrompt.current,
+											startedAt: new Date(traceStartTime),
+											completedAt: null,
+											metrics: null,
+											modelInfo: null,
+											entries: [],
+											isLive: true,
 										});
 									}
 									currentTraceId = data.traceId || currentTraceId;
@@ -213,22 +252,74 @@ export function useAgent() {
 									break;
 								}
 
-								case "text-delta":
-									// Streaming text chunks - accumulate but don't display yet
-									assistantText += data.delta || data.text || "";
+								case "text-delta": {
+									// Streaming text chunks - accumulate and update streaming entry
+									const delta = data.delta || data.text || "";
+									assistantText += delta;
+									streamingText.current += delta;
+
+									// Update streaming entry with clean preview
+									if (streamingEntryId.current) {
+										const cleanText = streamingText.current
+											.replace(/\*\*/g, "")
+											.replace(/\*/g, "")
+											.replace(/`/g, "")
+											.replace(/\n/g, " ")
+											.replace(/\s+/g, " ")
+											.trim();
+										const preview = cleanText.slice(0, 60);
+										const truncated = cleanText.length > 60 ? "..." : "";
+										updateEntry(streamingEntryId.current, {
+											summary: `"${preview}${truncated}"`,
+											output: streamingText.current,
+										});
+									}
 									break;
+								}
 
 								case "system-prompt": {
-									// System prompt emitted for debugging/inspection
-									const promptTokens = countTokens(data.prompt || "");
+									// System prompt with server-calculated tokens
+									const tokens = data.tokens || 0;
+									const workingMemoryTokens = data.workingMemoryTokens || 0;
 									addEntry({
 										traceId: currentTraceId,
 										timestamp: Date.now(),
 										type: "system-prompt",
 										level: "info",
-										summary: `System prompt (${formatTokenCount(promptTokens)} tokens)`,
-										input: data.prompt, // The prompt is INPUT to the LLM
-										// No output - it's just the prompt being sent
+										summary: `System prompt (${formatTokenCount(tokens)} tokens${
+											workingMemoryTokens > 0 ? `, incl. ${formatTokenCount(workingMemoryTokens)} working memory` : ""
+										})`,
+										input: data.prompt,
+										tokens: { input: tokens, output: 0 },
+										// Store breakdown in output for detail modal
+										output: {
+											totalTokens: tokens,
+											workingMemoryTokens,
+											promptLength: data.promptLength,
+										},
+									});
+									break;
+								}
+
+								case "user-prompt": {
+									// User prompt with server-calculated tokens
+									const tokens = data.tokens || 0;
+									const historyTokens = data.messageHistoryTokens || 0;
+									addEntry({
+										traceId: currentTraceId,
+										timestamp: Date.now(),
+										type: "user-prompt",
+										level: "info",
+										summary: `User prompt (${formatTokenCount(tokens)} tokens${
+											historyTokens > 0 ? `, +${formatTokenCount(historyTokens)} history` : ""
+										})`,
+										input: data.prompt,
+										tokens: { input: tokens + historyTokens, output: 0 },
+										output: {
+											promptTokens: tokens,
+											messageHistoryTokens: historyTokens,
+											messageCount: data.messageCount || 0,
+										},
 									});
 									break;
 								}
@@ -386,10 +477,53 @@ export function useAgent() {
 										stepNumber: data.stepNumber,
 										summary: `Step ${data.stepNumber}`,
 									});
+
+									// Create streaming entry for this step's text output
+									const streamId = `stream-step-${data.stepNumber}`;
+									streamingEntryId.current = streamId;
+									streamingText.current = "";
+									addEntry({
+										id: streamId,
+										traceId: currentTraceId,
+										timestamp: Date.now(),
+										type: "text-streaming",
+										level: "info",
+										stepNumber: data.stepNumber,
+										summary: "Generating...",
+									});
 									break;
 								}
 
 								case "step-finish": {
+									// Complete the streaming entry for this step
+									const streamId = `stream-step-${data.stepNumber}`;
+									if (streamingText.current) {
+										// Has text - finalize the entry with clean preview
+										const finalText = streamingText.current;
+										// Clean up markdown for preview: remove **, *, etc.
+										const cleanText = finalText
+											.replace(/\*\*/g, "")
+											.replace(/\*/g, "")
+											.replace(/`/g, "")
+											.replace(/\n/g, " ")
+											.replace(/\s+/g, " ")
+											.trim();
+										const preview = cleanText.slice(0, 80);
+										const truncated = cleanText.length > 80 ? "..." : "";
+										updateEntry(streamId, {
+											summary: `"${preview}${truncated}"`,
+											output: finalText,
+											duration: data.duration,
+										});
+									} else {
+										// No text generated in this step - delete the entry entirely
+										deleteEntry(streamId);
+									}
+
+									// Reset streaming state
+									streamingEntryId.current = null;
+									streamingText.current = "";
+
 									// Step completed - log with metrics (no expandable content)
 									addEntry({
 										traceId: currentTraceId,
@@ -437,21 +571,18 @@ export function useAgent() {
 										addMessage(assistantMessage as any);
 									}
 
-									// Enhanced trace entry for LLM response
-									const responseTokens = countTokens(assistantText);
+									// Enhanced trace entry for LLM response - use SDK usage (source of truth)
+									const usage = data.usage || {};
+									const inputTokens = usage.promptTokens || usage.inputTokens || 0;
+									const outputTokens = usage.completionTokens || usage.outputTokens || 0;
 									addEntry({
 										traceId: currentTraceId,
 										timestamp: Date.now(),
 										type: "llm-response",
 										level: "info",
-										summary: `LLM response (${formatTokenCount(responseTokens)} tokens)`,
+										summary: `LLM response (${formatTokenCount(inputTokens)} in / ${formatTokenCount(outputTokens)} out)`,
 										output: assistantText,
-										tokens: data.usage
-											? {
-													input: data.usage.promptTokens || data.usage.inputTokens || 0,
-													output: data.usage.completionTokens || data.usage.outputTokens || 0,
-											  }
-											: { input: 0, output: responseTokens },
+										tokens: { input: inputTokens, output: outputTokens },
 									});
 
 									// Log intelligence metrics
@@ -495,19 +626,71 @@ export function useAgent() {
 									setError(new Error(data.error || "Unknown error"));
 									break;
 
-								case "done":
+								case "done": {
 									// Add trace-complete entry
 									if (currentTraceId) {
+										const completedAt = Date.now();
 										addEntry({
 											traceId: currentTraceId,
-											timestamp: Date.now(),
-											duration: Date.now() - traceStartTime,
+											timestamp: completedAt,
+											duration: completedAt - traceStartTime,
 											type: "trace-complete",
 											level: "info",
-											summary: `Trace completed (${Date.now() - traceStartTime}ms)`,
+											summary: `Trace completed (${completedAt - traceStartTime}ms)`,
 										});
+
+										// Get current state for entries and metrics
+										const traceStore = useTraceStore.getState();
+										const entries = traceStore.entriesByTrace.get(currentTraceId) || [];
+										const modelInfo = traceStore.modelInfoByTrace.get(currentTraceId);
+										const metrics = traceStore.getMetrics();
+
+										// Update the live conversation log with final data
+										addConversationLog({
+											id: currentTraceId,
+											sessionId: sessionId || "",
+											conversationIndex: traceStore.conversationLogs.find((l) => l.id === currentTraceId)?.conversationIndex || 1,
+											userPrompt: currentUserPrompt.current,
+											startedAt: new Date(traceStartTime),
+											completedAt: new Date(completedAt),
+											metrics,
+											modelInfo: modelInfo || null,
+											entries,
+											isLive: false, // No longer live
+										});
+
+										// Get actual sessionId (may have been updated from result event)
+										const actualSessionId = useChatStore.getState().sessionId;
+
+										if (actualSessionId) {
+											// Save to backend asynchronously
+											fetch(`/api/sessions/${actualSessionId}/logs`, {
+												method: "POST",
+												headers: { "Content-Type": "application/json" },
+												body: JSON.stringify({
+													userPrompt: currentUserPrompt.current,
+													entries: entries.map((e) => ({
+														...e,
+														// Ensure serializable
+														timestamp: e.timestamp,
+													})),
+													metrics,
+													modelInfo: modelInfo || undefined,
+													startedAt: new Date(traceStartTime).toISOString(),
+													completedAt: new Date(completedAt).toISOString(),
+												}),
+											})
+												.then(() => {
+													// Refresh session list to update message counts and titles
+													loadSessions();
+												})
+												.catch((err) => {
+													console.error("Failed to save conversation log:", err);
+												});
+										}
 									}
 									break;
+								}
 
 								case "finish": {
 									// AI SDK overall finish event - logged for debugging
@@ -558,9 +741,13 @@ export function useAgent() {
 			setAgentStatus,
 			addLog,
 			addEntry,
+			updateEntry,
+			deleteEntry,
 			setActiveTrace,
 			completeEntry,
 			setModelInfo,
+			addConversationLog,
+			loadSessions,
 		]
 	);
 

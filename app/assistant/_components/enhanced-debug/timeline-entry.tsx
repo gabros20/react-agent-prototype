@@ -31,6 +31,8 @@ import {
 	ScrollText,
 	PlayCircle,
 	Cpu,
+	User,
+	Type,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -47,11 +49,12 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	"trace-start": Play,
 	"prompt-sent": MessageSquare,
 	"llm-response": Bot,
+	"text-streaming": Type,
 	"tools-available": Wrench,
 	"model-info": Cpu,
 	"tool-call": Wrench,
 	"step-start": PlayCircle,
-	"step-complete": Layers,
+	"step-complete": CheckCircle2,
 	"approval-request": Shield,
 	"approval-response": ShieldCheck,
 	"confirmation-required": ShieldQuestion,
@@ -69,6 +72,7 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	"session-loaded": History,
 	"system-log": FileText,
 	"system-prompt": ScrollText,
+	"user-prompt": User,
 };
 
 interface TimelineEntryProps {
@@ -218,7 +222,9 @@ export function TimelineEntry({ entry, isSelected, isTraceComplete = false, onSe
 
 						{/* Summary - skip for tool-calls and step entries since badge already shows the info */}
 						{entry.type !== "tool-call" && entry.type !== "step-start" && entry.type !== "step-complete" ? (
-							<span className='flex-1 text-xs sm:text-sm truncate text-muted-foreground'>{entry.summary}</span>
+							<span className='flex-1 min-w-0 text-xs sm:text-sm text-muted-foreground break-words'>
+								{entry.summary && entry.summary.length > 80 ? `${entry.summary.slice(0, 80)}…` : entry.summary}
+							</span>
 						) : (
 							<span className='flex-1' />
 						)}

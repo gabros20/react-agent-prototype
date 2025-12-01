@@ -35,7 +35,7 @@ interface SessionState {
   loadSession: (sessionId: string) => Promise<Session | null>;
   createSession: (title?: string) => Promise<string>;
   updateSession: (sessionId: string, title: string) => Promise<void>;
-  deleteSession: (sessionId: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<string | null>;
   clearHistory: (sessionId: string) => Promise<void>;
   setCurrentSessionId: (sessionId: string | null) => void;
   setError: (error: string | null) => void;
@@ -173,7 +173,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   // Delete session permanently
-  deleteSession: async (sessionId: string) => {
+  // Returns the new current session ID (either next session or newly created one)
+  deleteSession: async (sessionId: string): Promise<string | null> => {
     set({ isLoading: true, error: null });
     try {
       const response = await fetch(`/api/sessions/${sessionId}`, {
@@ -186,11 +187,57 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         throw new Error(result.error?.message || 'Failed to delete session');
       }
 
-      set((state) => ({
-        sessions: state.sessions.filter((session) => session.id !== sessionId),
-        currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
+      const state = get();
+      const remainingSessions = state.sessions.filter((s) => s.id !== sessionId);
+      const wasCurrentSession = state.currentSessionId === sessionId;
+
+      // Determine what session to switch to
+      let newCurrentSessionId: string | null = state.currentSessionId;
+
+      if (wasCurrentSession) {
+        if (remainingSessions.length > 0) {
+          // Switch to the first remaining session
+          newCurrentSessionId = remainingSessions[0].id;
+        } else {
+          // No sessions left - create a new one
+          const createResponse = await fetch('/api/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: 'New Session' }),
+          });
+
+          const createResult = await createResponse.json();
+
+          if (!createResponse.ok) {
+            throw new Error(createResult.error?.message || 'Failed to create new session');
+          }
+
+          const newSession: SessionMetadata = {
+            id: createResult.data.id,
+            title: createResult.data.title,
+            messageCount: 0,
+            lastActivity: new Date(createResult.data.updatedAt),
+            createdAt: new Date(createResult.data.createdAt),
+            updatedAt: new Date(createResult.data.updatedAt),
+          };
+
+          set({
+            sessions: [newSession],
+            currentSessionId: newSession.id,
+            isLoading: false,
+          });
+
+          return newSession.id;
+        }
+      }
+
+      set({
+        sessions: remainingSessions,
+        currentSessionId: newCurrentSessionId,
         isLoading: false,
-      }));
+      });
+
+      return wasCurrentSession ? newCurrentSessionId : null;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       console.error('Failed to delete session:', error);

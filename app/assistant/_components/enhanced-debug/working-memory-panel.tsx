@@ -38,7 +38,9 @@ interface WorkingMemoryPanelProps {
 }
 
 export function WorkingMemoryPanel({ className }: WorkingMemoryPanelProps) {
-  const { entriesByTrace, activeTraceId } = useTraceStore();
+  // Use selectors to avoid subscribing to entire store
+  const entriesByTrace = useTraceStore((state) => state.entriesByTrace);
+  const activeTraceId = useTraceStore((state) => state.activeTraceId);
 
   // Extract entities from working-memory-update trace entries
   const entities = useMemo(() => {

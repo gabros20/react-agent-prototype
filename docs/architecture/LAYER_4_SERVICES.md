@@ -6,6 +6,12 @@
 
 The services layer encapsulates all business logic. Services are stateless classes that coordinate between the database, vector store, and other infrastructure. They're accessed via the ServiceContainer singleton.
 
+**Key Changes (AI SDK 6 Migration):**
+- ApprovalQueue removed (native `needsApproval` on tools)
+- SessionService checkpoint methods removed
+- Added tokenizer and pricing services
+- Messages saved at end of agent execution only
+
 **Location:** `server/services/`
 
 ---
@@ -15,6 +21,7 @@ The services layer encapsulates all business logic. Services are stateless class
 ```
 ┌───────────────────────────────────────────────────────────────────┐
 │                       Services Layer                              │
+│                     (AI SDK 6 Updated)                            │
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
@@ -25,14 +32,22 @@ The services layer encapsulates all business logic. Services are stateless class
 │         ▼           ▼           ▼           ▼           ▼         │
 │  ┌───────────┬───────────┬───────────┬───────────┬───────────┐    │
 │  │   Page    │  Section  │   Entry   │   Image   │   Post    │    │
-│  │  Service  │  Service  │  Service  │  Service  │  Service  │    │ 
+│  │  Service  │  Service  │  Service  │  Service  │  Service  │    │
 │  └───────────┴───────────┴───────────┴───────────┴───────────┘    │
 │         │           │           │           │           │         │
 │         ▼           ▼           ▼           ▼           ▼         │
 │  ┌───────────┬───────────┬───────────┬───────────┬───────────┐    │
-│  │  Session  │  Vector   │   Site    │  Renderer │  Approval │    │
-│  │  Service  │  Index    │ Settings  │  Service  │   Queue   │    │
+│  │  Session  │  Vector   │   Site    │  Renderer │ Navigation│    │
+│  │  Service  │  Index    │ Settings  │  Service  │  Service  │    │
 │  └───────────┴───────────┴───────────┴───────────┴───────────┘    │
+│                                                                   │
+│  ┌───────────────────────────────────────────────────────────────┐│
+│  │                    NEW: Utility Services                      ││
+│  │  ┌───────────────────┐  ┌─────────────────────────────────┐   ││
+│  │  │    Tokenizer      │  │     OpenRouter Pricing          │   ││
+│  │  │  (js-tiktoken)    │  │   (Cost Calculation)            │   ││
+│  │  └───────────────────┘  └─────────────────────────────────┘   ││
+│  └───────────────────────────────────────────────────────────────┘│
 │                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │                    Working Memory                           │  │
@@ -57,8 +72,10 @@ The services layer encapsulates all business logic. Services are stateless class
 | `server/services/vector-index-service.ts` | Semantic search |
 | `server/services/site-settings-service.ts` | Global config |
 | `server/services/renderer-service.ts` | Template rendering |
-| `server/services/approval-queue.ts` | HITL coordination |
+| `server/services/navigation-service.ts` | Menu structure |
 | `server/services/working-memory/` | Entity tracking |
+| `lib/tokenizer.ts` | Token counting (NEW) |
+| `server/services/openrouter-pricing.ts` | Cost calculation (NEW) |
 
 ---
 
@@ -80,6 +97,7 @@ class ServiceContainer {
   readonly postService: PostService;
   readonly sessionService: SessionService;
   readonly siteSettingsService: SiteSettingsService;
+  readonly navigationService: NavigationService;
   readonly rendererService: RendererService;
 
   private constructor() {
@@ -97,6 +115,132 @@ class ServiceContainer {
     return this.instance;
   }
 }
+```
+
+---
+
+## NEW: Tokenizer Service
+
+Token counting for cost estimation:
+
+```typescript
+// lib/tokenizer.ts
+import { encodingForModel, type TiktokenModel } from 'js-tiktoken';
+
+// Cache encodings to avoid re-initialization
+const encodingCache = new Map<string, ReturnType<typeof encodingForModel>>();
+
+function getEncoding(model: string) {
+  if (!encodingCache.has(model)) {
+    try {
+      encodingCache.set(model, encodingForModel(model as TiktokenModel));
+    } catch {
+      // Fall back to gpt-4o for unknown models
+      encodingCache.set(model, encodingForModel('gpt-4o'));
+    }
+  }
+  return encodingCache.get(model)!;
+}
+
+export function countTokens(text: string, model = 'gpt-4o'): number {
+  const encoding = getEncoding(model);
+  return encoding.encode(text).length;
+}
+
+export function countMessageTokens(
+  messages: Array<{ role: string; content: string }>,
+  model = 'gpt-4o'
+): number {
+  const encoding = getEncoding(model);
+
+  let total = 0;
+  for (const msg of messages) {
+    // Each message has overhead: ~4 tokens for role + delimiters
+    total += 4;
+    total += encoding.encode(msg.content).length;
+  }
+  // Add 3 for assistant reply priming
+  total += 3;
+
+  return total;
+}
+```
+
+**Usage:**
+
+```typescript
+import { countTokens, countMessageTokens } from '@/lib/tokenizer';
+
+const promptTokens = countTokens(systemPrompt);
+const messageTokens = countMessageTokens(messages);
+const totalInput = promptTokens + messageTokens;
+```
+
+---
+
+## NEW: OpenRouter Pricing Service
+
+Cost calculation for model usage:
+
+```typescript
+// server/services/openrouter-pricing.ts
+
+// Pricing per 1M tokens (updated periodically)
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'openai/gpt-4o': { input: 5.00, output: 15.00 },
+  'anthropic/claude-3.5-sonnet': { input: 3.00, output: 15.00 },
+  'anthropic/claude-3-haiku': { input: 0.25, output: 1.25 },
+  'google/gemini-pro': { input: 0.50, output: 1.50 },
+  // Default fallback
+  'default': { input: 1.00, output: 2.00 },
+};
+
+export function calculateCost(
+  inputTokens: number,
+  outputTokens: number,
+  model: string
+): number {
+  const pricing = MODEL_PRICING[model] || MODEL_PRICING['default'];
+  const inputCost = (inputTokens * pricing.input) / 1_000_000;
+  const outputCost = (outputTokens * pricing.output) / 1_000_000;
+  return inputCost + outputCost;
+}
+
+export function formatCost(cost: number): string {
+  if (cost < 0.01) {
+    return `$${(cost * 100).toFixed(4)}¢`;
+  }
+  return `$${cost.toFixed(4)}`;
+}
+
+export function getModelPricing(model: string) {
+  return MODEL_PRICING[model] || MODEL_PRICING['default'];
+}
+```
+
+**Usage in Agent Route:**
+
+```typescript
+// server/routes/agent.ts
+import { calculateCost, formatCost } from '../services/openrouter-pricing';
+
+// After agent completes
+const { usage } = result;
+const cost = calculateCost(
+  usage.promptTokens,
+  usage.completionTokens,
+  AGENT_CONFIG.modelId
+);
+
+// Emit to frontend
+writeSSE('usage', {
+  promptTokens: usage.promptTokens,
+  completionTokens: usage.completionTokens,
+  totalTokens: usage.totalTokens,
+  estimatedCost: cost,
+  formattedCost: formatCost(cost),
+});
 ```
 
 ---
@@ -141,7 +285,6 @@ class PageService {
         })
         .returning();
 
-      // Create sections if provided
       if (data.sections) {
         for (const section of data.sections) {
           await this.sectionService.createEntry(page.id, section);
@@ -151,21 +294,8 @@ class PageService {
       return page;
     });
 
-    // Index for semantic search
     await this.vectorIndex.indexPage(page);
-
     return page;
-  }
-
-  async updatePage(pageId: string, data: UpdatePageInput) {
-    const [updated] = await this.db
-      .update(pages)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(pages.id, pageId))
-      .returning();
-
-    await this.vectorIndex.reindexPage(updated);
-    return updated;
   }
 
   async deletePage(pageId: string) {
@@ -182,17 +312,14 @@ Handles image lifecycle with variant generation:
 ```typescript
 class ImageService {
   async upload(file: Express.Multer.File, siteId: string) {
-    // Check for duplicate via hash
     const hash = await hashFile(file.path);
     const existing = await this.findByHash(hash);
     if (existing) return existing;
 
-    // Store original
     const datePath = format(new Date(), 'yyyy/MM/dd');
     const destPath = `uploads/${datePath}/original/${file.filename}`;
     await fs.move(file.path, destPath);
 
-    // Create record
     const [image] = await this.db
       .insert(images)
       .values({
@@ -200,36 +327,24 @@ class ImageService {
         siteId,
         filename: file.originalname,
         originalPath: destPath,
-        mimeType: file.mimetype,
-        size: file.size,
         hash,
         status: 'pending'
       })
       .returning();
 
-    // Queue background processing
     await imageQueue.add('process-image', { imageId: image.id });
-
     return image;
   }
 
   async search(query: string, limit = 10) {
-    // Semantic search via embeddings
     return this.vectorIndex.searchImages(query, limit);
-  }
-
-  async getVariants(imageId: string) {
-    return this.db
-      .select()
-      .from(imageVariants)
-      .where(eq(imageVariants.imageId, imageId));
   }
 }
 ```
 
 ### SessionService
 
-Persists chat history and checkpoints:
+Persists chat history (checkpoint methods removed):
 
 ```typescript
 class SessionService {
@@ -241,44 +356,29 @@ class SessionService {
     return session;
   }
 
-  async getMessages(sessionId: string) {
-    return this.db
-      .select()
-      .from(messages)
-      .where(eq(messages.sessionId, sessionId))
-      .orderBy(messages.createdAt);
+  async loadMessages(sessionId: string): Promise<CoreMessage[]> {
+    const session = await this.getSessionById(sessionId);
+    return session.messages.map((msg) => ({
+      role: msg.role,
+      content: JSON.parse(msg.content)
+    }));
   }
 
-  async saveMessages(sessionId: string, newMessages: Message[]) {
-    await this.db.insert(messages).values(
-      newMessages.map(m => ({
-        id: nanoid(),
-        sessionId,
-        role: m.role,
-        content: m.content,
-        createdAt: new Date()
-      }))
-    );
+  async saveMessages(sessionId: string, messages: CoreMessage[]) {
+    // Auto-create session if needed
+    await this.ensureSession(sessionId);
+
+    // Clear and re-insert
+    await this.db.delete(schema.messages)
+      .where(eq(schema.messages.sessionId, sessionId));
+
+    for (const msg of messages) {
+      await this.addMessage(sessionId, msg);
+    }
   }
 
-  async saveCheckpoint(sessionId: string, state: CheckpointState) {
-    await this.db
-      .update(sessions)
-      .set({
-        checkpoint: JSON.stringify(state),
-        updatedAt: new Date()
-      })
-      .where(eq(sessions.id, sessionId));
-  }
-
-  async loadCheckpoint(sessionId: string): Promise<CheckpointState | null> {
-    const [session] = await this.db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.id, sessionId));
-
-    return session?.checkpoint ? JSON.parse(session.checkpoint) : null;
-  }
+  // REMOVED: saveCheckpoint, loadCheckpoint, clearCheckpoint
+  // Checkpoints were dead code - messages saved at end is sufficient
 }
 ```
 
@@ -289,18 +389,6 @@ Manages LanceDB for semantic search:
 ```typescript
 class VectorIndexService {
   private db: LanceDB;
-
-  async indexPage(page: Page) {
-    const content = `${page.title} ${page.description || ''} ${extractText(page.sections)}`;
-    const embedding = await generateEmbedding(content);
-
-    await this.db.add('page_embeddings', {
-      id: page.id,
-      pageId: page.id,
-      content,
-      vector: embedding
-    });
-  }
 
   async searchPages(query: string, limit = 5) {
     const queryVector = await generateEmbedding(query);
@@ -317,18 +405,6 @@ class VectorIndexService {
     }));
   }
 
-  async indexImage(image: Image, metadata: ImageMetadata) {
-    const content = `${image.filename} ${metadata.description} ${metadata.tags.join(' ')}`;
-    const embedding = await generateEmbedding(content);
-
-    await this.db.add('image_embeddings', {
-      id: image.id,
-      imageId: image.id,
-      content,
-      vector: embedding
-    });
-  }
-
   async searchImages(query: string, limit = 10) {
     const queryVector = await generateEmbedding(query);
     return this.db
@@ -336,45 +412,6 @@ class VectorIndexService {
       .nearestTo(queryVector)
       .limit(limit)
       .execute();
-  }
-}
-```
-
-### SiteSettingsService
-
-Global configuration storage:
-
-```typescript
-class SiteSettingsService {
-  async get(siteId: string, key: string) {
-    const [setting] = await this.db
-      .select()
-      .from(siteSettings)
-      .where(
-        and(eq(siteSettings.siteId, siteId), eq(siteSettings.key, key))
-      );
-    return setting?.value;
-  }
-
-  async set(siteId: string, key: string, value: unknown) {
-    await this.db
-      .insert(siteSettings)
-      .values({ siteId, key, value: JSON.stringify(value) })
-      .onConflictDoUpdate({
-        target: [siteSettings.siteId, siteSettings.key],
-        set: { value: JSON.stringify(value) }
-      });
-  }
-
-  async getAll(siteId: string) {
-    const settings = await this.db
-      .select()
-      .from(siteSettings)
-      .where(eq(siteSettings.siteId, siteId));
-
-    return Object.fromEntries(
-      settings.map(s => [s.key, JSON.parse(s.value)])
-    );
   }
 }
 ```
@@ -387,103 +424,59 @@ In-memory entity tracking across agent steps:
 
 ```typescript
 // server/services/working-memory/index.ts
-class WorkingMemoryService {
+class WorkingContext {
   private entities = new Map<string, Entity>();
-  private references = new Map<string, string>();
 
-  extractEntities(toolResult: unknown, stepNumber: number) {
-    // Extract page entities
-    if (toolResult.page) {
-      this.entities.set(toolResult.page.id, {
-        type: 'page',
-        id: toolResult.page.id,
-        name: toolResult.page.title,
-        lastMentioned: stepNumber
-      });
-      this.references.set('the page', toolResult.page.id);
-      this.references.set('that page', toolResult.page.id);
+  add(entity: Entity) {
+    this.entities.set(entity.id, entity);
+    // Keep only last 10 entities (sliding window)
+    if (this.entities.size > 10) {
+      const oldest = [...this.entities.entries()]
+        .sort((a, b) => a[1].stepNumber - b[1].stepNumber)[0];
+      this.entities.delete(oldest[0]);
     }
+  }
 
-    // Extract image entities
-    if (toolResult.image) {
-      this.entities.set(toolResult.image.id, {
-        type: 'image',
-        id: toolResult.image.id,
-        name: toolResult.image.filename,
-        lastMentioned: stepNumber
-      });
+  toContextString(): string {
+    if (this.entities.size === 0) return '';
+
+    const lines = ['[WORKING MEMORY]'];
+    for (const entity of this.entities.values()) {
+      lines.push(`- ${entity.type}: "${entity.name}" (id: ${entity.id})`);
     }
-
-    // ... other entity types
+    return lines.join('\n');
   }
 
-  resolveReference(reference: string): string | null {
-    return this.references.get(reference.toLowerCase()) || null;
-  }
-
-  getRecentEntities(count = 5): Entity[] {
-    return Array.from(this.entities.values())
-      .sort((a, b) => b.lastMentioned - a.lastMentioned)
-      .slice(0, count);
-  }
-
-  serialize(): SerializedMemory {
+  toJSON(): SerializedContext {
     return {
-      entities: Array.from(this.entities.entries()),
-      references: Array.from(this.references.entries())
+      entities: Array.from(this.entities.entries())
     };
+  }
+
+  static fromJSON(data: SerializedContext): WorkingContext {
+    const ctx = new WorkingContext();
+    for (const [id, entity] of data.entities) {
+      ctx.entities.set(id, entity);
+    }
+    return ctx;
   }
 }
 ```
 
 ---
 
-## Approval Queue
+## Removed: Approval Queue
 
-Coordinates HITL approval flow:
+**Replaced by native `needsApproval` on tools.**
+
+The old ApprovalQueue class is no longer needed:
 
 ```typescript
-class ApprovalQueue {
-  private pending = new Map<string, PendingApproval>();
-  private resolvers = new Map<string, (approved: boolean) => void>();
-
-  async requestApproval(request: ApprovalRequest): Promise<boolean> {
-    const id = nanoid();
-    this.pending.set(id, {
-      id,
-      toolName: request.toolName,
-      args: request.args,
-      message: request.message,
-      createdAt: Date.now()
-    });
-
-    return new Promise((resolve) => {
-      this.resolvers.set(id, resolve);
-
-      // Timeout after 5 minutes
-      setTimeout(() => {
-        if (this.pending.has(id)) {
-          this.pending.delete(id);
-          this.resolvers.delete(id);
-          resolve(false);
-        }
-      }, 5 * 60 * 1000);
-    });
-  }
-
-  submitResponse(approvalId: string, approved: boolean) {
-    const resolver = this.resolvers.get(approvalId);
-    if (resolver) {
-      resolver(approved);
-      this.pending.delete(approvalId);
-      this.resolvers.delete(approvalId);
-    }
-  }
-
-  getPending(): PendingApproval[] {
-    return Array.from(this.pending.values());
-  }
-}
+// REMOVED: server/services/approval-queue.ts
+// Native AI SDK 6 pattern:
+// - Tools have `needsApproval: true`
+// - SDK pauses execution
+// - Frontend handles approval via /api/agent/approve endpoint
 ```
 
 ---
@@ -493,7 +486,6 @@ class ApprovalQueue {
 ### Transaction Handling
 
 ```typescript
-// Wrap multi-step operations in transactions
 async createPageWithSections(data: CreatePageInput) {
   return this.db.transaction(async (tx) => {
     const [page] = await tx.insert(pages).values(pageData).returning();
@@ -523,7 +515,6 @@ class ServiceError extends Error {
   }
 }
 
-// Usage
 async getPage(pageId: string) {
   const page = await this.db.select().from(pages).where(eq(pages.id, pageId));
   if (!page) {
@@ -543,13 +534,15 @@ async getPage(pageId: string) {
 | Layer 2 (Database) | Drizzle queries |
 | Layer 3 (Agent) | Tools call services |
 | Layer 5 (Background) | Job dispatch |
+| Layer 6 (Client) | Usage/cost displayed |
 
 ---
 
 ## Deep Dive Topics
 
-- Service composition patterns
-- Caching strategies
-- Batch operations
-- Event-driven updates
-- Service testing strategies
+- [4.1 CMS Services](./LAYER_4.1_CMS_SERVICES.md) - Page/Section/Entry details
+- [4.2 Session Management](./LAYER_4.2_SESSION_MANAGEMENT.md) - Chat persistence
+- [4.3 Vector Index](./LAYER_4.3_VECTOR_INDEX.md) - Semantic search
+- [4.4 Image Processing](./LAYER_4.4_IMAGE_PROCESSING.md) - Upload pipeline
+- [4.5 Renderer](./LAYER_4.5_RENDERER.md) - Template rendering
+- [4.6 Working Memory](./LAYER_4.6_WORKING_MEMORY.md) - Entity tracking

@@ -3,6 +3,7 @@ import { EntryService } from "./cms/entry-service";
 import { PageService } from "./cms/page-service";
 import { SectionService } from "./cms/section-service";
 import { SessionService } from "./session-service";
+import { ConversationLogService } from "./conversation-log-service";
 import { VectorIndexService } from "./vector-index";
 
 export class ServiceContainer {
@@ -14,10 +15,11 @@ export class ServiceContainer {
   readonly sectionService: SectionService;
   readonly entryService: EntryService;
   readonly sessionService: SessionService;
+  readonly conversationLogService: ConversationLogService;
 
   private constructor(db: DrizzleDB) {
     this.db = db; // Store DB reference
-    
+
     // Initialize vector index first
     this.vectorIndex = new VectorIndexService(process.env.LANCEDB_DIR || "data/lancedb");
 
@@ -25,9 +27,12 @@ export class ServiceContainer {
     this.pageService = new PageService(db, this.vectorIndex);
     this.sectionService = new SectionService(db, this.vectorIndex);
     this.entryService = new EntryService(db, this.vectorIndex);
-    
+
     // Initialize session service
     this.sessionService = new SessionService(db);
+
+    // Initialize conversation log service
+    this.conversationLogService = new ConversationLogService(db);
   }
 
   static async initialize(db: DrizzleDB): Promise<ServiceContainer> {

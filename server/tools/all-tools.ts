@@ -664,30 +664,67 @@ export const searchVector = tool({
 })
 
 export const cmsFindResource = tool({
-  description: 'Find CMS resource by name/query using fuzzy matching (typo-tolerant). Use this to find pages by partial name or slug.',
+  description: 'Find CMS resource by name/query using semantic search. Works for pages, sections, collections.',
   inputSchema: z.object({
-    query: z.string().describe('Search query - partial name or slug to search for (e.g., "about" to find "About Us")'),
+    query: z.string().describe('Search query - name, slug, or description (e.g., "about" to find "About Us", "hero" to find Hero Section)'),
     resourceType: z.enum(['page', 'section', 'collection']).optional().describe('Type of resource to search for (defaults to page)')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-    
-    // Simple fuzzy match implementation
-    const allPages = await ctx.services.pageService.listPages()
-    const matches = allPages.filter((p: any) => 
-      p.name.toLowerCase().includes(input.query.toLowerCase()) ||
-      p.slug.toLowerCase().includes(input.query.toLowerCase())
-    )
-    
-    return {
-      count: matches.length,
-      matches: matches.map((m: any) => ({
-        id: m.id,
-        name: m.name,
-        slug: m.slug,
-        type: 'page'
-      }))
+    const resourceType = input.resourceType || 'page'
+
+    // For pages, use simple fuzzy match on existing data
+    if (resourceType === 'page') {
+      const allPages = await ctx.services.pageService.listPages()
+      const matches = allPages.filter((p: any) =>
+        p.name.toLowerCase().includes(input.query.toLowerCase()) ||
+        p.slug.toLowerCase().includes(input.query.toLowerCase())
+      )
+
+      return {
+        count: matches.length,
+        matches: matches.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          slug: m.slug,
+          type: 'page'
+        }))
+      }
     }
+
+    // For sections, use vector search on section_def type
+    if (resourceType === 'section') {
+      const results = await ctx.vectorIndex.search(input.query, 'section_def', 5)
+
+      return {
+        count: results.length,
+        matches: results.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          slug: r.slug,
+          type: 'section_def',
+          similarity: r.similarity
+        }))
+      }
+    }
+
+    // For collections, use vector search
+    if (resourceType === 'collection') {
+      const results = await ctx.vectorIndex.search(input.query, 'collection', 5)
+
+      return {
+        count: results.length,
+        matches: results.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          slug: r.slug,
+          type: 'collection',
+          similarity: r.similarity
+        }))
+      }
+    }
+
+    return { count: 0, matches: [] }
   }
 })
 

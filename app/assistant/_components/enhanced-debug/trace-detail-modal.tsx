@@ -85,7 +85,10 @@ function highlightXml(text: string): string {
 }
 
 export function TraceDetailModal() {
-	const { isModalOpen, modalEntry, closeModal } = useTraceStore();
+	// Use selectors to avoid subscribing to entire store
+	const isModalOpen = useTraceStore((state) => state.isModalOpen);
+	const modalEntry = useTraceStore((state) => state.modalEntry);
+	const closeModal = useTraceStore((state) => state.closeModal);
 	const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
 	const formattedInput = useMemo(() => {

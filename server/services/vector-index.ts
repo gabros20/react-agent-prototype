@@ -344,7 +344,5 @@ export class VectorIndexService {
   }
 }
 
-// Export singleton instance as default
-export default new VectorIndexService(
-  process.env.VECTOR_DB_PATH || "./vector_index"
-);
+// No default export - use ServiceContainer.get().vectorIndex instead
+// This ensures a single instance managed by the service container

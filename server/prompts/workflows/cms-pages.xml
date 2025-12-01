@@ -13,12 +13,23 @@ After creation:
 </page-creation>
 
 <section-workflow>
-Adding sections:
+**CRITICAL: Check if section exists BEFORE adding!**
+
+Updating existing section (most common):
 1. `cms_findResource(query, "page")` → get page ID
-2. `cms_findResource(query, "section")` → get section def ID
-3. `cms_addSectionToPage(pageId, sectionDefId)` → get pageSectionId
-4. `cms_getSectionDef(id)` → check required fields
-5. `cms_syncPageContent(pageSectionId, content)` → populate fields
+2. `cms_getPageSections(pageId)` → see what sections ALREADY exist
+3. If section exists → use `cms_updateSectionImage` or `cms_syncPageContent` on existing pageSectionId
+4. If section NOT exists → THEN use `cms_addSectionToPage`
+
+Adding NEW sections (only when section doesn't exist):
+1. `cms_findResource(query, "page")` → get page ID
+2. `cms_getPageSections(pageId)` → **VERIFY section doesn't already exist**
+3. `cms_findResource(query, "section")` → get section def ID
+4. `cms_addSectionToPage(pageId, sectionDefId)` → get pageSectionId
+5. `cms_getSectionDef(id)` → check required fields
+6. `cms_syncPageContent(pageSectionId, content)` → populate fields
+
+**NEVER add a duplicate section!** Always check existing sections first.
 
 Content format for links: `{href: "/path", type: "url"|"page"}`
 </section-workflow>
@@ -33,13 +44,21 @@ Only set image via `cms_updateSectionImage` after section exists.
 </image-text-sections>
 
 <examples>
-**Add section with content:**
+**Update image on existing section (MOST COMMON):**
+"Update the hero image on homepage" →
+1. cms_findResource("homepage", "page") → pageId
+2. cms_getPageSections(pageId) → [{id: "abc123", sectionKey: "hero"}, ...] ← FIND EXISTING
+3. cms_updateSectionImage(imageId, "abc123", "image") ← USE EXISTING pageSectionId
+**DO NOT add a new section - update the existing one!**
+
+**Add section with content (only if section doesn't exist):**
 "Add hero to about page" →
 1. cms_findResource("about", "page") → pageId
-2. cms_findResource("hero", "section") → sectionDefId
-3. cms_addSectionToPage → pageSectionId
-4. cms_getSectionDef → {fields: [title, subtitle, ctaText, ctaLink, image]}
-5. cms_syncPageContent(pageSectionId, {title: "...", ctaLink: {href: "/x", type: "url"}})
+2. cms_getPageSections(pageId) → [] ← VERIFY hero doesn't exist
+3. cms_findResource("hero", "section") → sectionDefId
+4. cms_addSectionToPage → pageSectionId
+5. cms_getSectionDef → {fields: [title, subtitle, ctaText, ctaLink, image]}
+6. cms_syncPageContent(pageSectionId, {title: "...", ctaLink: {href: "/x", type: "url"}})
 
 **Granular field lookup:**
 "What's the CTA link on about page?" →

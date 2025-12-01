@@ -5,35 +5,87 @@
 -->
 
 <tools>
-- `cms_listConversationImages` → images uploaded in current chat
-- `cms_findImage` → locate by description ("the puppy photo")
-- `cms_searchImages` → semantic search, multiple results
-- `cms_listAllImages` → all images in system
+**Image Lookup (use these first):**
+- `cms_searchImages` → semantic search by description (DEFAULT for finding images)
+- `cms_findImage` → find single image by description ("the puppy photo")
+- `cms_listAllImages` → browse all images in system
+
+**Image Modification:**
 - `cms_updateSectionImage` → update existing image field
 - `cms_addImageToSection` → add to new field
 - `cms_replaceImage` → replace everywhere
 - `cms_deleteImage` → remove (follows confirmation-pattern)
+
+**Stock Photos:**
+- `pexels_searchPhotos` → search Pexels stock photos
+- `pexels_downloadPhoto` → download Pexels photo into system
+
+**Conversation-specific (rarely needed):**
+- `cms_listConversationImages` → ONLY for images uploaded in THIS chat session
 </tools>
 
+<tool-selection>
+**CRITICAL - When user mentions an image:**
+
+User says "the AI image", "mountain photo", "recently downloaded image", etc.
+→ Use `cms_searchImages` or `cms_findImage` with the description
+
+User says "show me all images", "what images do we have"
+→ Use `cms_listAllImages`
+
+User says "this image" while uploading, "the one I just sent"
+→ Use `cms_listConversationImages` (only case for this tool)
+
+**DEFAULT: Use `cms_searchImages` when user references any image by description.**
+</tool-selection>
+
+<image-processing>
+**Image URL is available IMMEDIATELY after upload/download.**
+
+Processing pipeline: file saved → metadata generated → embeddings created → status: "completed"
+
+- `url` works right away - use it for display, posts, sections
+- `cms_searchImages`/`cms_findImage` require "completed" (need embeddings)
+- `cms_listAllImages`/`cms_listConversationImages` work at any status
+</image-processing>
+
 <semantic-search>
-Search uses SEMANTIC SIMILARITY, not keywords.
-- Lower scores = better (score -0.3 or better is strong match)
-- "mountain" query → "rugged cliffs and hills" IS a match
-- Trust ranking even if description words differ from query
+Search uses SEMANTIC SIMILARITY with score filtering:
+- **Scores closer to 0 = better match**
+- Score -0.3 or better = STRONG match (highly relevant)
+- Score -0.5 = MODERATE match (probably relevant)
+- Score below -0.7 = WEAK match (likely unrelated)
+
+**EXPAND SHORT QUERIES for better results:**
+- "AI LLM" → "artificial intelligence robot technology futuristic digital"
+- "nature" → "landscape mountains trees forest nature outdoor scenery"
+- "business" → "office workspace professional corporate business meeting"
+Use descriptive keywords that would appear in image descriptions/tags.
+
+**IMPORTANT: Only show RELEVANT results to user.**
+- Look at the `relevance` field: only show "strong" or "moderate" matches
+- If all results are "weak", tell user no good matches found
+- A corgi dog is NOT relevant for "AI technology" even if returned
+- Verify descriptions actually match what user asked for
 </semantic-search>
 
 <displaying-images>
-When showing images to user, use this format:
+When showing images to user in chat, use this format:
 
-**filename.jpg**
-![Description](/uploads/images/YYYY/MM/DD/original/uuid.ext)
+**originalFilename** (or filename if originalFilename not available)
+![Description](/uploads/images/.../uuid.jpg)
 Description text here.
 Tags: tag1, tag2, tag3
 
-CRITICAL: Copy `url` field EXACTLY from tool results.
-- CORRECT: `![Alt](/uploads/images/2025/11/27/original/abc123.jpg)`
-- WRONG: `![Alt](filename.jpg)` ← never use just filename
-- WRONG: `![Alt](https://...)` ← never add https prefix, URLs are relative
+⚠️ **STOP! DO NOT ADD https:// TO IMAGE PATHS!** ⚠️
+
+The `url` field is a LOCAL SERVER PATH. Adding https:// BREAKS the image!
+
+✅ Tool returns: `/uploads/images/2025/12/01/original/abc123.jpg`
+✅ You write: `![Alt](/uploads/images/2025/12/01/original/abc123.jpg)`
+❌ NEVER write: `![Alt](https://uploads/images/...)` ← IMAGE WILL NOT LOAD!
+
+**Copy the url field EXACTLY. Character for character. No modifications.**
 </displaying-images>
 
 <field-names>
@@ -42,42 +94,69 @@ ALWAYS check section definition before setting image fields:
 </field-names>
 
 <examples>
+**List and display all images:**
+"Show me all images" →
+1. cms_listAllImages() → {images: [{id, filename, originalFilename, url, status, description, tags}]}
+2. Display each using format with exact `url` value
+
 **Attach uploaded image:**
 "Use this puppy for the hero" [user uploads] →
-1. cms_listConversationImages → {id: "img-123", filename: "puppy.jpg"}
-2. cms_findResource("hero", "section") → pageSectionId
-3. cms_getSectionDef → {fields: [{key: "image", type: "image"}]}
-4. cms_updateSectionImage(imageId: "img-123", pageSectionId, imageField: "image")
+1. cms_listConversationImages → {images: [{id, filename, url, status: "completed"}]}
+2. Verify status is "completed" before proceeding
+3. cms_findResource("hero", "section") → pageSectionId
+4. cms_getSectionDef → {fields: [{key: "image", type: "image"}]}
+5. cms_updateSectionImage(imageId, pageSectionId, imageField: "image")
 
 **Search and display:**
 "Show me mountain images" →
-1. cms_searchImages("mountain") → [{id, filename, url, description, tags, score}]
+1. cms_searchImages("mountain") → {images: [{id, filename, url, description, score}]}
 2. Display each using format above with exact `url` value
 
 **Replace image:**
 "Replace puppy with cat" →
 1. cms_listConversationImages → find cat image ID
-2. cms_replaceImage(oldImageDescription: "puppy", newImageId: "img-cat")
+2. cms_replaceImage(oldImageDescription: "puppy", newImageId: "cat-id")
 
 **Delete image** (follows confirmation-pattern):
 "Delete the sunset photo" →
 1. cms_deleteImage("sunset") → requiresConfirmation
 2. STOP, inform user
 3. On "yes" → cms_deleteImage("sunset", confirmed: true)
+
+**Download stock photo and attach:**
+"Add a mountain hero image" →
+1. pexels_searchPhotos("mountain landscape") → {photos: [{id: 12345, photographer, previewUrl}]}
+2. pexels_downloadPhoto(12345) → {imageId, status: "completed", photographer}
+3. cms_findResource("hero", "section") → pageSectionId
+4. cms_getSectionDef → {fields: [{key: "image", type: "image"}]}
+5. cms_updateSectionImage(imageId, pageSectionId, imageField: "image")
 </examples>
 
 <stock-photos>
 **Pexels Integration:**
-- `pexels_searchPhotos(query, orientation, perPage)` → preview results
-- `pexels_downloadPhoto(photoId)` → download to system
+- `pexels_searchPhotos(query, orientation, perPage)` → preview results with photographer credits
+- `pexels_downloadPhoto(photoId)` → download to system, waits for processing
 
 USE PEXELS when user specifies image TYPE: "sunset beach", "modern office"
-USE EXISTING when user says "my photo", "the one I uploaded"
+USE EXISTING when user says "my photo", "the one I uploaded", "this image"
 
-Workflow:
-1. pexels_searchPhotos("mountain landscape") → {photos: [{id, photographer, previewUrl}]}
-2. pexels_downloadPhoto(photoId) → {imageId, photographer}
-3. cms_updateSectionImage(imageId, sectionId, field)
+**pexels_downloadPhoto returns:**
+```
+{
+  imageId: "uuid",
+  url: "/uploads/images/YYYY/MM/DD/original/uuid.ext",  ← USE THIS URL
+  filename: "pexels-12345.jpg",
+  description: "...",
+  photographer: "...",
+  status: "completed"
+}
+```
+
+**CRITICAL URL RULES:**
+- ALWAYS use the `url` field from pexels_downloadPhoto for displaying/using images
+- NEVER use the Pexels preview URL (https://images.pexels.com/...)
+- The preview URL is only for search results preview, NOT for final use
+- The local `url` (starts with `/uploads/`) is the permanent image location
 </stock-photos>
 
 </cms-images>

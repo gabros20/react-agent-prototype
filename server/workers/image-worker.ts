@@ -183,7 +183,8 @@ async function processEmbeddings(job: any) {
 
 	try {
 		// Store in vector index (embeddings generated internally via OpenRouter)
-		const { default: vectorIndex } = await import("../services/vector-index");
+		const { ServiceContainer } = await import("../services/service-container");
+		const vectorIndex = ServiceContainer.get().vectorIndex;
 
 		await job.updateProgress(30);
 

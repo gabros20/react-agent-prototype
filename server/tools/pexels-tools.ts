@@ -165,10 +165,16 @@ export const pexelsDownloadPhotoTool: any = tool({
 						});
 					}
 
+					// Get the local URL
+					const localUrl = existingImage.filePath ? `/uploads/${existingImage.filePath}` : undefined;
+
 					return {
 						success: true,
 						isNew: false,
 						imageId: existingImage.id,
+						url: localUrl,
+						filename: existingImage.originalFilename || existingImage.filename,
+						description: existingImage.metadata?.description,
 						photographer: existingImage.metadata?.detailedDescription?.replace("Photo by ", "").replace(" on Pexels", "") || "Unknown",
 						message: "Photo already in system, linked to conversation",
 					};
@@ -218,8 +224,9 @@ export const pexelsDownloadPhotoTool: any = tool({
 			const startTime = Date.now();
 
 			let finalStatus = "processing";
+			let imageRecord: any = null;
 			while (Date.now() - startTime < maxWaitMs) {
-				const imageRecord = await db.query.images.findFirst({
+				imageRecord = await db.query.images.findFirst({
 					where: eq(images.id, processResult.imageId),
 				});
 
@@ -244,12 +251,18 @@ export const pexelsDownloadPhotoTool: any = tool({
 				};
 			}
 
+			// Get the local URL - filePath exists even while processing (file is on disk)
+			const localUrl = imageRecord?.filePath ? `/uploads/${imageRecord.filePath}` : undefined;
+
 			if (finalStatus !== "completed") {
 				// Still processing after timeout - return anyway
 				return {
 					success: true,
 					isNew: true,
 					imageId: processResult.imageId,
+					url: localUrl,
+					filename: download.metadata.filename,
+					description: download.metadata.alt,
 					photographer: download.metadata.photographer,
 					photographerUrl: download.metadata.photographerUrl,
 					message: `Downloaded. Processing still in progress. ${attribution}`,
@@ -261,6 +274,9 @@ export const pexelsDownloadPhotoTool: any = tool({
 				success: true,
 				isNew: true,
 				imageId: processResult.imageId,
+				url: localUrl,
+				filename: download.metadata.filename,
+				description: download.metadata.alt,
 				photographer: download.metadata.photographer,
 				photographerUrl: download.metadata.photographerUrl,
 				message: `Downloaded and processed. ${attribution}`,

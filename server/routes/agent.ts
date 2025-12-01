@@ -20,6 +20,7 @@ import type { ServiceContainer } from "../services/service-container";
 import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 import { getSiteAndEnv } from "../utils/get-context";
 import { getModelPricing } from "../services/openrouter-pricing";
+import { countTokens, countChatTokens } from "../../lib/tokenizer";
 
 // Request schema
 const agentRequestSchema = z.object({
@@ -55,6 +56,10 @@ export function createAgentRoutes(services: ServiceContainer) {
 			// Generate trace ID
 			const traceId = randomUUID();
 			const sessionId = input.sessionId || randomUUID();
+
+			// Ensure session exists in DB before agent execution
+			// (Tools like pexels_downloadPhoto need to link to session via FK)
+			await services.sessionService.ensureSession(sessionId);
 
 			// Setup SSE headers
 			res.setHeader("Content-Type", "text/event-stream");
@@ -171,11 +176,18 @@ export function createAgentRoutes(services: ServiceContainer) {
 				workingMemory: workingContext.toContextString(),
 			});
 
+			// Calculate system prompt tokens server-side (source of truth)
+			const systemPromptTokens = countTokens(systemPrompt);
+			const workingMemoryStr = workingContext.toContextString();
+			const workingMemoryTokens = workingMemoryStr ? countTokens(workingMemoryStr) : 0;
+
 			writeSSE("system-prompt", {
 				type: "system-prompt",
 				prompt: systemPrompt,
 				promptLength: systemPrompt.length,
-				workingMemory: workingContext.toContextString(),
+				tokens: systemPromptTokens,
+				workingMemory: workingMemoryStr,
+				workingMemoryTokens,
 				timestamp: new Date().toISOString(),
 			});
 
@@ -213,6 +225,24 @@ export function createAgentRoutes(services: ServiceContainer) {
 					{ role: "user", content: input.prompt },
 				];
 
+				// Emit user prompt with token count
+				const userPromptTokens = countTokens(input.prompt);
+				const messageHistoryTokens = previousMessages.length > 0
+					? countChatTokens(previousMessages.map(m => ({
+						role: m.role,
+						content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+					})))
+					: 0;
+
+				writeSSE("user-prompt", {
+					type: "user-prompt",
+					prompt: input.prompt,
+					tokens: userPromptTokens,
+					messageHistoryTokens,
+					messageCount: previousMessages.length,
+					timestamp: new Date().toISOString(),
+				});
+
 				// Stream using cmsAgent (SDK handles retry internally with default maxRetries: 2)
 				const streamResult = await cmsAgent.stream({
 					messages,
@@ -225,6 +255,8 @@ export function createAgentRoutes(services: ServiceContainer) {
 				let finalText = "";
 				let finishReason = "unknown";
 				let usage: any = {};
+				let currentStep = 0;
+				let stepStartTime = Date.now();
 
 				// Process stream chunks
 				for await (const chunk of streamResult.fullStream) {
@@ -330,11 +362,35 @@ export function createAgentRoutes(services: ServiceContainer) {
 							});
 							break;
 
+						case "start-step":
+							currentStep++;
+							stepStartTime = Date.now();
+							writeSSE("step-start", {
+								type: "step-start",
+								stepNumber: currentStep,
+								timestamp: new Date().toISOString(),
+							});
+							break;
+
+						case "finish-step":
+							const stepDuration = Date.now() - stepStartTime;
+							const stepUsage = (chunk as any).usage;
+							writeSSE("step-finish", {
+								type: "step-finish",
+								stepNumber: currentStep,
+								duration: stepDuration,
+								finishReason: (chunk as any).finishReason,
+								usage: stepUsage ? {
+									promptTokens: stepUsage.promptTokens || 0,
+									completionTokens: stepUsage.completionTokens || 0,
+								} : undefined,
+								timestamp: new Date().toISOString(),
+							});
+							break;
+
 						// AI SDK internal streaming events - silently ignore
-						// These are not exposed as discrete events per SDK docs
 						default:
-							// Silently ignore: tool-input-start, tool-input-delta, 
-							// step-start, step-finish, reasoning, etc.
+							// Silently ignore: tool-input-start, tool-input-delta, reasoning, etc.
 							break;
 					}
 				}
@@ -417,6 +473,9 @@ export function createAgentRoutes(services: ServiceContainer) {
 
 			const traceId = randomUUID();
 			const sessionId = input.sessionId || randomUUID();
+
+			// Ensure session exists in DB before agent execution
+			await services.sessionService.ensureSession(sessionId);
 
 			// Simple console logger for non-streaming
 			const logger = {

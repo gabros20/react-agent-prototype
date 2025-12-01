@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
-import { Message, MessageContent } from "@/components/ai-elements/message";
+import { useStickToBottomContext } from "use-stick-to-bottom";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
-import { Markdown } from "@/components/markdown";
 import { useAgent } from "../_hooks/use-agent";
-import { useChatStore } from "../_stores/chat-store";
+import { useChatStore, type ChatMessage } from "../_stores/chat-store";
 import { useSessionStore } from "../_stores/session-store";
 import { Button } from "@/components/ui/button";
 import { Trash2, MessageSquare } from "lucide-react";
@@ -23,11 +23,98 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export function ChatPane() {
+// Inner component that handles auto-scroll when messages change
+function MessageList({ messages }: { messages: ChatMessage[] }) {
+	const { scrollToBottom } = useStickToBottomContext();
+	const prevMessagesLength = useRef(messages.length);
+
+	useEffect(() => {
+		// Only scroll when new messages are added
+		if (messages.length > prevMessagesLength.current) {
+			scrollToBottom({ animation: "smooth" });
+		}
+		prevMessagesLength.current = messages.length;
+	}, [messages.length, scrollToBottom]);
+
+	if (messages.length === 0) {
+		return (
+			<div className='flex items-center justify-center h-full text-muted-foreground p-4'>
+				<div className='text-center'>
+					<p className='text-base sm:text-lg font-medium mb-2'>No messages yet</p>
+					<p className='text-xs sm:text-sm'>Start a conversation to manage your CMS</p>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<>
+			{messages.map((message) => (
+				<Message from={message.role} key={message.id}>
+					<MessageContent>
+						<MessageResponse className='text-xs sm:text-sm'>{message.content}</MessageResponse>
+					</MessageContent>
+				</Message>
+			))}
+			{/* Status indicator at end of messages during streaming */}
+			<AgentStatusIndicator />
+		</>
+	);
+}
+
+// Memoized conversation area - won't re-render when input changes
+const ConversationArea = memo(function ConversationArea({ messages }: { messages: ChatMessage[] }) {
+	return (
+		<Conversation className='h-full'>
+			<ConversationContent>
+				<MessageList messages={messages} />
+			</ConversationContent>
+			<ConversationScrollButton />
+		</Conversation>
+	);
+});
+
+// Isolated input component - typing here won't re-render parent
+function ChatInput({ onSendMessage, isStreaming }: { onSendMessage: (text: string) => void; isStreaming: boolean }) {
 	const [input, setInput] = useState("");
+
+	return (
+		<PromptInput
+			onSubmit={(message) => {
+				if (message.text && message.text.trim() && !isStreaming) {
+					onSendMessage(message.text);
+					setInput("");
+				}
+			}}
+			className='w-full'
+		>
+			<PromptInputBody>
+				<PromptInputTextarea
+					value={input}
+					onChange={(e) => setInput(e.target.value)}
+					placeholder='Type a message...'
+					className='min-h-[60px] sm:min-h-[80px] text-sm'
+					disabled={isStreaming}
+				/>
+			</PromptInputBody>
+			<PromptInputFooter>
+				<div className='flex items-center justify-between w-full'>
+					<span className='text-xs text-muted-foreground'>Press Enter to send</span>
+					<PromptInputSubmit disabled={isStreaming || !input.trim()} />
+				</div>
+			</PromptInputFooter>
+		</PromptInput>
+	);
+}
+
+export function ChatPane() {
 	const { sendMessage, isStreaming } = useAgent();
-	const { messages, reset, sessionId } = useChatStore();
-	const { clearHistory } = useSessionStore();
+
+	// Use selectors to avoid subscribing to entire store
+	const messages = useChatStore((state) => state.messages);
+	const reset = useChatStore((state) => state.reset);
+	const sessionId = useChatStore((state) => state.sessionId);
+	const clearHistory = useSessionStore((state) => state.clearHistory);
 
 	const handleClearHistory = async () => {
 		// Use sessionId from chat store (which is the active session)
@@ -80,60 +167,12 @@ export function ChatPane() {
 
 			{/* Messages - Flex-1 with overflow */}
 			<div className='flex-1 min-h-0 overflow-hidden'>
-				<Conversation className='h-full'>
-					<ConversationContent>
-						{messages.length === 0 ? (
-							<div className='flex items-center justify-center h-full text-muted-foreground p-4'>
-								<div className='text-center'>
-									<p className='text-base sm:text-lg font-medium mb-2'>No messages yet</p>
-									<p className='text-xs sm:text-sm'>Start a conversation to manage your CMS</p>
-								</div>
-							</div>
-						) : (
-							<>
-								{messages.map((message) => (
-									<Message from={message.role} key={message.id}>
-										<MessageContent>
-											<Markdown className='text-xs sm:text-sm'>{message.content}</Markdown>
-										</MessageContent>
-									</Message>
-								))}
-								{/* Status indicator at end of messages during streaming */}
-								<AgentStatusIndicator />
-							</>
-						)}
-					</ConversationContent>
-					<ConversationScrollButton />
-				</Conversation>
+				<ConversationArea messages={messages} />
 			</div>
 
-			{/* Input - Fixed */}
+			{/* Input - Fixed (isolated component to prevent re-renders) */}
 			<div className='flex-none p-3 sm:p-4 border-t'>
-				<PromptInput
-					onSubmit={(message) => {
-						if (message.text && message.text.trim() && !isStreaming) {
-							sendMessage(message.text);
-							setInput("");
-						}
-					}}
-					className='w-full'
-				>
-					<PromptInputBody>
-						<PromptInputTextarea
-							value={input}
-							onChange={(e) => setInput(e.target.value)}
-							placeholder='Type a message...'
-							className='min-h-[60px] sm:min-h-[80px] text-sm'
-							disabled={isStreaming}
-						/>
-					</PromptInputBody>
-					<PromptInputFooter>
-						<div className='flex items-center justify-between w-full'>
-							<span className='text-xs text-muted-foreground'>Press Enter to send</span>
-							<PromptInputSubmit disabled={isStreaming || !input.trim()} />
-						</div>
-					</PromptInputFooter>
-				</PromptInput>
+				<ChatInput onSendMessage={sendMessage} isStreaming={isStreaming} />
 			</div>
 		</div>
 	);

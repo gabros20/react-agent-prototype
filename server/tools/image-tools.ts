@@ -22,7 +22,8 @@ export const findImageTool: any = tool({
 	execute: async (input: { description: string }): Promise<any> => {
 		const { description } = input;
 		try {
-			const { default: vectorIndex } = await import("../services/vector-index");
+			const { ServiceContainer } = await import("../services/service-container");
+			const vectorIndex = ServiceContainer.get().vectorIndex;
 			const result = await vectorIndex.findImageByDescription(description);
 
 			// Get full image details
@@ -59,43 +60,65 @@ export const findImageTool: any = tool({
 });
 
 /**
- * Search for multiple images
+ * Search for multiple images using semantic similarity
+ * Score interpretation: closer to 0 = better match, -0.3 or better is strong, -0.5 is moderate, -0.7+ is weak
  */
 export const searchImagesTool: any = tool({
-	description: "Search for multiple images using natural language",
+	description: "Search for images using semantic similarity. IMPORTANT: Expand short queries with descriptive keywords (e.g., 'AI' → 'artificial intelligence robot technology futuristic'). Returns ranked results with relevance: 'strong' (score >= -0.3), 'moderate' (-0.3 to -0.5), 'weak' (< -0.5). Default filter excludes weak matches. Only show relevant results to user - if all weak, tell user no good matches found.",
 	inputSchema: z.object({
-		query: z.string().describe("Search query"),
-		limit: z.number().optional().describe("Max results (default: 10)"),
+		query: z.string().describe("Search query - use multiple descriptive keywords for better results"),
+		limit: z.number().optional().describe("Max results (default: 5)"),
+		minScore: z.number().optional().describe("Minimum score threshold (default: -0.5 for moderate+strong only, use -0.8 to include weak matches)"),
 	}),
-	execute: async (input: { query: string; limit?: number }): Promise<any> => {
-		const { query, limit = 10 } = input;
+	execute: async (input: { query: string; limit?: number; minScore?: number }): Promise<any> => {
+		// Default minScore -0.5 to filter out weak matches automatically
+		const { query, limit = 5, minScore = -0.5 } = input;
 		try {
-			const { default: vectorIndex } = await import("../services/vector-index");
-			const { results } = await vectorIndex.searchImages(query, { limit });
+			const { ServiceContainer } = await import("../services/service-container");
+			const vectorIndex = ServiceContainer.get().vectorIndex;
+			// Fetch more results initially to allow filtering
+			const { results } = await vectorIndex.searchImages(query, { limit: limit * 3 });
+
+			// Filter by minimum score threshold
+			const filteredResults = results.filter((r: any) => r.score >= minScore);
 
 			// Get full image data including URLs from database
-			const imageIds = results.map((r: any) => r.id);
-			const fullImages = await db.query.images.findMany({
-				where: (images, { inArray }) => inArray(images.id, imageIds),
-				with: { metadata: true },
-			});
+			const imageIds = filteredResults.map((r: any) => r.id);
+			const fullImages = imageIds.length > 0
+				? await db.query.images.findMany({
+						where: (images, { inArray }) => inArray(images.id, imageIds),
+						with: { metadata: true },
+					})
+				: [];
 
 			// Create lookup map for quick access
 			const imageMap = new Map(fullImages.map(img => [img.id, img]));
 
+			const finalResults = filteredResults.slice(0, limit).map((r: any) => {
+				const img = imageMap.get(r.id);
+				return {
+					id: r.id,
+					filename: r.filename,
+					url: img?.cdnUrl ?? (img?.filePath ? `/uploads/${img.filePath}` : undefined),
+					description: r.description,
+					score: r.score,
+					// Score thresholds matching prompt guidance
+					// -0.3 or better = strong, -0.3 to -0.5 = moderate, below -0.5 = weak
+					relevance: r.score >= -0.3 ? "strong" : r.score >= -0.5 ? "moderate" : "weak",
+				};
+			});
+
 			return {
 				success: true,
-				count: results.length,
-				images: results.map((r: any) => {
-					const img = imageMap.get(r.id);
-					return {
-						id: r.id,
-						filename: r.filename,
-						url: img?.cdnUrl ?? (img?.filePath ? `/uploads/${img.filePath}` : undefined),
-						description: r.description,
-						score: r.score,
-					};
-				}),
+				count: finalResults.length,
+				query,
+				scoreThreshold: minScore,
+				images: finalResults,
+				hint: finalResults.length === 0
+					? "No images matched the query well. Try different keywords or lower the minScore threshold."
+					: finalResults[0].relevance === "strong"
+						? "Found strong matches - the top result is highly relevant."
+						: "Matches found but relevance is moderate/weak - verify they match user intent.",
 			};
 		} catch (error) {
 			return {
@@ -143,9 +166,12 @@ export const listConversationImagesTool: any = tool({
 				images: conversationImgs.map((ci) => ({
 					id: ci.image.id,
 					filename: ci.image.filename,
+					originalFilename: ci.image.originalFilename,
+					url: ci.image.cdnUrl ?? (ci.image.filePath ? `/uploads/${ci.image.filePath}` : undefined),
 					status: ci.image.status,
 					uploadedAt: ci.uploadedAt,
 					description: ci.image.metadata?.description,
+					tags: ci.image.metadata?.tags ? JSON.parse(ci.image.metadata.tags as string) : [],
 				})),
 			};
 		} catch (error) {
@@ -222,9 +248,8 @@ export const addImageToSectionTool: any = tool({
 			};
 
 			// Sync updated content
-			const { SectionService } = await import("../services/cms/section-service");
-			const { default: vectorIndex } = await import("../services/vector-index");
-			const service = new SectionService(db, vectorIndex);
+			const { ServiceContainer } = await import("../services/service-container");
+			const service = ServiceContainer.get().sectionService;
 			await service.syncPageContents({
 				pageSectionId,
 				localeCode,
@@ -261,7 +286,8 @@ export const replaceImageTool: any = tool({
 		const { oldImageDescription, newImageId } = input;
 		try {
 			// Find old image
-			const { default: vectorIndex } = await import("../services/vector-index");
+			const { ServiceContainer } = await import("../services/service-container");
+			const vectorIndex = ServiceContainer.get().vectorIndex;
 			const searchResult = await vectorIndex.findImageByDescription(
 				oldImageDescription
 			);
@@ -470,9 +496,8 @@ export const updateSectionImageTool: any = tool({
 			};
 
 			// Sync updated content
-			const { SectionService } = await import("../services/cms/section-service");
-			const { default: vectorIndex } = await import("../services/vector-index");
-			const service = new SectionService(db, vectorIndex);
+			const { ServiceContainer } = await import("../services/service-container");
+			const service = ServiceContainer.get().sectionService;
 			await service.syncPageContents({
 				pageSectionId,
 				localeCode,
@@ -507,7 +532,8 @@ export const deleteImageTool: any = tool({
 		const { description, confirmed } = input;
 		try {
 			// Find image first
-			const { default: vectorIndex } = await import("../services/vector-index");
+			const { ServiceContainer } = await import("../services/service-container");
+			const vectorIndex = ServiceContainer.get().vectorIndex;
 			const image = await vectorIndex.findImageByDescription(description);
 
 			// Require confirmation

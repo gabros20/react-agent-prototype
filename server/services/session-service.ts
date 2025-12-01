@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 import type { DrizzleDB } from "../db/client";
 import * as schema from "../db/schema";
 import { WorkingContext, type WorkingContextState } from "./working-memory";
@@ -50,9 +50,30 @@ export class SessionService {
   }
 
   /**
+   * Ensure session exists (create if not exists)
+   * Used by agent routes to create session before tool execution
+   * (Tools like pexels_downloadPhoto need session to exist for FK constraint)
+   */
+  async ensureSession(sessionId: string): Promise<void> {
+    const existing = await this.db.query.sessions.findFirst({
+      where: eq(schema.sessions.id, sessionId),
+    });
+
+    if (!existing) {
+      await this.db.insert(schema.sessions).values({
+        id: sessionId,
+        title: "New Session",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+  }
+
+  /**
    * List all sessions with metadata (message count, last activity)
    */
   async listSessions(): Promise<SessionWithMetadata[]> {
+    // Get all sessions with their last message for activity timestamp
     const sessionsData = await this.db.query.sessions.findMany({
       with: {
         messages: {
@@ -63,8 +84,22 @@ export class SessionService {
       orderBy: desc(schema.sessions.updatedAt),
     });
 
+    // Get message counts for all sessions
+    const messageCounts = await this.db
+      .select({
+        sessionId: schema.messages.sessionId,
+        count: count(),
+      })
+      .from(schema.messages)
+      .groupBy(schema.messages.sessionId);
+
+    // Create a map for quick lookup
+    const countMap = new Map(
+      messageCounts.map((mc) => [mc.sessionId, mc.count])
+    );
+
     return sessionsData.map((session) => {
-      const messageCount = session.messages.length;
+      const messageCount = countMap.get(session.id) || 0;
       const lastMessage = session.messages[0];
       const lastActivity = lastMessage?.createdAt || session.updatedAt;
 
@@ -151,11 +186,16 @@ export class SessionService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    // Serialize content: only stringify if not already a string
+    const serializedContent = typeof input.content === 'string'
+      ? input.content
+      : JSON.stringify(input.content);
+
     const message = {
       id: randomUUID(),
       sessionId,
       role: input.role,
-      content: JSON.stringify(input.content),
+      content: serializedContent,
       toolName: input.toolName || null,
       stepIdx: input.stepIdx || null,
       createdAt: new Date(),
@@ -213,11 +253,25 @@ export class SessionService {
    */
   async loadMessages(sessionId: string): Promise<any[]> {
     const session = await this.getSessionById(sessionId);
-    
-    return session.messages.map((msg: any) => ({
-      role: msg.role,
-      content: typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content
-    }));
+
+    return session.messages.map((msg: any) => {
+      let content = msg.content;
+
+      // Parse JSON content if it's a string
+      if (typeof content === 'string') {
+        try {
+          content = JSON.parse(content);
+        } catch {
+          // If parsing fails, use as plain string (for user messages)
+          // This handles both valid JSON strings and plain text
+        }
+      }
+
+      return {
+        role: msg.role,
+        content,
+      };
+    });
   }
 
   /**

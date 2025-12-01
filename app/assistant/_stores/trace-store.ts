@@ -10,6 +10,7 @@ export type TraceEntryType =
 	| "trace-start"
 	| "prompt-sent"
 	| "llm-response"
+	| "text-streaming" // LLM generating text (updated in place as tokens stream)
 	| "tools-available" // List of tools passed to the agent
 	| "model-info" // Model ID and pricing info
 	| "tool-call" // Tool call - updated in place with output/error when complete
@@ -31,7 +32,8 @@ export type TraceEntryType =
 	| "retry-attempt" // Retry with backoff
 	| "session-loaded" // Previous messages loaded
 	| "system-log" // General log from backend
-	| "system-prompt"; // Compiled system prompt (for inspection)
+	| "system-prompt" // Compiled system prompt (for inspection)
+	| "user-prompt"; // User prompt with token count
 
 export type TraceLevel = "debug" | "info" | "warn" | "error";
 
@@ -82,6 +84,20 @@ export interface TraceMetrics {
 	errorCount: number;
 }
 
+// Conversation log represents a single user->agent exchange
+export interface ConversationLog {
+	id: string;
+	sessionId: string;
+	conversationIndex: number;
+	userPrompt: string;
+	startedAt: Date;
+	completedAt: Date | null;
+	metrics: TraceMetrics | null;
+	modelInfo: { modelId: string; pricing: ModelPricing | null } | null;
+	entries: TraceEntry[];
+	isLive?: boolean; // True if this conversation is currently streaming
+}
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -106,9 +122,15 @@ interface TraceState {
 	isModalOpen: boolean;
 	modalEntry: TraceEntry | null;
 
+	// Conversation logs - persisted logs loaded from DB
+	conversationLogs: ConversationLog[];
+	activeSessionId: string | null;
+	expandedConversationIds: Set<string>; // Which conversations are expanded
+
 	// Actions
 	addEntry: (entry: Omit<TraceEntry, "id"> & { id?: string }) => void;
 	updateEntry: (id: string, updates: Partial<TraceEntry>) => void;
+	deleteEntry: (id: string) => void;
 	completeEntry: (id: string, output?: unknown, error?: TraceEntry["error"]) => void;
 	setModelInfo: (traceId: string, modelId: string, pricing: ModelPricing | null) => void;
 	setActiveTrace: (traceId: string | null) => void;
@@ -119,11 +141,21 @@ interface TraceState {
 	clearTrace: (traceId?: string) => void;
 	clearAllTraces: () => void;
 
+	// Conversation log actions
+	loadConversationLogs: (sessionId: string, logs: ConversationLog[]) => void;
+	addConversationLog: (log: ConversationLog) => void;
+	setActiveSession: (sessionId: string | null) => void;
+	toggleConversationExpanded: (conversationId: string) => void;
+	setConversationExpanded: (conversationId: string, expanded: boolean) => void;
+	getConversationLogs: () => ConversationLog[];
+
 	// Export utilities
 	exportTrace: (traceId: string) => string;
 	copyAllLogs: () => Promise<void>;
 	getFilteredEntries: () => TraceEntry[];
 	getMetrics: () => TraceMetrics;
+	getTotalMetrics: () => TraceMetrics;
+	getTotalEventCount: () => number;
 }
 
 const DEFAULT_FILTERS: TraceFilters = {
@@ -143,6 +175,9 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 	selectedEntryId: null,
 	isModalOpen: false,
 	modalEntry: null,
+	conversationLogs: [],
+	activeSessionId: null,
+	expandedConversationIds: new Set(),
 
 	addEntry: (entry) => {
 		const id = entry.id || crypto.randomUUID();
@@ -187,6 +222,23 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 				if (index !== -1) {
 					const updatedEntries = [...entries];
 					updatedEntries[index] = { ...updatedEntries[index], ...updates };
+					newEntriesByTrace.set(traceId, updatedEntries);
+					break;
+				}
+			}
+
+			return { entriesByTrace: newEntriesByTrace };
+		});
+	},
+
+	deleteEntry: (id) => {
+		set((state) => {
+			const newEntriesByTrace = new Map(state.entriesByTrace);
+
+			for (const [traceId, entries] of newEntriesByTrace) {
+				const index = entries.findIndex((e) => e.id === id);
+				if (index !== -1) {
+					const updatedEntries = entries.filter((e) => e.id !== id);
 					newEntriesByTrace.set(traceId, updatedEntries);
 					break;
 				}
@@ -289,7 +341,109 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			selectedEntryId: null,
 			isModalOpen: false,
 			modalEntry: null,
+			// Also clear conversation logs when switching sessions
+			conversationLogs: [],
+			expandedConversationIds: new Set(),
 		});
+	},
+
+	// Conversation log actions
+	loadConversationLogs: (sessionId, logs) => {
+		set({
+			conversationLogs: logs,
+			activeSessionId: sessionId,
+			// Auto-expand ALL conversations by default
+			expandedConversationIds: new Set(logs.map((l) => l.id)),
+		});
+	},
+
+	addConversationLog: (log) => {
+		set((state) => {
+			// Check if this conversation already exists (update it)
+			const existingIndex = state.conversationLogs.findIndex((l) => l.id === log.id);
+			if (existingIndex !== -1) {
+				const newLogs = [...state.conversationLogs];
+				newLogs[existingIndex] = log;
+				return { conversationLogs: newLogs };
+			}
+			// Add new conversation - collapse all others, only expand the new one
+			return {
+				conversationLogs: [...state.conversationLogs, log],
+				expandedConversationIds: new Set([log.id]),
+			};
+		});
+	},
+
+	setActiveSession: (sessionId) => {
+		set({
+			activeSessionId: sessionId,
+			// Clear logs when switching sessions - they'll be reloaded
+			conversationLogs: sessionId === null ? [] : get().conversationLogs,
+			expandedConversationIds: new Set(),
+		});
+	},
+
+	toggleConversationExpanded: (conversationId) => {
+		set((state) => {
+			const newExpanded = new Set(state.expandedConversationIds);
+			if (newExpanded.has(conversationId)) {
+				newExpanded.delete(conversationId);
+			} else {
+				newExpanded.add(conversationId);
+			}
+			return { expandedConversationIds: newExpanded };
+		});
+	},
+
+	setConversationExpanded: (conversationId, expanded) => {
+		set((state) => {
+			const newExpanded = new Set(state.expandedConversationIds);
+			if (expanded) {
+				newExpanded.add(conversationId);
+			} else {
+				newExpanded.delete(conversationId);
+			}
+			return { expandedConversationIds: newExpanded };
+		});
+	},
+
+	getConversationLogs: () => {
+		const state = get();
+		// Just return persisted logs - live traces are added via addConversationLog during streaming
+		return state.conversationLogs;
+	},
+
+	// Get aggregated metrics across ALL conversation logs
+	getTotalMetrics: () => {
+		const state = get();
+		const totals: TraceMetrics = {
+			totalDuration: 0,
+			toolCallCount: 0,
+			stepCount: 0,
+			tokens: { input: 0, output: 0 },
+			cost: 0,
+			errorCount: 0,
+		};
+
+		for (const log of state.conversationLogs) {
+			if (log.metrics) {
+				totals.totalDuration += log.metrics.totalDuration || 0;
+				totals.toolCallCount += log.metrics.toolCallCount || 0;
+				totals.stepCount += log.metrics.stepCount || 0;
+				totals.tokens.input += log.metrics.tokens?.input || 0;
+				totals.tokens.output += log.metrics.tokens?.output || 0;
+				totals.cost += log.metrics.cost || 0;
+				totals.errorCount += log.metrics.errorCount || 0;
+			}
+		}
+
+		return totals;
+	},
+
+	// Get total event count across all conversations
+	getTotalEventCount: () => {
+		const state = get();
+		return state.conversationLogs.reduce((count, log) => count + (log.entries?.length || 0), 0);
 	},
 
 	exportTrace: (traceId) => {
@@ -312,22 +466,78 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 
 	copyAllLogs: async () => {
 		const state = get();
-		const entries = state.getFilteredEntries();
+		const allLogs = state.conversationLogs;
 
-		const logText = entries
-			.map((e) => {
-				const time = new Date(e.timestamp).toISOString();
-				const duration = e.duration ? ` (${e.duration}ms)` : "";
-				const tool = e.toolName ? ` [${e.toolName}]` : "";
-				const inputStr = e.input ? `\n  Input: ${JSON.stringify(e.input)}` : "";
-				const outputStr = e.output ? `\n  Output: ${JSON.stringify(e.output)}` : "";
-				const errorStr = e.error ? `\n  Error: ${e.error.message}` : "";
+		if (allLogs.length === 0) {
+			await navigator.clipboard.writeText("No conversation logs to copy.");
+			return;
+		}
 
-				return `[${time}] [${e.type}]${tool}${duration}\n  ${e.summary}${inputStr}${outputStr}${errorStr}`;
-			})
-			.join("\n\n");
+		// Sort conversations by index
+		const sortedLogs = [...allLogs].sort((a, b) => a.conversationIndex - b.conversationIndex);
 
-		await navigator.clipboard.writeText(logText);
+		// Format a single entry
+		const formatEntry = (e: TraceEntry): string => {
+			const time = new Date(e.timestamp).toISOString();
+			const duration = e.duration ? ` (${e.duration}ms)` : "";
+			const tool = e.toolName ? ` [${e.toolName}]` : "";
+			const inputStr = e.input ? `\n  Input: ${JSON.stringify(e.input, null, 2).split('\n').map((l, i) => i === 0 ? l : '  ' + l).join('\n')}` : "";
+			const outputStr = e.output ? `\n  Output: ${JSON.stringify(e.output, null, 2).split('\n').map((l, i) => i === 0 ? l : '  ' + l).join('\n')}` : "";
+			const errorStr = e.error ? `\n  Error: ${e.error.message}` : "";
+
+			return `[${time}] [${e.type}]${tool}${duration}\n  ${e.summary}${inputStr}${outputStr}${errorStr}`;
+		};
+
+		// Build the full log text
+		const sections: string[] = [];
+
+		// Header
+		sections.push(`# Session Logs`);
+		sections.push(`Exported: ${new Date().toISOString()}`);
+		sections.push(`Total Conversations: ${sortedLogs.length}`);
+		sections.push(`Total Events: ${sortedLogs.reduce((sum, log) => sum + (log.entries?.length || 0), 0)}`);
+		sections.push("");
+
+		// Track if we've included system prompt
+		let systemPromptIncluded = false;
+
+		// Process each conversation
+		for (const log of sortedLogs) {
+			const entries = log.entries || [];
+
+			// Add conversation header
+			sections.push(`${"=".repeat(80)}`);
+			sections.push(`## Conversation ${log.conversationIndex + 1}: ${log.userPrompt || "Unknown"}`);
+			sections.push(`Started: ${log.startedAt?.toISOString() || "N/A"}`);
+			if (log.completedAt) {
+				sections.push(`Completed: ${log.completedAt.toISOString()}`);
+			}
+			if (log.metrics) {
+				const m = log.metrics;
+				sections.push(`Metrics: ${formatDuration(m.totalDuration)} | ${m.toolCallCount} tools | ${m.stepCount} steps | ${m.tokens?.input || 0} in / ${m.tokens?.output || 0} out`);
+			}
+			sections.push(`${"=".repeat(80)}`);
+			sections.push("");
+
+			// Process entries
+			for (const entry of entries) {
+				// Include system prompt only once (first occurrence)
+				if (entry.type === "system-prompt") {
+					if (!systemPromptIncluded) {
+						sections.push(formatEntry(entry));
+						sections.push("");
+						systemPromptIncluded = true;
+					}
+					// Skip subsequent system prompts
+					continue;
+				}
+
+				sections.push(formatEntry(entry));
+				sections.push("");
+			}
+		}
+
+		await navigator.clipboard.writeText(sections.join("\n"));
 	},
 
 	getFilteredEntries: () => {
@@ -427,11 +637,12 @@ export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
 	"trace-start": "bg-slate-500",
 	"prompt-sent": "bg-blue-500",
 	"llm-response": "bg-indigo-500",
+	"text-streaming": "bg-violet-500",
 	"tools-available": "bg-amber-600",
 	"model-info": "bg-cyan-600",
 	"tool-call": "bg-amber-500",
-	"step-start": "bg-indigo-400",
-	"step-complete": "bg-green-500",
+	"step-start": "bg-emerald-500",
+	"step-complete": "bg-emerald-500",
 	"approval-request": "bg-orange-500",
 	"approval-response": "bg-cyan-500",
 	"confirmation-required": "bg-orange-400",
@@ -449,12 +660,14 @@ export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
 	"session-loaded": "bg-violet-500",
 	"system-log": "bg-gray-400",
 	"system-prompt": "bg-pink-500",
+	"user-prompt": "bg-blue-600",
 };
 
 export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
 	"trace-start": "Start",
 	"prompt-sent": "Prompt",
 	"llm-response": "Response",
+	"text-streaming": "Generating",
 	"tools-available": "Tools",
 	"model-info": "Model",
 	"tool-call": "Tool",
@@ -476,7 +689,8 @@ export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
 	"retry-attempt": "Retry",
 	"session-loaded": "Session",
 	"system-log": "Log",
-	"system-prompt": "Prompt",
+	"system-prompt": "System",
+	"user-prompt": "User",
 };
 
 export function formatDuration(ms: number): string {

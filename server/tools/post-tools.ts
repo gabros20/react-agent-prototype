@@ -96,14 +96,21 @@ export const cmsUpdatePost = tool({
       throw new Error(`Post "${input.postSlug}" not found`)
     }
 
+    // Auto-sync: If content.cover is set but featuredImage isn't, copy the URL
+    // This ensures templates that use featuredImage will display the correct image
+    let featuredImageToUpdate = input.updates.featuredImage
+    if (input.updates.content?.cover?.url && !featuredImageToUpdate) {
+      featuredImageToUpdate = input.updates.content.cover.url
+    }
+
     // Update metadata if provided
     if (input.updates.title || input.updates.author || input.updates.excerpt ||
-        input.updates.featuredImage || input.updates.category) {
+        featuredImageToUpdate || input.updates.category) {
       await ctx.services.entryService.updateEntryMetadata(entry.id, {
         title: input.updates.title,
         author: input.updates.author,
         excerpt: input.updates.excerpt,
-        featuredImage: input.updates.featuredImage,
+        featuredImage: featuredImageToUpdate,
         category: input.updates.category
       })
     }
