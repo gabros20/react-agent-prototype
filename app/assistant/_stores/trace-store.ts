@@ -190,6 +190,12 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 		set((state) => {
 			const newEntriesByTrace = new Map(state.entriesByTrace);
 			const traceEntries = newEntriesByTrace.get(fullEntry.traceId) || [];
+
+			// Prevent duplicate IDs - if entry with this ID exists, skip
+			if (traceEntries.some((e) => e.id === id)) {
+				return state;
+			}
+
 			newEntriesByTrace.set(fullEntry.traceId, [...traceEntries, fullEntry]);
 
 			// Track new trace IDs

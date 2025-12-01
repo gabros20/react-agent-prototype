@@ -6,6 +6,7 @@ import { EnhancedDebugPanel } from './_components/enhanced-debug';
 import { SessionSidebar } from './_components/session-sidebar';
 import { useSessionStore } from './_stores/session-store';
 import { useChatStore } from './_stores/chat-store';
+import { useWorkerEvents } from './_hooks/use-worker-events';
 import { Bot } from 'lucide-react';
 import {
   ResizablePanelGroup,
@@ -18,6 +19,10 @@ export default function AssistantPage() {
   const loadSessions = useSessionStore((state) => state.loadSessions);
   const createSession = useSessionStore((state) => state.createSession);
   const setSessionId = useChatStore((state) => state.setSessionId);
+
+  // Subscribe to worker events (image processing, etc.)
+  // This connects via SSE and adds events to the trace store
+  useWorkerEvents();
 
   // Initialize session on mount
   useEffect(() => {

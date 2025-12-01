@@ -7,9 +7,11 @@ import { errorHandler } from "./middleware/error-handler";
 import { createCMSRoutes } from "./routes/cms";
 import { createAgentRoutes } from "./routes/agent";
 import { createSessionRoutes } from "./routes/sessions";
+import { createWorkerEventsRoutes } from "./routes/worker-events";
 import uploadRoutes from "./routes/upload";
 import imageRoutes from "./routes/images";
 import { ServiceContainer } from "./services/service-container";
+import { getSubscriber } from "./services/worker-events.service";
 
 const app = express();
 const PORT = process.env.EXPRESS_PORT || 8787;
@@ -48,12 +50,18 @@ async function startServer() {
     const services = await ServiceContainer.initialize(db);
     console.log("✓ Services initialized");
 
+    // Initialize worker events subscriber for SSE
+    const workerEventSubscriber = getSubscriber();
+    await workerEventSubscriber.subscribe();
+    console.log("✓ Worker events subscriber initialized");
+
     // Routes
     app.use("/api", uploadRoutes);
     app.use("/api", imageRoutes);
     app.use("/v1/teams/:team/sites/:site/environments/:env", createCMSRoutes(services));
     app.use("/v1/agent", createAgentRoutes(services));
     app.use("/v1/sessions", createSessionRoutes(services));
+    app.use("/v1/worker-events", createWorkerEventsRoutes());
 
     // Serve uploaded images
     const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
@@ -83,6 +91,7 @@ async function startServer() {
       console.log(`   Health: http://localhost:${PORT}/health`);
       console.log(`   CMS API: http://localhost:${PORT}/v1/teams/dev-team/sites/local-site/environments/main`);
       console.log(`   Agent: http://localhost:${PORT}/v1/agent/stream`);
+      console.log(`   Worker Events: http://localhost:${PORT}/v1/worker-events/stream`);
       console.log(`   Images: http://localhost:${PORT}/api/images`);
       console.log(`   Upload: http://localhost:${PORT}/api/upload`);
       console.log(`   Uploads: http://localhost:${PORT}/uploads/`);

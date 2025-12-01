@@ -116,7 +116,10 @@ tool1.call(); tool2.call();  // Which took longer? Why did retry happen?
 | `app/assistant/_components/enhanced-debug/working-memory-panel.tsx` | Entity visualization   |
 | `app/assistant/_components/enhanced-debug/json-viewer.tsx` | Collapsible JSON display       |
 | `app/assistant/_hooks/use-agent.ts`                    | SSE parsing, pattern detection    |
+| `app/assistant/_hooks/use-worker-events.ts`            | Worker events SSE consumer        |
 | `server/agent/orchestrator.ts`                         | system-prompt emission            |
+| `server/services/worker-events.service.ts`             | Redis pub/sub for worker events   |
+| `server/routes/worker-events.ts`                       | Worker events SSE endpoint        |
 
 ---
 
@@ -543,9 +546,11 @@ return JSON.stringify(exportData, null, 2);
 | ---------------------------- | ------------------------------------ |
 | Layer 3.1 (ReAct Loop)       | Emits step events, system prompt     |
 | Layer 3.3 (Working Memory)   | Entity tracking visualization        |
+| Layer 5.1 (Redis Connection) | Worker events pub/sub channel        |
+| Layer 5.3 (Worker Lifecycle) | Publishes job lifecycle events       |
 | Layer 5.4 (Job Processors)   | Job status events                    |
 | Layer 6.1 (State Management) | trace-store alongside other stores   |
-| Layer 6.2 (SSE Streaming)    | All events flow through SSE          |
+| Layer 6.2 (SSE Streaming)    | Agent + worker events flow via SSE   |
 | Layer 6.5 (HITL UI)          | Approval events in timeline          |
 
 ---
@@ -658,6 +663,123 @@ console.log('Filtered count:', useTraceStore.getState().getFilteredEntries().len
 - Modal used for viewing large JSON instead of inline expansion
 - Clear trace option to free memory on long sessions
 - Virtual scrolling possible for very long traces (future)
+
+---
+
+## Worker Events Streaming
+
+Background job events (image processing) are streamed to the debug panel via a dedicated Redis pub/sub → SSE pipeline. This allows real-time visibility into worker activity even though workers run in a separate process.
+
+### Architecture
+
+```
+┌─────────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
+│   Worker Process    │      │    Main Server      │      │      Browser        │
+│                     │      │                     │      │                     │
+│  BullMQ Worker      │      │  Redis Subscriber   │      │  EventSource        │
+│  ├─ on('active')    │      │  ├─ on('message')   │      │  ├─ worker-event    │
+│  ├─ on('completed') │─────▶│  └─ forward to SSE  │─────▶│  └─ addEntry()      │
+│  └─ on('failed')    │      │                     │      │                     │
+│                     │      │  /v1/worker-events  │      │  useWorkerEvents()  │
+│  WorkerEventPublisher      │  /stream            │      │                     │
+└─────────────────────┘      └─────────────────────┘      └─────────────────────┘
+        │                              │
+        │     Redis Pub/Sub            │
+        └───── worker:events ──────────┘
+```
+
+### Key Files
+
+| File                                           | Purpose                              |
+| ---------------------------------------------- | ------------------------------------ |
+| `server/services/worker-events.service.ts`     | Redis pub/sub publisher/subscriber   |
+| `server/routes/worker-events.ts`               | SSE endpoint for worker events       |
+| `server/workers/image-worker.ts`               | Publishes job lifecycle events       |
+| `server/queues/image-queue.ts`                 | Publishes job-queued events          |
+| `app/assistant/_hooks/use-worker-events.ts`    | SSE consumer, adds to trace store    |
+
+### Event Flow
+
+```typescript
+// 1. Worker publishes event via Redis
+await eventPublisher.jobCompleted(jobId, 'generate-metadata', imageId, duration);
+
+// 2. Publisher sends to Redis channel
+await redis.publish('worker:events', JSON.stringify(event));
+
+// 3. Main server subscriber receives event
+subscriber.on('message', (channel, message) => {
+  const event = JSON.parse(message);
+  this.emit('event', event);
+});
+
+// 4. SSE route forwards to connected clients
+eventSource.addEventListener('worker-event', (e) => {
+  const event = JSON.parse(e.data);
+  handleWorkerEvent(event);
+});
+
+// 5. Frontend adds to trace store
+addEntry({
+  traceId,
+  type: 'job-complete',
+  summary: `✅ Completed: ${jobName} for ${imageId}... in ${duration}ms`,
+});
+```
+
+### Worker Event Types
+
+| Event Type      | Trigger                      | Summary Example                                      |
+| --------------- | ---------------------------- | ---------------------------------------------------- |
+| `job-queued`    | Job added to queue           | 📥 Queued: generate-metadata for abc123... (3 in queue) |
+| `job-active`    | Worker starts processing     | ⚙️ Processing: generate-metadata for abc123... (attempt 1/3) |
+| `job-progress`  | Progress update (throttled)  | ⏳ generate-metadata: 50% for abc123...              |
+| `job-completed` | Job finished successfully    | ✅ Completed: generate-metadata for abc123... in 2500ms |
+| `job-failed`    | Job failed                   | ❌ Failed: generate-metadata for abc123... (attempt 2/3) |
+
+### Progress Throttling
+
+To avoid flooding the SSE stream, progress events are throttled:
+
+```typescript
+// Only publish every 500ms or at milestones (10%, 50%, 90%, 100%)
+const isMilestone = [10, 50, 90, 100].includes(progress);
+if (isMilestone || now - lastPublish > 500) {
+  await eventPublisher.jobProgress(jobId, jobName, imageId, progress);
+}
+```
+
+### Connection Management
+
+The `useWorkerEvents` hook manages the SSE connection lifecycle:
+
+```typescript
+// Connect on mount
+useEffect(() => {
+  connect();
+  return () => disconnect();
+}, []);
+
+// Reconnect with exponential backoff on disconnect
+const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
+setTimeout(connect, delay);
+```
+
+### Initial Queue Status
+
+When a client connects, they receive current queue status:
+
+```typescript
+// Server sends on connection
+writeSSE('connected', {
+  queueStatus: {
+    waiting: waitingCount,
+    active: activeCount,
+    completed: completedCount,
+    failed: failedCount,
+  },
+});
+```
 
 ---
 

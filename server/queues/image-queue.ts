@@ -1,11 +1,21 @@
 import { Queue, QueueEvents } from "bullmq";
 import Redis from "ioredis";
+import { getPublisher } from "../services/worker-events.service";
 
 const connection = new Redis({
 	host: process.env.REDIS_HOST || "localhost",
 	port: parseInt(process.env.REDIS_PORT || "6379", 10),
 	maxRetriesPerRequest: null,
 });
+
+// Event publisher - initialized lazily
+let eventPublisher: ReturnType<typeof getPublisher> | null = null;
+function getEventPublisher() {
+	if (!eventPublisher) {
+		eventPublisher = getPublisher();
+	}
+	return eventPublisher;
+}
 
 // Redis connection events
 connection.on("connect", () => {
@@ -37,8 +47,20 @@ export const imageQueue = new Queue("image-processing", {
 // Queue events (uses QueueEvents for job lifecycle events)
 const queueEvents = new QueueEvents("image-processing", { connection });
 
-queueEvents.on("added", ({ jobId, name }) => {
+queueEvents.on("added", async ({ jobId, name }) => {
 	console.log(`📥 [Queue] Job ${name} queued (${jobId})`);
+
+	// Get queue size and publish event
+	try {
+		const waitingCount = await imageQueue.getWaitingCount();
+		const job = await imageQueue.getJob(jobId);
+		const imageId = job?.data?.imageId || "unknown";
+
+		await getEventPublisher().jobQueued(jobId, name, imageId, waitingCount);
+	} catch (error) {
+		// Don't fail job queueing if event publishing fails
+		console.warn("[Queue] Failed to publish queued event:", error);
+	}
 });
 
 queueEvents.on("failed", ({ jobId, failedReason }) => {

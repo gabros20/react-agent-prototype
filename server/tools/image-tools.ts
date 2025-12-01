@@ -64,15 +64,15 @@ export const findImageTool: any = tool({
  * Score interpretation: closer to 0 = better match, -0.3 or better is strong, -0.5 is moderate, -0.7+ is weak
  */
 export const searchImagesTool: any = tool({
-	description: "Search for images using semantic similarity. IMPORTANT: Expand short queries with descriptive keywords (e.g., 'AI' → 'artificial intelligence robot technology futuristic'). Returns ranked results with relevance: 'strong' (score >= -0.3), 'moderate' (-0.3 to -0.5), 'weak' (< -0.5). Default filter excludes weak matches. Only show relevant results to user - if all weak, tell user no good matches found.",
+	description: "Search for images using semantic similarity. IMPORTANT: Expand short queries with descriptive keywords (e.g., 'AI' → 'artificial intelligence robot technology futuristic', 'money plant' → 'indoor plant greenery botanical houseplant'). Returns ranked results with relevance: 'strong' (score >= -0.3), 'moderate' (-0.3 to -0.6), 'weak' (< -0.6). Default filter includes moderate matches.",
 	inputSchema: z.object({
 		query: z.string().describe("Search query - use multiple descriptive keywords for better results"),
 		limit: z.number().optional().describe("Max results (default: 5)"),
-		minScore: z.number().optional().describe("Minimum score threshold (default: -0.5 for moderate+strong only, use -0.8 to include weak matches)"),
+		minScore: z.number().optional().describe("Minimum score threshold (default: -0.7)"),
 	}),
 	execute: async (input: { query: string; limit?: number; minScore?: number }): Promise<any> => {
-		// Default minScore -0.5 to filter out weak matches automatically
-		const { query, limit = 5, minScore = -0.5 } = input;
+		// Default minScore -0.7 to include moderate matches
+		const { query, limit = 5, minScore = -0.7 } = input;
 		try {
 			const { ServiceContainer } = await import("../services/service-container");
 			const vectorIndex = ServiceContainer.get().vectorIndex;
@@ -102,9 +102,8 @@ export const searchImagesTool: any = tool({
 					url: img?.cdnUrl ?? (img?.filePath ? `/uploads/${img.filePath}` : undefined),
 					description: r.description,
 					score: r.score,
-					// Score thresholds matching prompt guidance
-					// -0.3 or better = strong, -0.3 to -0.5 = moderate, below -0.5 = weak
-					relevance: r.score >= -0.3 ? "strong" : r.score >= -0.5 ? "moderate" : "weak",
+					// Score thresholds: -0.3 or better = strong, -0.3 to -0.6 = moderate, below -0.6 = weak
+					relevance: r.score >= -0.3 ? "strong" : r.score >= -0.6 ? "moderate" : "weak",
 				};
 			});
 

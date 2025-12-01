@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { Worker, Job } from "bullmq";
 import Redis from "ioredis";
 import { imageQueue } from "../queues/image-queue";
 import { generateImageMetadata } from "../services/ai/metadata-generation.service";
@@ -13,8 +13,24 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { getPublisher, WorkerEventPublisher } from "../services/worker-events.service";
+import { VectorIndexService } from "../services/vector-index";
 
 const uploadsDir = process.env.UPLOADS_DIR || "./uploads";
+
+// Event publisher for UI debugging
+let eventPublisher: WorkerEventPublisher;
+
+// Vector index service (initialized on first use)
+let vectorIndex: VectorIndexService | null = null;
+async function getVectorIndex(): Promise<VectorIndexService> {
+	if (!vectorIndex) {
+		vectorIndex = new VectorIndexService(process.env.LANCEDB_DIR || "data/lancedb");
+		await vectorIndex.initialize();
+		console.log("✅ [Worker] Vector index initialized");
+	}
+	return vectorIndex;
+}
 
 // Redis connection with logging
 const redisConnection = new Redis({
@@ -25,6 +41,8 @@ const redisConnection = new Redis({
 
 redisConnection.on("connect", () => {
 	console.log("✅ [Worker] Redis connected");
+	// Initialize event publisher after Redis is ready
+	eventPublisher = getPublisher();
 });
 
 redisConnection.on("error", (err) => {
@@ -34,6 +52,26 @@ redisConnection.on("error", (err) => {
 redisConnection.on("close", () => {
 	console.log("⚠️  [Worker] Redis connection closed");
 });
+
+// Helper to publish progress events (debounced to avoid flooding)
+const progressThrottleMap = new Map<string, number>();
+async function publishProgress(job: Job, progress: number) {
+	const key = job.id || "";
+	const now = Date.now();
+	const lastPublish = progressThrottleMap.get(key) || 0;
+
+	// Only publish every 500ms or at key milestones (10, 50, 90, 100)
+	const isMilestone = [10, 50, 90, 100].includes(progress);
+	if (isMilestone || now - lastPublish > 500) {
+		progressThrottleMap.set(key, now);
+		await eventPublisher?.jobProgress(
+			job.id || "unknown",
+			job.name,
+			job.data.imageId || "unknown",
+			progress
+		);
+	}
+}
 
 const worker = new Worker(
 	"image-processing",
@@ -79,21 +117,24 @@ const worker = new Worker(
 	}
 );
 
-async function processMetadata(job: any) {
+async function processMetadata(job: Job) {
 	const { imageId, filePath } = job.data;
 
 	await job.updateProgress(10);
+	await publishProgress(job, 10);
 
 	// Read file from disk
 	const fullPath = path.join(uploadsDir, filePath);
 	const buffer = await fs.readFile(fullPath);
 
 	await job.updateProgress(20);
+	await publishProgress(job, 20);
 
 	// Generate metadata with GPT-4o-mini
 	const metadata = await generateImageMetadata(buffer);
 
 	await job.updateProgress(50);
+	await publishProgress(job, 50);
 
 	// Store in database (upsert - preserve source attribution from Pexels if exists)
 	await db
@@ -134,6 +175,7 @@ async function processMetadata(job: any) {
 		});
 
 	await job.updateProgress(80);
+	await publishProgress(job, 80);
 
 	// Queue embeddings job
 	await imageQueue.add(
@@ -147,16 +189,19 @@ async function processMetadata(job: any) {
 	);
 
 	await job.updateProgress(100);
+	await publishProgress(job, 100);
 }
 
-async function processVariants(job: any) {
+async function processVariants(job: Job) {
 	const { imageId, filePath } = job.data;
 
 	await job.updateProgress(10);
+	await publishProgress(job, 10);
 
 	const variants = await imageStorageService.generateVariants(imageId, filePath);
 
 	await job.updateProgress(60);
+	await publishProgress(job, 60);
 
 	// Store variants in database
 	for (const variant of variants) {
@@ -174,22 +219,24 @@ async function processVariants(job: any) {
 	}
 
 	await job.updateProgress(100);
+	await publishProgress(job, 100);
 }
 
-async function processEmbeddings(job: any) {
+async function processEmbeddings(job: Job) {
 	const { imageId, metadata, filePath } = job.data;
 
 	await job.updateProgress(10);
+	await publishProgress(job, 10);
 
 	try {
-		// Store in vector index (embeddings generated internally via OpenRouter)
-		const { ServiceContainer } = await import("../services/service-container");
-		const vectorIndex = ServiceContainer.get().vectorIndex;
+		// Get or initialize vector index for this worker process
+		const vi = await getVectorIndex();
 
 		await job.updateProgress(30);
+		await publishProgress(job, 30);
 
 		// Add to vector index - it will generate embeddings from searchableText using OpenRouter
-		await vectorIndex.add({
+		await vi.add({
 			id: imageId,
 			type: "image",
 			name: path.basename(filePath || "image"),
@@ -206,10 +253,11 @@ async function processEmbeddings(job: any) {
 		});
 
 		await job.updateProgress(90);
+		await publishProgress(job, 90);
 	} catch (error) {
 		console.error(`Failed to generate embeddings for image ${imageId}:`, error);
-		// Continue to mark as completed even if embeddings fail
-		// The image metadata is still usable, just not searchable via vector search
+		// Re-throw to mark job as failed - embeddings are important for search
+		throw error;
 	}
 
 	// Always update image status to completed
@@ -223,25 +271,61 @@ async function processEmbeddings(job: any) {
 		.where(eq(images.id, imageId));
 
 	await job.updateProgress(100);
+	await publishProgress(job, 100);
 }
 
-worker.on("completed", (job) => {
+worker.on("completed", async (job) => {
 	const duration = job.finishedOn ? job.finishedOn - (job.processedOn || job.timestamp) : 0;
 	console.log(`✅ [Worker] ${job.name} completed for ${job.data.imageId?.substring(0, 8)}... (${duration}ms)`);
+
+	// Publish completion event
+	await eventPublisher?.jobCompleted(
+		job.id || "unknown",
+		job.name,
+		job.data.imageId || "unknown",
+		duration
+	);
+
+	// Clean up throttle map
+	progressThrottleMap.delete(job.id || "");
 });
 
-worker.on("failed", (job, err) => {
-	const imageId = job?.data?.imageId?.substring(0, 8) || 'unknown';
-	console.error(`❌ [Worker] ${job?.name} failed for ${imageId}...:`, err.message);
+worker.on("failed", async (job, err) => {
+	const imageId = job?.data?.imageId || "unknown";
+	const shortId = imageId.substring(0, 8);
+	console.error(`❌ [Worker] ${job?.name} failed for ${shortId}...:`, err.message);
+
+	// Publish failure event
+	await eventPublisher?.jobFailed(
+		job?.id || "unknown",
+		job?.name || "unknown",
+		imageId,
+		err.message,
+		job?.attemptsMade,
+		job?.opts?.attempts || 3
+	);
+
+	// Clean up throttle map
+	progressThrottleMap.delete(job?.id || "");
 });
 
 worker.on("error", (err) => {
 	console.error("❌ [Worker] Worker error:", err.message);
 });
 
-worker.on("active", (job) => {
-	const imageId = job.data.imageId?.substring(0, 8) || 'unknown';
-	console.log(`⚙️  [Worker] Processing ${job.name} for ${imageId}...`);
+worker.on("active", async (job) => {
+	const imageId = job.data.imageId || "unknown";
+	const shortId = imageId.substring(0, 8);
+	console.log(`⚙️  [Worker] Processing ${job.name} for ${shortId}...`);
+
+	// Publish active event
+	await eventPublisher?.jobActive(
+		job.id || "unknown",
+		job.name,
+		imageId,
+		job.attemptsMade + 1, // attemptsMade is 0-indexed
+		job.opts?.attempts || 3
+	);
 });
 
 console.log("🚀 [Worker] Image processing worker started");
@@ -254,6 +338,7 @@ const shutdown = async (signal: string) => {
 	console.log(`\n⚠️  Received ${signal}, shutting down gracefully...`);
 	try {
 		await worker.close();
+		await eventPublisher?.close();
 		console.log("✅ Worker closed successfully");
 		process.exit(0);
 	} catch (error) {
