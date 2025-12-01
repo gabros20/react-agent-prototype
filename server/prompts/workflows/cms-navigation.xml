@@ -1,0 +1,48 @@
+<cms-navigation>
+<!--
+  Navigation management workflows.
+-->
+
+<structure>
+Navigation items have:
+- label: Display text
+- href: URL (use `/pages/{slug}?locale=en` format)
+- location: "header" | "footer" | "both"
+- visible: true/false (hide without deleting)
+</structure>
+
+<tools>
+- `cms_getNavigation` → list all nav items
+- `cms_addNavigationItem` → add new item
+- `cms_updateNavigationItem` → change href/location
+- `cms_toggleNavigationItem` → show/hide
+- `cms_removeNavigationItem` → delete
+</tools>
+
+<examples>
+**List navigation:**
+"What nav items do we have?" →
+cms_getNavigation() → [{label, href, location, visible}]
+
+**Add item:**
+"Add Services to navigation" →
+cms_addNavigationItem({label: "Services", href: "/pages/services?locale=en", location: "both"})
+
+**Update href:**
+"Change About link to /pages/company?locale=en" →
+cms_updateNavigationItem({label: "About", newHref: "/pages/company?locale=en"})
+
+**Hide item:**
+"Hide Contact from navigation" →
+cms_toggleNavigationItem({label: "Contact"}) → now hidden
+
+**Remove item:**
+"Delete Services link" →
+cms_removeNavigationItem({label: "Services"})
+
+**After page creation:**
+When creating pages, offer: "Add to navigation?"
+On "yes" → cms_addNavigationItem({label: pageName, href: "/pages/{slug}?locale=en", location: "both"})
+</examples>
+
+</cms-navigation>

@@ -10,11 +10,14 @@ export type TraceEntryType =
 	| "trace-start"
 	| "prompt-sent"
 	| "llm-response"
+	| "tools-available" // List of tools passed to the agent
+	| "model-info" // Model ID and pricing info
 	| "tool-call" // Tool call - updated in place with output/error when complete
+	| "step-start"
 	| "step-complete"
 	| "approval-request"
 	| "approval-response"
-	| "confirmation-required" // Tool asks for confirmation (confirmed flag pattern)
+	| "confirmation-required" // Tool returned requiresConfirmation (confirmed flag pattern)
 	| "job-queued"
 	| "job-progress"
 	| "job-complete"
@@ -65,11 +68,17 @@ export interface TraceFilters {
 	showJobEvents: boolean;
 }
 
+export interface ModelPricing {
+	prompt: number; // $ per million tokens
+	completion: number; // $ per million tokens
+}
+
 export interface TraceMetrics {
 	totalDuration: number;
 	toolCallCount: number;
 	stepCount: number;
 	tokens: { input: number; output: number };
+	cost: number; // Calculated cost in $
 	errorCount: number;
 }
 
@@ -82,6 +91,9 @@ interface TraceState {
 	entriesByTrace: Map<string, TraceEntry[]>;
 	allTraceIds: string[];
 	activeTraceId: string | null;
+
+	// Model and pricing per trace
+	modelInfoByTrace: Map<string, { modelId: string; pricing: ModelPricing | null }>;
 
 	// Timing tracking for duration calculation
 	pendingTimings: Map<string, number>; // id -> startTime
@@ -98,6 +110,7 @@ interface TraceState {
 	addEntry: (entry: Omit<TraceEntry, "id"> & { id?: string }) => void;
 	updateEntry: (id: string, updates: Partial<TraceEntry>) => void;
 	completeEntry: (id: string, output?: unknown, error?: TraceEntry["error"]) => void;
+	setModelInfo: (traceId: string, modelId: string, pricing: ModelPricing | null) => void;
 	setActiveTrace: (traceId: string | null) => void;
 	setFilters: (filters: Partial<TraceFilters>) => void;
 	setSelectedEntry: (id: string | null) => void;
@@ -124,6 +137,7 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 	entriesByTrace: new Map(),
 	allTraceIds: [],
 	activeTraceId: null,
+	modelInfoByTrace: new Map(),
 	pendingTimings: new Map(),
 	filters: DEFAULT_FILTERS,
 	selectedEntryId: null,
@@ -215,6 +229,14 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 		});
 	},
 
+	setModelInfo: (traceId, modelId, pricing) => {
+		set((state) => {
+			const newModelInfoByTrace = new Map(state.modelInfoByTrace);
+			newModelInfoByTrace.set(traceId, { modelId, pricing });
+			return { modelInfoByTrace: newModelInfoByTrace };
+		});
+	},
+
 	setActiveTrace: (traceId) => {
 		set({ activeTraceId: traceId, selectedEntryId: null });
 	},
@@ -262,6 +284,7 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			entriesByTrace: new Map(),
 			allTraceIds: [],
 			activeTraceId: null,
+			modelInfoByTrace: new Map(),
 			pendingTimings: new Map(),
 			selectedEntryId: null,
 			isModalOpen: false,
@@ -347,12 +370,14 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 	getMetrics: () => {
 		const state = get();
 		const entries = state.entriesByTrace.get(state.activeTraceId || "") || [];
+		const modelInfo = state.modelInfoByTrace.get(state.activeTraceId || "");
 
 		const metrics: TraceMetrics = {
 			totalDuration: 0,
 			toolCallCount: 0,
 			stepCount: 0,
 			tokens: { input: 0, output: 0 },
+			cost: 0,
 			errorCount: 0,
 		};
 
@@ -383,6 +408,13 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			}
 		}
 
+		// Calculate cost if we have pricing info
+		if (modelInfo?.pricing) {
+			const { prompt, completion } = modelInfo.pricing;
+			// pricing is $ per million tokens
+			metrics.cost = (metrics.tokens.input / 1_000_000) * prompt + (metrics.tokens.output / 1_000_000) * completion;
+		}
+
 		return metrics;
 	},
 }));
@@ -395,8 +427,11 @@ export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
 	"trace-start": "bg-slate-500",
 	"prompt-sent": "bg-blue-500",
 	"llm-response": "bg-indigo-500",
+	"tools-available": "bg-amber-600",
+	"model-info": "bg-cyan-600",
 	"tool-call": "bg-amber-500",
-	"step-complete": "bg-purple-500",
+	"step-start": "bg-indigo-400",
+	"step-complete": "bg-green-500",
 	"approval-request": "bg-orange-500",
 	"approval-response": "bg-cyan-500",
 	"confirmation-required": "bg-orange-400",
@@ -420,8 +455,11 @@ export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
 	"trace-start": "Start",
 	"prompt-sent": "Prompt",
 	"llm-response": "Response",
+	"tools-available": "Tools",
+	"model-info": "Model",
 	"tool-call": "Tool",
-	"step-complete": "Step",
+	"step-start": "Step",
+	"step-complete": "Step Done",
 	"approval-request": "Approval",
 	"approval-response": "Approved",
 	"confirmation-required": "Confirm?",

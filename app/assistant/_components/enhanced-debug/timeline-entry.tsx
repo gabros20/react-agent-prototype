@@ -29,6 +29,8 @@ import {
 	History,
 	FileText,
 	ScrollText,
+	PlayCircle,
+	Cpu,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -45,7 +47,10 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	"trace-start": Play,
 	"prompt-sent": MessageSquare,
 	"llm-response": Bot,
+	"tools-available": Wrench,
+	"model-info": Cpu,
 	"tool-call": Wrench,
+	"step-start": PlayCircle,
 	"step-complete": Layers,
 	"approval-request": Shield,
 	"approval-response": ShieldCheck,
@@ -138,8 +143,15 @@ export function TimelineEntry({ entry, isSelected, isTraceComplete = false, onSe
 	// Determine badge color - tool-calls with errors get red badge
 	const badgeColor = toolCallStatus === "failed" ? "bg-red-500" : toolCallStatus === "stale" ? "bg-gray-400" : ENTRY_TYPE_COLORS[entry.type];
 
+	// Only allow expanding if there's content to show
+	const handleOpenChange = (open: boolean) => {
+		if (hasExpandableContent) {
+			setIsExpanded(open);
+		}
+	};
+
 	return (
-		<Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+		<Collapsible open={isExpanded} onOpenChange={handleOpenChange}>
 			<div
 				className={cn(
 					"border rounded-lg transition-all group",
@@ -155,7 +167,7 @@ export function TimelineEntry({ entry, isSelected, isTraceComplete = false, onSe
 							{formatTimestamp(entry.timestamp)}
 						</span>
 
-						{/* Type badge - includes tool name for tool-call entries */}
+						{/* Type badge - includes tool name for tool-call entries, step number for step entries */}
 						<Badge
 							className={cn(badgeColor, "text-white text-[10px] sm:text-xs flex-shrink-0 gap-1 pl-1.5 pr-2 relative overflow-visible")}
 						>
@@ -168,8 +180,12 @@ export function TimelineEntry({ entry, isSelected, isTraceComplete = false, onSe
 							)}
 							<Icon className='h-3 w-3' />
 							<span className='hidden sm:inline'>
-								{entry.type === 'tool-call' && entry.toolName
+								{entry.type === "tool-call" && entry.toolName
 									? `Tool: ${entry.toolName}`
+									: entry.type === "step-start" && entry.stepNumber
+									? `Step ${entry.stepNumber} start`
+									: entry.type === "step-complete" && entry.stepNumber
+									? `Step ${entry.stepNumber} finish`
 									: ENTRY_TYPE_LABELS[entry.type]}
 							</span>
 						</Badge>
@@ -196,12 +212,12 @@ export function TimelineEntry({ entry, isSelected, isTraceComplete = false, onSe
 						)}
 
 						{/* Tool name - only show separately for non-tool-call entries that have a tool name */}
-						{entry.toolName && entry.type !== 'tool-call' && (
+						{entry.toolName && entry.type !== "tool-call" && (
 							<span className='font-mono text-xs sm:text-sm text-primary flex-shrink-0'>{entry.toolName}</span>
 						)}
 
-						{/* Summary - skip for tool-calls since badge already shows tool name */}
-						{entry.type !== 'tool-call' ? (
+						{/* Summary - skip for tool-calls and step entries since badge already shows the info */}
+						{entry.type !== "tool-call" && entry.type !== "step-start" && entry.type !== "step-complete" ? (
 							<span className='flex-1 text-xs sm:text-sm truncate text-muted-foreground'>{entry.summary}</span>
 						) : (
 							<span className='flex-1' />
@@ -281,9 +297,7 @@ export function TimelineEntryCompact({ entry, onClick }: { entry: TraceEntry; on
 	const isError = entry.type === "error" || entry.type === "job-failed" || (entry.type === "tool-call" && entry.error);
 
 	// For tool-calls, show tool name; for others show summary
-	const displayText = entry.type === 'tool-call' && entry.toolName
-		? entry.toolName
-		: entry.summary;
+	const displayText = entry.type === "tool-call" && entry.toolName ? entry.toolName : entry.summary;
 
 	return (
 		<button

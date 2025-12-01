@@ -91,7 +91,7 @@ User: "Nice, I can see exactly what it's doing!"
 │  │                │                                             │
 │  │  ChatStore     │                                             │
 │  │  LogStore      │                                             │
-│  │  ApprovalStore │                                             │
+│  │  TraceStore    │                                             │
 │  └────────────────┘                                             │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -137,11 +137,15 @@ data: {"name": "cms_createPage", "args": {...}}
 | `text-delta` | LLM generates text | `{ delta: string }` |
 | `tool-call` | Tool invocation starts | `{ name, args, id }` |
 | `tool-result` | Tool completes | `{ name, result, id }` |
-| `approval-required` | HITL needed | `{ approvalId, toolName, message }` |
+| `tool-error` | Tool execution fails | `{ name, error, id }` |
 | `step-completed` | Agent step done | `{ stepNumber, usage }` |
 | `log` | Logger output | `{ level, message, metadata }` |
 | `finish` | Stream ends | `{ finishReason, usage }` |
+| `result` | Final response with text | `{ text, sessionId, traceId }` |
+| `done` | Stream complete | `{ traceId, sessionId }` |
 | `error` | Error occurred | `{ error, code }` |
+
+**Note:** HITL confirmations are handled conversationally through tool-result events with `requiresConfirmation: true`. No separate approval event is emitted.
 
 ### Event Details
 
@@ -212,26 +216,34 @@ After tool execution completes:
 }
 ```
 
-#### approval-required
+#### tool-result with requiresConfirmation
 
-HITL pause point:
+When a destructive tool needs user confirmation, it returns:
 
 ```typescript
 {
-  approvalId: string;   // Unique approval ID
-  toolName: string;     // Which tool needs approval
-  input: object;        // Tool arguments
-  message: string;      // User-facing description
+  id: string;        // Matches tool-call ID
+  name: string;      // Tool name
+  result: {
+    requiresConfirmation: true;  // Signals confirmation needed
+    message: string;             // User-facing description
+    ...                          // Additional context
+  };
 }
 
 // Example
 {
-  approvalId: "apr-xyz789",
-  toolName: "cms_deletePost",
-  input: { slug: "old-post" },
-  message: "Delete post 'old-post'? This cannot be undone."
+  id: "call-abc123",
+  name: "cms_deletePage",
+  result: {
+    requiresConfirmation: true,
+    message: "Are you sure you want to delete 'About Us'? This will permanently remove the page and all 3 sections.",
+    page: { id: "page-123", slug: "about", name: "About Us" }
+  }
 }
 ```
+
+The frontend detects `requiresConfirmation: true` and logs a special `confirmation-required` trace entry. The agent then asks the user conversationally, and if confirmed, calls the tool again with `confirmed: true`.
 
 #### log
 
@@ -358,9 +370,6 @@ router.post('/stream', async (req, res) => {
           });
           break;
 
-        case 'approval-required':
-          writeSSE('approval-required', event);
-          break;
 
         case 'finish':
           writeSSE('finish', {
@@ -451,12 +460,12 @@ export async function POST(request: NextRequest) {
 // app/assistant/_hooks/use-agent.ts
 import { useChatStore } from '../_stores/chat-store';
 import { useLogStore } from '../_stores/log-store';
-import { useApprovalStore } from '../_stores/approval-store';
+import { useTraceStore } from '../_stores/trace-store';
 
 export function useAgent() {
   const { addMessage, updateLastMessage, setStreaming } = useChatStore();
   const { addLog } = useLogStore();
-  const { setPendingApproval } = useApprovalStore();
+  const { addEntry } = useTraceStore();
 
   const sendMessage = async (content: string) => {
     // Add user message immediately
@@ -526,8 +535,22 @@ export function useAgent() {
         });
         break;
 
-      case 'approval-required':
-        setPendingApproval(event.data);
+      case 'tool-result':
+        // Check for confirmation required
+        if (event.data.result?.requiresConfirmation) {
+          addEntry({
+            type: 'confirmation-required',
+            level: 'warn',
+            toolName: event.data.name,
+            summary: `${event.data.name}: Confirmation required`,
+            output: event.data.result,
+          });
+        }
+        addLog({
+          level: 'info',
+          message: `${event.data.name} completed`,
+          metadata: { result: event.data.result }
+        });
         break;
 
       case 'log':
@@ -758,7 +781,7 @@ const writeSSE = (event: string, data: unknown) => {
 | Connects To | How |
 |-------------|-----|
 | [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | Orchestrator yields events |
-| [3.5 HITL](./LAYER_3.5_HITL.md) | approval-required event |
+| [3.5 HITL](./LAYER_3.5_HITL.md) | tool-result with requiresConfirmation |
 | [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | error event |
 | [3.8 Context](./LAYER_3.8_CONTEXT_INJECTION.md) | Logger in context |
 | Layer 6 (Client) | State stores consume events |

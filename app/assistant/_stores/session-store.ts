@@ -14,7 +14,6 @@ export interface SessionMetadata {
 export interface Session {
   id: string;
   title: string;
-  checkpoint: any;
   createdAt: Date;
   updatedAt: Date;
   messages: Array<{
@@ -199,7 +198,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  // Clear history (delete messages + checkpoint, keep session)
+  // Clear history (delete messages, keep session)
   clearHistory: async (sessionId: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -211,16 +210,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (!messagesResponse.ok) {
         const result = await messagesResponse.json();
         throw new Error(result.error?.message || 'Failed to clear messages');
-      }
-
-      // Clear checkpoint
-      const checkpointResponse = await fetch(`/api/sessions/${sessionId}/checkpoint`, {
-        method: 'DELETE',
-      });
-
-      if (!checkpointResponse.ok) {
-        const result = await checkpointResponse.json();
-        throw new Error(result.error?.message || 'Failed to clear checkpoint');
       }
 
       // Update session metadata (messageCount = 0, lastActivity = now)

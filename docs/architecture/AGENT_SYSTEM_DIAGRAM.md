@@ -33,13 +33,13 @@ flowchart TB
         subgraph ReactUI["React Components"]
             ChatPane["ChatPane.tsx"]
             MessageInput["Message Input"]
-            ApprovalModal["ApprovalModal.tsx"]
+            DebugPane["DebugPane.tsx"]
         end
 
         subgraph ZustandStores["Zustand Stores - _stores/"]
             ChatStore["useChatStore<br/>messages, sessionId, isStreaming"]
             SessionStore["useSessionStore<br/>sessions, currentSessionId"]
-            ApprovalStore["useApprovalStore<br/>pendingApproval"]
+            TraceStore["useTraceStore<br/>trace entries, debug panel"]
             LogStore["useLogStore<br/>execution logs"]
         end
 
@@ -56,7 +56,6 @@ flowchart TB
     subgraph Backend["Backend - server/"]
         subgraph ExpressRoutes["Routes - routes/agent.ts"]
             StreamRoute["POST /v1/agent/stream"]
-            ApprovalRoute["POST /v1/agent/approval/:approvalId"]
             WriteSSE["writeSSE()<br/>event + data format"]
         end
 
@@ -110,15 +109,13 @@ flowchart TB
                 HttpTools["http_* tools<br/>httpGet, httpPost"]
             end
 
-            ToolDef["tool() definition<br/>description, inputSchema,<br/>needsApproval?, execute"]
+            ToolDef["tool() definition<br/>description, inputSchema,<br/>confirmed flag, execute"]
             ZodSchema["Zod Schema<br/>Input validation"]
             ExperimentalContext["experimental_context<br/>as AgentContext"]
         end
 
-        subgraph HITLSystem["HITL - services/approval-queue.ts"]
-            ApprovalQueue["ApprovalQueue singleton<br/>pendingRequests Map<br/>resolvers Map"]
-            RequestApproval["requestApproval()<br/>Returns Promise, 5min timeout"]
-            RespondApproval["respondToApproval()<br/>Resolves Promise"]
+        subgraph HITLSystem["HITL - Confirmed Flag Pattern"]
+            ConfirmationFlow["Conversational HITL<br/>Tool returns requiresConfirmation<br/>Agent asks user → User confirms<br/>Tool called with confirmed: true"]
         end
 
         subgraph ServicesLayer["Services Layer - services/"]
@@ -201,16 +198,13 @@ flowchart TB
     VectorService --> LanceDB
     DrizzleORM --> SQLiteDB
 
-    %% === FLOW 9: HITL Branch (needsApproval tools) ===
-    ToolDef -->|"needsApproval: true"| ApprovalQueue
-    ApprovalQueue -->|"requestApproval()"| RequestApproval
-    RequestApproval -->|"SSE: approval-required"| WriteSSE
+    %% === FLOW 9: HITL Branch (confirmed flag pattern) ===
+    ToolDef -->|"confirmed flag"| ConfirmationFlow
+    ConfirmationFlow -->|"requiresConfirmation: true"| WriteSSE
     WriteSSE --> SSEParser
-    SSEParser -->|"setPendingApproval()"| ApprovalStore
-    ApprovalStore --> ApprovalModal
-    ApprovalModal -->|"user decision"| ApprovalRoute
-    ApprovalRoute -->|"respondToApproval()"| RespondApproval
-    RespondApproval -->|"Promise resolves"| ExperimentalContext
+    SSEParser -->|"confirmation-required entry"| TraceStore
+    TraceStore --> DebugPane
+    %% User confirms in chat, agent calls tool with confirmed: true
 
     %% === FLOW 10: Observe Phase ===
     ExperimentalContext -->|"tool result"| Observe
@@ -242,7 +236,7 @@ flowchart TB
     SSEParser -->|"tool-result"| LogStore
     SSEParser -->|"result: sessionId"| SessionStore
     ChatStore --> ChatPane
-    LogStore --> ChatPane
+    TraceStore --> DebugPane
 
     %% === STYLING ===
     classDef frontend fill:#f3e5f5,stroke:#333
@@ -258,15 +252,15 @@ flowchart TB
     classDef db fill:#d7ccc8,stroke:#333
     classDef error fill:#ffccbc,stroke:#333
 
-    class ChatPane,MessageInput,ApprovalModal frontend
-    class ChatStore,SessionStore,ApprovalStore,LogStore store
-    class StreamRoute,ApprovalRoute,WriteSSE,ProxyRoute route
+    class ChatPane,MessageInput,DebugPane frontend
+    class ChatStore,SessionStore,TraceStore,LogStore store
+    class StreamRoute,WriteSSE,ProxyRoute route
     class AgentContext,ContainerSingleton,DbInstance,VectorIndex,Services context
     class ReactXML,WorkingMemStr,ToolsFormatted,HandlebarsCompile,SystemPrompt prompt
     class WorkingContext,EntityExtractor,ToContextString memory
     class CreateAgent,StreamWithApproval,PrepareStep,Think,Act,Observe,OnStepFinish,StopCondition agent
     class AllTools,CmsTools,SearchTools,WebTools,PexelsTools,HttpTools,ToolDef,ZodSchema,ExperimentalContext tool
-    class ApprovalQueue,RequestApproval,RespondApproval hitl
+    class ConfirmationFlow hitl
     class PageService,SectionService,EntryService,ImageService,SessionService,VectorService service
     class DrizzleORM,SQLiteDB,LanceDB db
     class ExecuteWithRetry,ExponentialBackoff,Checkpoint error
@@ -284,7 +278,7 @@ flowchart TB
 
 **Tool Execution:** Tools access services via `experimental_context as AgentContext` - no globals, no closures
 
-**HITL Flow:** Tools with `needsApproval: true` pause execution, send SSE event, wait for user decision
+**HITL Flow:** Destructive tools with `confirmed` flag return `requiresConfirmation`, agent asks user conversationally, then re-calls with `confirmed: true`
 
 **Working Memory:** `EntityExtractor` pulls entities from tool results → `WorkingContext` tracks last 10 → enables "the page" reference resolution
 
@@ -586,49 +580,53 @@ flowchart TB
 
 ---
 
-## 6. HITL Approval Flow
+## 6. HITL Confirmation Flow (Conversational)
 
-**Human-in-the-loop coordination for destructive operations**
+**Human-in-the-loop coordination for destructive operations via chat**
 
-📖 **Deep dive:** [Layer 3.5: HITL](./LAYER_3.5_HITL.md) | [Layer 4.7: Approval Queue](./LAYER_4.7_APPROVAL_QUEUE.md)
+📖 **Deep dive:** [Layer 3.5: HITL](./LAYER_3.5_HITL.md)
 
 ```mermaid
 sequenceDiagram
-    participant Agent as ReAct Agent
-    participant Orchestrator as Orchestrator
-    participant Queue as ApprovalQueue
-    participant SSE as SSE Stream
-    participant UI as Frontend UI
     participant User as User
+    participant Chat as Chat UI
+    participant Agent as ReAct Agent
+    participant Tool as Destructive Tool
+    participant SSE as SSE Stream
+    participant Trace as Trace Store
 
-    Note over Agent,User: Destructive Operation Flow (e.g., deletePage)
+    Note over User,Trace: Conversational Confirmation Flow
 
-    Agent->>Orchestrator: tool-call: cms_deletePage
-    Orchestrator->>Orchestrator: Check requiresApproval flag
+    User->>Chat: "Delete the about page"
+    Chat->>Agent: User message
 
-    alt Needs Approval
-        Orchestrator->>Queue: addRequest(approvalId, toolName, args)
-        Queue->>SSE: Write approval-required event
-        SSE->>UI: approval-required event with approvalId
-        UI->>User: Show Approval Modal
+    Agent->>Tool: cms_deletePage({ slug: "about" })
+    Note right of Tool: First call: no confirmed flag
 
-        User->>UI: Click Approve/Reject
-        UI->>Orchestrator: POST /approval/:id with decision
-        Orchestrator->>Queue: resolveRequest(approvalId, decision)
+    Tool->>Agent: { requiresConfirmation: true,<br/>message: "Are you sure..." }
+    Agent->>SSE: tool-result with requiresConfirmation
+    SSE->>Trace: Add confirmation-required entry
 
-        alt Approved
-            Queue->>Orchestrator: Promise resolves (true)
-            Orchestrator->>Agent: Continue execution
-            Agent->>Agent: Execute tool with confirmed: true
-        else Rejected
-            Queue->>Orchestrator: Promise resolves (false)
-            Orchestrator->>Agent: Skip tool, return cancelled
-            Agent->>SSE: tool-result cancelled
-        end
-    else No Approval Needed
-        Orchestrator->>Agent: Execute tool immediately
-    end
+    Agent->>Chat: "This will permanently delete...<br/>Are you sure?"
+    Chat->>User: Display confirmation message
+
+    User->>Chat: "yes"
+    Chat->>Agent: User confirms
+
+    Agent->>Tool: cms_deletePage({ slug: "about", confirmed: true })
+    Note right of Tool: Second call: with confirmed: true
+
+    Tool->>Agent: { success: true, message: "Deleted" }
+    Agent->>Chat: "Done! Page deleted."
+    Chat->>User: Display completion
 ```
+
+### Key Design Points
+
+1. **No Modal** - Confirmation happens inline in chat
+2. **Two Tool Calls** - First without confirmed (returns request), second with confirmed: true (executes)
+3. **Agent Explains** - Agent can provide context about what will happen
+4. **Natural Flow** - User responds conversationally (yes/no/cancel/etc.)
 
 ---
 
@@ -912,7 +910,7 @@ sequenceDiagram
 | ALL_TOOLS         | `server/tools/all-tools.ts`            | [3.2 Tools](./LAYER_3.2_TOOLS.md)                         |
 | WorkingContext    | `server/services/working-memory/`      | [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       |
 | react.xml         | `server/prompts/react.xml`             | [3.4 Prompts](./LAYER_3.4_PROMPTS.md)                     |
-| ApprovalQueue     | `server/services/approval-queue.ts`    | [3.5 HITL](./LAYER_3.5_HITL.md)                           |
+| ConfirmationFlow  | `server/tools/all-tools.ts` (confirmed flag) | [3.5 HITL](./LAYER_3.5_HITL.md)                      |
 | Retry Logic       | `server/agent/orchestrator.ts`         | [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       |
 | SSE Writer        | `server/routes/agent.ts`               | [3.7 Streaming](./LAYER_3.7_STREAMING.md)                 |
 | AgentContext      | `server/agent/orchestrator.ts`         | [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) |
@@ -936,9 +934,9 @@ No mode switching or tool filtering. The agent always has access to all 21 tools
 
 Entity tracking reduces repeated context by 70%, enabling natural reference resolution.
 
-### 4. HITL = Safety Net
+### 4. HITL = Conversational Safety Net
 
-Destructive operations pause for user approval before execution.
+Destructive operations request confirmation through chat, executed only after user says "yes".
 
 ### 5. Checkpoint = Reliability
 

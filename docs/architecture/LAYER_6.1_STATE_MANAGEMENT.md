@@ -4,7 +4,7 @@
 
 ## Overview
 
-State management in the client layer uses Zustand stores with optional localStorage persistence. Each store manages a specific domain: chat messages, sessions, approvals, and execution logs. Stores are independent but coordinate through component-level composition.
+State management in the client layer uses Zustand stores with optional localStorage persistence. Each store manages a specific domain: chat messages, sessions, traces, and execution logs. Stores are independent but coordinate through component-level composition.
 
 **Key Responsibilities:**
 - Define typed state shape per domain
@@ -35,7 +35,7 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 ```
 
 **Our Solution:**
-1. Zustand stores for each domain (chat, session, approval, log)
+1. Zustand stores for each domain (chat, session, trace, log)
 2. TypeScript interfaces for state shape
 3. Persist middleware for critical state
 4. Actions co-located with state
@@ -84,18 +84,6 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                  approval-store                           │  │
-│  │                                                           │  │
-│  │  State:                                                   │  │
-│  │  └─ pendingApproval: ApprovalRequest | null               │  │
-│  │                                                           │  │
-│  │  Actions:                                                 │  │
-│  │  └─ setPendingApproval()                                  │  │
-│  │                                                           │  │
-│  │  Persistence: None (transient HITL state)                 │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
 │  │                     log-store                             │  │
 │  │                                                           │  │
 │  │  State:                                                   │  │
@@ -120,7 +108,7 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 |------|---------|
 | `app/assistant/_stores/chat-store.ts` | Chat messages, sessionId, streaming state |
 | `app/assistant/_stores/session-store.ts` | Session list, CRUD operations |
-| `app/assistant/_stores/approval-store.ts` | Pending HITL approval |
+| `app/assistant/_stores/trace-store.ts` | Trace entries for debug panel |
 | `app/assistant/_stores/log-store.ts` | Execution logs, filtering |
 
 ---
@@ -239,30 +227,6 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 }));
 ```
 
-### Approval Store (Transient)
-
-```typescript
-// app/assistant/_stores/approval-store.ts
-export interface ApprovalRequest {
-  approvalId?: string;
-  traceId: string;
-  stepId: string;
-  toolName: string;
-  input: unknown;
-  description: string;
-}
-
-interface ApprovalState {
-  pendingApproval: ApprovalRequest | null;
-  setPendingApproval: (approval: ApprovalRequest | null) => void;
-}
-
-export const useApprovalStore = create<ApprovalState>()((set) => ({
-  pendingApproval: null,
-  setPendingApproval: (approval) => set({ pendingApproval: approval }),
-}));
-```
-
 ### Log Store (Session-Scoped)
 
 ```typescript
@@ -356,8 +320,8 @@ messages: state.messages.slice(-50)
 ```typescript
 useChatStore    // Chat messages
 useSessionStore // Session list
-useApprovalStore // HITL state
-useLogStore     // Debug logs
+useTraceStore   // Debug trace entries
+useLogStore     // Legacy debug logs
 ```
 
 **Reasons:**
@@ -375,7 +339,7 @@ useLogStore     // Debug logs
 | Layer 6.2 (SSE Streaming) | useAgent reads/writes chat store |
 | Layer 6.3 (Session UI) | SessionSidebar uses session store |
 | Layer 6.4 (Chat Components) | ChatPane uses chat store |
-| Layer 6.5 (HITL) | HITLModal uses approval store |
+| Layer 6.5 (HITL UI) | Debug panel uses trace store |
 | Backend API | session-store fetches from /api/sessions |
 
 ### Cross-Store Coordination

@@ -110,20 +110,5 @@ export function createSessionRoutes(services: ServiceContainer) {
     }
   });
 
-  // =========================================================================
-  // CHECKPOINT MANAGEMENT
-  // =========================================================================
-
-  // DELETE /v1/sessions/:id/checkpoint - Clear checkpoint
-  router.delete("/:id/checkpoint", async (req, res, next) => {
-    try {
-      const result = await services.sessionService.clearCheckpoint(req.params.id);
-
-      res.json(ApiResponse.success(result));
-    } catch (error) {
-      next(error);
-    }
-  });
-
   return router;
 }

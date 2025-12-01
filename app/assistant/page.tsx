@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { ChatPane } from './_components/chat-pane';
 import { EnhancedDebugPanel } from './_components/enhanced-debug';
-import { HITLModal } from './_components/hitl-modal';
 import { SessionSidebar } from './_components/session-sidebar';
 import { useSessionStore } from './_stores/session-store';
 import { useChatStore } from './_stores/chat-store';
@@ -83,7 +82,6 @@ export default function AssistantPage() {
         </ResizablePanelGroup>
       </div>
 
-      <HITLModal />
     </div>
   );
 }

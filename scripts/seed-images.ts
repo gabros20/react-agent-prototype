@@ -48,7 +48,6 @@ async function seedImages() {
     await db.insert(schema.sessions).values({
       id: sessionId,
       title: "Seed Images Session",
-      checkpoint: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

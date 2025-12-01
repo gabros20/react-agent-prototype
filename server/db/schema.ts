@@ -374,8 +374,7 @@ export const navigationItems = sqliteTable("navigation_items", {
 export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
-  checkpoint: text("checkpoint", { mode: "json" }),
-  workingContext: text("working_context", { mode: "json" }), // NEW: Working memory storage
+  workingContext: text("working_context", { mode: "json" }), // Working memory storage
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });

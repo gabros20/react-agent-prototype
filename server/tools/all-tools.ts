@@ -171,12 +171,12 @@ export const cmsUpdatePage = tool({
 })
 
 export const cmsDeletePage = tool({
-  description: 'Delete a page (CASCADE: deletes all sections). Checks if page is in navigation and offers cleanup. DANGEROUS - requires confirmation.',
+  description: 'Delete a page permanently (CASCADE: deletes all sections). This cannot be undone. Requires confirmed: true.',
   inputSchema: z.object({
     slug: z.string().optional().describe('Page slug to delete'),
     id: z.string().optional().describe('Page ID to delete'),
-    confirmed: z.boolean().optional().describe('Set to true to confirm deletion'),
-    removeFromNavigation: z.boolean().optional().describe('Also remove from navigation if present')
+    removeFromNavigation: z.boolean().optional().describe('Also remove from navigation if present'),
+    confirmed: z.boolean().optional().describe('Must be true to actually delete')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
@@ -185,7 +185,7 @@ export const cmsDeletePage = tool({
       throw new Error('Either slug or id must be provided')
     }
 
-    // Get page
+    // Get page first to show what will be deleted
     let page: any
     if (input.id) {
       page = await ctx.services.pageService.getPageById(input.id)
@@ -197,7 +197,16 @@ export const cmsDeletePage = tool({
       throw new Error(`Page not found: ${input.slug || input.id}`)
     }
 
-    // Check if page is in navigation
+    // Require confirmation
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to delete page "${page.name}"? This will permanently remove the page and all its sections. Set confirmed: true to proceed.`,
+        page: { id: page.id, slug: page.slug, name: page.name }
+      }
+    }
+
+    // Check if page is in navigation and remove if requested
     const siteSettingsService = new SiteSettingsService(ctx.db)
     const navItems = await siteSettingsService.getNavigationItems()
 
@@ -205,27 +214,6 @@ export const cmsDeletePage = tool({
     const inNavigation = navItems.filter((item: any) =>
       item.href.includes(page.slug) || item.href === pageHref
     )
-
-    // Require explicit confirmation
-    if (!input.confirmed) {
-      let message = `STOP: Deleting "${page.name}" will remove all its sections. This cannot be undone.`
-
-      if (inNavigation.length > 0) {
-        const locations = [...new Set(inNavigation.map((i: any) => i.location))].join(', ')
-        message += ` Note: This page is in the navigation (${locations}).`
-        message += ' Set removeFromNavigation: true to also remove from nav.'
-      }
-
-      message += ' Call again with confirmed: true if user has approved.'
-
-      return {
-        success: false,
-        requiresConfirmation: true,
-        message,
-        pageInNavigation: inNavigation.length > 0,
-        navigationLocations: inNavigation.map((i: any) => i.location)
-      }
-    }
 
     // Remove from navigation if requested
     let removedFromNav = false
@@ -246,7 +234,8 @@ export const cmsDeletePage = tool({
     return {
       success: true,
       message: `Page "${page.name}" deleted`,
-      removedFromNavigation: removedFromNav
+      removedFromNavigation: removedFromNav,
+      pageInNavigation: inNavigation.length > 0
     }
   }
 })
@@ -471,68 +460,67 @@ export const cmsSyncPageContent = tool({
 })
 
 export const cmsDeletePageSection = tool({
-  description: 'Delete a section from a page. Removes the section instance (not the template). DANGEROUS - requires confirmation.',
+  description: 'Delete a section from a page. Removes the section instance (not the template). This cannot be undone. Requires confirmed: true.',
   inputSchema: z.object({
     pageSectionId: z.string().describe('Page section ID (from cms_getPage sections array)'),
-    confirmed: z.boolean().optional().describe('Set to true to confirm deletion')
+    confirmed: z.boolean().optional().describe('Must be true to actually delete')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-    
-    // Require explicit confirmation
+
+    // Require confirmation
     if (!input.confirmed) {
       return {
-        success: false,
         requiresConfirmation: true,
-        message: 'STOP: This is a destructive operation. Call again with confirmed: true if user has approved.'
+        message: `Are you sure you want to delete section "${input.pageSectionId}"? This cannot be undone. Set confirmed: true to proceed.`
       }
     }
-    
+
     // Import schema at runtime
     const { pageSections } = await import('../db/schema')
     const { eq } = await import('drizzle-orm')
-    
+
     // Delete page section (CASCADE deletes content)
     await ctx.db.delete(pageSections).where(eq(pageSections.id, input.pageSectionId))
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       message: `Section deleted from page`
     }
   }
 })
 
 export const cmsDeletePageSections = tool({
-  description: 'Delete multiple sections from a page in one operation (more efficient than one-by-one). DANGEROUS - requires confirmation.',
+  description: 'Delete multiple sections from a page in one operation (more efficient than one-by-one). This cannot be undone. Requires confirmed: true.',
   inputSchema: z.object({
     pageSectionIds: z.array(z.string()).describe('Array of page section IDs to delete'),
     pageId: z.string().optional().describe('Optional: page ID for validation'),
-    confirmed: z.boolean().optional().describe('Set to true to confirm deletion')
+    confirmed: z.boolean().optional().describe('Must be true to actually delete')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-    
-    // Require explicit confirmation
+
+    // Require confirmation
     if (!input.confirmed) {
       return {
-        success: false,
         requiresConfirmation: true,
-        message: `STOP: About to delete ${input.pageSectionIds.length} sections. Call again with confirmed: true if user has approved.`
+        message: `Are you sure you want to delete ${input.pageSectionIds.length} sections? This cannot be undone. Set confirmed: true to proceed.`,
+        sectionCount: input.pageSectionIds.length
       }
     }
-    
+
     const { pageSections } = await import('../db/schema')
     const { eq, inArray } = await import('drizzle-orm')
-    
+
     // Validate all sections exist
     const sections = await ctx.db.query.pageSections.findMany({
       where: inArray(pageSections.id, input.pageSectionIds)
     })
-    
+
     if (sections.length !== input.pageSectionIds.length) {
       throw new Error(`Some sections not found. Found ${sections.length} of ${input.pageSectionIds.length}`)
     }
-    
+
     // Validate all belong to same page if pageId provided
     if (input.pageId) {
       const wrongPage = sections.find((s: any) => s.pageId !== input.pageId)
@@ -540,14 +528,14 @@ export const cmsDeletePageSections = tool({
         throw new Error('All sections must belong to the specified page')
       }
     }
-    
+
     // Delete all sections
     for (const sectionId of input.pageSectionIds) {
       await ctx.db.delete(pageSections).where(eq(pageSections.id, sectionId))
     }
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       deletedCount: input.pageSectionIds.length,
       message: `Deleted ${input.pageSectionIds.length} sections`
     }
@@ -729,18 +717,27 @@ export const httpGet = tool({
 })
 
 export const httpPost = tool({
-  description: 'Make HTTP POST request to external API',
+  description: 'Make HTTP POST request to external API. Requires confirmed: true.',
   inputSchema: z.object({
     url: z.string().describe('URL to post to'),
     body: z.record(z.string(), z.any()).describe('Request body'),
-    headers: z.record(z.string(), z.string()).optional().describe('Optional headers')
+    headers: z.record(z.string(), z.string()).optional().describe('Optional headers'),
+    confirmed: z.boolean().optional().describe('Must be true to execute')
   }),
-  needsApproval: true,  // Native AI SDK v6 approval pattern!
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-    
+
+    // Require confirmation for external POST requests
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to make a POST request to ${input.url}? Set confirmed: true to proceed.`,
+        url: input.url
+      }
+    }
+
     ctx.logger.info({ message: 'HTTP POST request', url: input.url })
-    
+
     const response = await fetch(input.url, {
       method: 'POST',
       headers: {
@@ -749,7 +746,7 @@ export const httpPost = tool({
       },
       body: JSON.stringify(input.body)
     })
-    
+
     const data = await response.json()
     return { status: response.status, data }
   }
@@ -901,7 +898,7 @@ export const TOOL_METADATA = {
   'cms_deletePage': {
     category: 'cms',
     riskLevel: 'high',
-    requiresApproval: false,  // Uses confirmed flag instead
+    requiresApproval: true,  // Uses confirmed flag pattern
     tags: ['delete', 'dangerous']
   },
   'cms_listPages': {
@@ -937,13 +934,13 @@ export const TOOL_METADATA = {
   'cms_deletePageSection': {
     category: 'cms',
     riskLevel: 'high',
-    requiresApproval: false,  // Uses confirmed flag instead
+    requiresApproval: true,  // Uses confirmed flag pattern
     tags: ['delete', 'section', 'dangerous']
   },
   'cms_deletePageSections': {
     category: 'cms',
     riskLevel: 'high',
-    requiresApproval: false,  // Uses confirmed flag instead
+    requiresApproval: true,  // Uses confirmed flag pattern
     tags: ['delete', 'section', 'batch', 'dangerous']
   },
   'cms_getPageSections': {

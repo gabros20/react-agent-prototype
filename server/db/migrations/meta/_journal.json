@@ -43,6 +43,13 @@
       "when": 1764192772832,
       "tag": "0005_cute_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1764576245260,
+      "tag": "0006_drop-checkpoint-column",
+      "breakpoints": true
     }
   ]
 }

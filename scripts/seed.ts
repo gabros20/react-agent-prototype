@@ -1288,7 +1288,6 @@ Stay tuned for more updates! 🎉`,
     await db.insert(schema.sessions).values({
       id: sessionId,
       title: "New Session",
-      checkpoint: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

@@ -17,7 +17,7 @@ This index provides a high-level view of the system's major architectural layers
 │  Nunjucks Templates • Section Variants • Asset Pipeline         │
 ├─────────────────────────────────────────────────────────────────┤
 │                        AGENT LAYER                              │
-│  ReAct Loop • Tool Registry • Working Memory • HITL Approval    │
+│  ReAct Loop • Tool Registry • Working Memory • Confirmed Flag   │
 ├─────────────────────────────────────────────────────────────────┤
 │                       SERVICES LAYER                            │
 │  PageService • SectionService • SessionService • VectorIndex    │
@@ -118,7 +118,7 @@ The Agent System is the core of the AI capabilities. These sub-documents provide
 | 3.2 | [Tools](./LAYER_3.2_TOOLS.md)                         | `LAYER_3.2_TOOLS.md`             | Tool anatomy, categories, Zod schemas, composition    |
 | 3.3 | [Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       | `LAYER_3.3_WORKING_MEMORY.md`    | Entity tracking, sliding window, reference resolution |
 | 3.4 | [Prompts](./LAYER_3.4_PROMPTS.md)                     | `LAYER_3.4_PROMPTS.md`           | System prompt structure, XML/Handlebars, injection    |
-| 3.5 | [Human-in-the-Loop](./LAYER_3.5_HITL.md)              | `LAYER_3.5_HITL.md`              | Approval queue, confirmation patterns, dangerous ops  |
+| 3.5 | [Human-in-the-Loop](./LAYER_3.5_HITL.md)              | `LAYER_3.5_HITL.md`              | Confirmed flag pattern, conversational confirmations  |
 | 3.6 | [Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       | `LAYER_3.6_ERROR_RECOVERY.md`    | Retry logic, backoff, stuck detection, degradation    |
 | 3.7 | [Streaming](./LAYER_3.7_STREAMING.md)                 | `LAYER_3.7_STREAMING.md`         | SSE events, real-time feedback, frontend parsing      |
 | 3.8 | [Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) | `LAYER_3.8_CONTEXT_INJECTION.md` | AgentContext, multi-tenant, tracing                   |
@@ -148,7 +148,6 @@ The Services layer contains all business logic and data access. These sub-docume
 | 4.4 | [Image Processing](./LAYER_4.4_IMAGE_PROCESSING.md)     | `LAYER_4.4_IMAGE_PROCESSING.md`   | Upload pipeline, deduplication, async jobs            |
 | 4.5 | [Renderer](./LAYER_4.5_RENDERER.md)                     | `LAYER_4.5_RENDERER.md`           | Nunjucks templates, page/post rendering               |
 | 4.6 | [Working Memory](./LAYER_4.6_WORKING_MEMORY.md)         | `LAYER_4.6_WORKING_MEMORY.md`     | Sliding window entity tracking, context serialization |
-| 4.7 | [Approval Queue](./LAYER_4.7_APPROVAL_QUEUE.md)         | `LAYER_4.7_APPROVAL_QUEUE.md`     | HITL request/response queue, timeout handling         |
 
 ### Services Reading Order
 
@@ -166,7 +165,6 @@ The Services layer contains all business logic and data access. These sub-docume
 
 5. [4.4 Image Processing](./LAYER_4.4_IMAGE_PROCESSING.md) - Image upload pipeline
 6. [4.6 Working Memory](./LAYER_4.6_WORKING_MEMORY.md) - Agent context tracking
-7. [4.7 Approval Queue](./LAYER_4.7_APPROVAL_QUEUE.md) - Human-in-the-loop coordination
 
 ---
 
@@ -210,7 +208,7 @@ The Client layer handles the Next.js frontend, React components, Zustand state m
 | 6.2 | [SSE Streaming](./LAYER_6.2_SSE_STREAMING.md)       | `LAYER_6.2_SSE_STREAMING.md`    | Event parsing, buffer handling, store dispatch        |
 | 6.3 | [Session UI](./LAYER_6.3_SESSION_UI.md)             | `LAYER_6.3_SESSION_UI.md`       | Session sidebar, switching, clear history             |
 | 6.4 | [Chat Components](./LAYER_6.4_CHAT_COMPONENTS.md)   | `LAYER_6.4_CHAT_COMPONENTS.md`  | Message display, input form, markdown rendering       |
-| 6.5 | [HITL & Debug UI](./LAYER_6.5_HITL_DEBUG_UI.md)     | `LAYER_6.5_HITL_DEBUG_UI.md`    | Approval modal, execution logs, filtering             |
+| 6.5 | [HITL UI](./LAYER_6.5_HITL_UI.md)                   | `LAYER_6.5_HITL_UI.md`          | Trace observability, confirmation visualization       |
 
 ### Client Reading Order
 
@@ -226,7 +224,7 @@ The Client layer handles the Next.js frontend, React components, Zustand state m
 
 **Advanced Features:**
 
-5. [6.5 HITL & Debug UI](./LAYER_6.5_HITL_DEBUG_UI.md) - Approval and debugging
+5. [6.5 HITL UI](./LAYER_6.5_HITL_UI.md) - Trace and confirmation visualization
 
 ---
 

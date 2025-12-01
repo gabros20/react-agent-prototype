@@ -1,415 +1,265 @@
-# Layer 6.5: HITL UI
+# Layer 6.5: HITL UI - Trace Observability
 
-> Human-in-the-loop approval modal for dangerous tool operations
+> Debug panel and trace visualization for agent execution
 
 ## Overview
 
-The HITL (Human-in-the-Loop) UI provides user control over dangerous agent operations. When the agent attempts to call a high-risk tool (delete, publish, etc.), the HITLModal intercepts the request and requires explicit user approval before proceeding.
+The HITL (Human-in-the-Loop) system uses a **conversational confirmation pattern** rather than modal popups. Destructive operations are handled entirely through chat conversation - the agent asks for confirmation and the user responds in the chat. The frontend's role is to visualize this in the debug/trace panel.
 
 **Key Responsibilities:**
 
--   Display approval modal for dangerous tool calls
--   Show tool name, description, and input for review
--   Send approve/reject responses to backend
--   Block agent execution until user responds
+- Display confirmation-required events in trace panel
+- Show tool execution flow with confirmation states
+- Provide visibility into agent reasoning during confirmations
+- No modal UI - confirmations are conversational
 
 ---
 
-## The Problem
+## Architecture Change: From Modals to Conversation
 
-Without HITL UI:
+### Previous Architecture (Deprecated)
 
-```typescript
-// WRONG: Silent dangerous operations
-await deleteAllPages();  // User never knew this happened
-
-// WRONG: No control over destructive actions
-await publishPage({ id: "draft-123" });  // Published without consent
-
-// WRONG: Agent runs unchecked
-agent.run("delete everything");  // No safeguard
-
-// WRONG: No review opportunity
-cms_updatePage({ content: "..." });  // User can't verify before save
+```
+// OLD: Modal-based approval - NO LONGER USED
+approval-required SSE event → approval-store → HITLModal → POST /approve
 ```
 
-**Our Solution:**
-
-1. HITLModal triggered by `approval-required` SSE events
-2. Modal displays tool details for user review
-3. Approve/Reject buttons with clear actions
-4. Backend approval endpoint to continue/abort execution
-5. 5-minute timeout with automatic rejection
-
----
-
-## Architecture
+### Current Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         HITL UI                                  │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                      HITLModal                             │  │
-│  │                                                            │  │
-│  │  Triggers when: approvalStore.pendingApproval !== null     │  │
-│  │                                                            │  │
-│  │  ┌──────────────────────────────────────────────────────┐  │  │
-│  │  │  ⚠️ Approval Required                                │  │  │
-│  │  │                                                      │  │  │
-│  │  │  Tool: cms_deletePage                                │  │  │
-│  │  │                                                      │  │  │
-│  │  │  Description:                                        │  │  │
-│  │  │  Delete page "About Us" permanently                  │  │  │
-│  │  │                                                      │  │  │
-│  │  │  Input:                                              │  │  │
-│  │  │  ┌────────────────────────────────────────────┐      │  │  │
-│  │  │  │ { "pageId": "abc123" }                     │      │  │  │
-│  │  │  └────────────────────────────────────────────┘      │  │  │
-│  │  │                                                      │  │  │
-│  │  │  [Reject]                           [Approve]        │  │  │
-│  │  └──────────────────────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────────────┘  │
+│              HITL: Conversational Confirmation                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Tool returns { requiresConfirmation: true }                 │
+│                    │                                            │
+│                    ▼                                            │
+│  2. Agent displays confirmation message in chat                 │
+│                    │                                            │
+│                    ▼                                            │
+│  3. User responds "yes" or "no" in chat                        │
+│                    │                                            │
+│                    ▼                                            │
+│  4. Agent calls tool with confirmed: true (or cancels)         │
+│                                                                 │
+│  Trace Panel shows: confirmation-required entry                 │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Trace Entry Types for Confirmations
+
+The trace store tracks confirmation-related events:
+
+```typescript
+// app/assistant/_stores/trace-store.ts
+export type TraceEntryType =
+  | "tool-call"
+  | "tool-result"  // Includes requiresConfirmation responses
+  | "confirmation-required" // Special type for confirmation requests
+  // ... other types
+```
+
+### Confirmation Detection
+
+```typescript
+// app/assistant/_hooks/use-agent.ts
+case 'tool-result': {
+  const result = data.result || {};
+  const requiresConfirmation = result.requiresConfirmation === true;
+
+  if (requiresConfirmation) {
+    // Log as special trace entry type
+    addEntry({
+      traceId: currentTraceId,
+      timestamp: Date.now(),
+      type: 'confirmation-required',
+      level: 'warn',
+      toolName: data.toolName,
+      toolCallId,
+      summary: `${data.toolName}: Confirmation required`,
+      output: result,
+    });
+  } else {
+    // Normal tool result - update existing entry
+    completeEntry(toolCallId, result, undefined);
+  }
+}
+```
+
+---
+
+## Trace Panel Visualization
+
+### Entry Type Colors
+
+```typescript
+// app/assistant/_stores/trace-store.ts
+export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
+  "tool-call": "bg-amber-500",
+  "confirmation-required": "bg-orange-400", // Highlighted for attention
+  // ... other colors
+};
+
+export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
+  "tool-call": "Tool",
+  "confirmation-required": "Confirm?",
+  // ... other labels
+};
+```
+
+### Trace Entry Display
+
+When a confirmation is required, the trace panel shows:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ [10:30:15.234] [Tool] cms_deletePage                    │
+│   Input: { slug: "about" }                              │
+│   Duration: 45ms                                        │
+├─────────────────────────────────────────────────────────┤
+│ [10:30:15.280] [Confirm?] cms_deletePage                │
+│   ⚠️ Confirmation required                              │
+│   Output: {                                             │
+│     requiresConfirmation: true,                         │
+│     message: "Are you sure you want to delete...",      │
+│     page: { id: "...", slug: "about", name: "About" }   │
+│   }                                                     │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Key Files
 
-| File                                       | Purpose                |
-| ------------------------------------------ | ---------------------- |
-| `app/assistant/_components/hitl-modal.tsx` | Approval modal dialog  |
-| `app/assistant/_stores/approval-store.ts`  | Pending approval state |
+| File | Purpose |
+|------|---------|
+| `app/assistant/_stores/trace-store.ts` | Trace entries including confirmation-required type |
+| `app/assistant/_hooks/use-agent.ts` | SSE parsing and confirmation detection |
+| `app/assistant/_components/debug-pane.tsx` | Trace visualization |
+
+### Removed Files
+
+The following files were removed as part of the modal-to-conversation migration:
+
+- ~~`app/assistant/_components/hitl-modal.tsx`~~ - Modal no longer used
+- ~~`app/assistant/_stores/approval-store.ts`~~ - Approval state no longer needed
+- ~~`app/assistant/_components/approval-card.tsx`~~ - Inline card removed
 
 ---
 
-## Core Implementation
+## User Flow: Confirmation in Chat
 
-### HITL Modal
+### Example Interaction
 
-```typescript
-// app/assistant/_components/hitl-modal.tsx
-export function HITLModal() {
-  const { pendingApproval, setPendingApproval } = useApprovalStore();
-
-  const handleApprove = async () => {
-    if (!pendingApproval) return;
-
-    const approvalId = pendingApproval.approvalId || pendingApproval.stepId;
-
-    try {
-      const response = await fetch(`/api/agent/approval/${approvalId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          approved: true,
-          reason: "User approved via modal",
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send approval");
-      }
-
-      setPendingApproval(null);
-    } catch (error) {
-      console.error("Error approving:", error);
-      alert("Failed to send approval");
-    }
-  };
-
-  const handleReject = async () => {
-    if (!pendingApproval) return;
-
-    const approvalId = pendingApproval.approvalId || pendingApproval.stepId;
-
-    try {
-      const response = await fetch(`/api/agent/approval/${approvalId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          approved: false,
-          reason: "User rejected via modal",
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send rejection");
-      }
-
-      setPendingApproval(null);
-    } catch (error) {
-      console.error("Error rejecting:", error);
-      alert("Failed to send rejection");
-    }
-  };
-
-  return (
-    <Dialog open={!!pendingApproval} onOpenChange={() => setPendingApproval(null)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
-            Approval Required
-          </DialogTitle>
-          <DialogDescription>
-            The agent wants to perform a high-risk operation.
-          </DialogDescription>
-        </DialogHeader>
-
-        {pendingApproval && (
-          <div className="space-y-4">
-            <div>
-              <p className="font-medium text-sm mb-1">Tool:</p>
-              <code className="text-sm bg-muted px-2 py-1 rounded">
-                {pendingApproval.toolName}
-              </code>
-            </div>
-
-            <div>
-              <p className="font-medium text-sm mb-1">Description:</p>
-              <p className="text-sm text-muted-foreground">
-                {pendingApproval.description}
-              </p>
-            </div>
-
-            <div>
-              <p className="font-medium text-sm mb-1">Input:</p>
-              <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-40">
-                {JSON.stringify(pendingApproval.input, null, 2)}
-              </pre>
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={handleReject}>
-            Reject
-          </Button>
-          <Button onClick={handleApprove}>Approve</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Chat Pane                           │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  User: Delete the about page                            │
+│                                                         │
+│  Agent: This will permanently delete the "About Us"     │
+│         page along with all 3 sections. This cannot     │
+│         be undone.                                      │
+│                                                         │
+│         Are you sure you want to proceed?               │
+│                                                         │
+│  User: yes                                              │
+│                                                         │
+│  Agent: Done! The About Us page has been deleted.       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Approval Store
+### Corresponding Trace
 
-```typescript
-// app/assistant/_stores/approval-store.ts
-interface PendingApproval {
-  approvalId?: string;
-  stepId?: string;
-  toolName: string;
-  description: string;
-  input: unknown;
-}
-
-interface ApprovalState {
-  pendingApproval: PendingApproval | null;
-  setPendingApproval: (approval: PendingApproval | null) => void;
-}
-
-export const useApprovalStore = create<ApprovalState>((set) => ({
-  pendingApproval: null,
-  setPendingApproval: (approval) => set({ pendingApproval: approval }),
-}));
 ```
-
-### SSE Event Handling
-
-```typescript
-// app/assistant/_hooks/use-agent.ts
-case 'approval-required': {
-  const { approvalId, toolName, input, description } = data;
-
-  useApprovalStore.getState().setPendingApproval({
-    approvalId,
-    toolName,
-    description,
-    input,
-  });
-  break;
-}
+┌─────────────────────────────────────────────────────────┐
+│                     Debug Panel                          │
+├─────────────────────────────────────────────────────────┤
+│ [10:30:15.100] [Prompt] User message sent               │
+│ [10:30:15.234] [Tool] cms_deletePage                    │
+│ [10:30:15.280] [Confirm?] Confirmation required         │
+│ [10:30:15.300] [Response] Agent asks for confirmation   │
+│ [10:30:18.500] [Prompt] User confirms "yes"             │
+│ [10:30:18.650] [Tool] cms_deletePage (confirmed)        │
+│ [10:30:18.900] [Tool] ✓ Page deleted                    │
+│ [10:30:19.000] [Response] Agent confirms deletion       │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Design Decisions
+## Why Conversational Over Modal?
 
-### Why Modal for Approvals (Not Inline)?
+| Aspect | Modal Approach | Conversational (Current) |
+|--------|----------------|--------------------------|
+| User Experience | Interrupting, jarring | Natural flow |
+| Context | Isolated modal | Full conversation context |
+| Implementation | Complex (approval queue, endpoints, stores) | Simple (tool logic) |
+| Backend | Requires SDK-specific features | Works with any backend |
+| Multi-step | Awkward | Natural ("delete these 3 pages?") |
 
-```typescript
-<Dialog open={!!pendingApproval}>
-```
+### Benefits of Conversational Approach
 
-**Reasons:**
-
-1. **Blocking UX** - User must respond before agent continues
-2. **High visibility** - Can't miss the request
-3. **Focus attention** - Review the operation carefully
-4. **Clear action** - Approve or reject, nothing else
-
-### Why Send Approval via API (Not SSE)?
-
-```typescript
-await fetch(`/api/agent/approval/${approvalId}`, {
-  method: "POST",
-  body: JSON.stringify({ approved, reason }),
-});
-```
-
-**Reasons:**
-
-1. **Reliable delivery** - HTTP POST is more reliable than upstream messages
-2. **Backend control** - Server orchestrates the approval queue
-3. **Audit trail** - Can log approvals in backend
-4. **Timeout handling** - Backend manages 5-minute timeout
-
-### Why Separate Approval Store?
-
-```typescript
-const { pendingApproval, setPendingApproval } = useApprovalStore();
-```
-
-**Reasons:**
-
-1. **Single responsibility** - Only approval state
-2. **Clean triggers** - Modal opens when pendingApproval !== null
-3. **Isolation** - Approval state separate from agent state
-4. **Easy testing** - Mock store independently
-
----
-
-## Approval Flow
-
-```
-Backend: approval-required event
-        │
-        ▼
-useAgent: setPendingApproval({...})
-        │
-        ▼
-HITLModal: Dialog opens, shows details
-        │
-        ├─── [Approve] ─────────────────────┐
-        │                                    │
-        └─── [Reject] ─────┐                │
-                           │                │
-                           ▼                ▼
-                POST /api/agent/approval/:id
-                { approved: false/true }
-                           │
-                           ▼
-                Backend: resolves promise
-                Agent: continues or aborts
-```
-
----
-
-## Confirmation Flag vs HITL Approval
-
-Two distinct patterns exist for user confirmation:
-
-### 1. HITL Approval (This Layer)
-
-- Tool marked with `needsApproval: true` in metadata
-- AI SDK emits `approval-required` event
-- **SSE stream pauses** waiting for approval
-- User approves/rejects via modal
-- Stream resumes or terminates
-
-### 2. Confirmation Flag Pattern (In-Band)
-
-- Tool returns `{requiresConfirmation: true, message: "..."}`
-- Agent shows message and waits for user response
-- User responds "yes" → Agent calls tool again with `confirmed: true`
-- **Does NOT pause SSE stream** - handled conversationally
+1. **Natural UX** - User stays in chat flow
+2. **Agent Can Explain** - Agent provides context about consequences
+3. **Questions Welcome** - User can ask "what sections will be deleted?" before confirming
+4. **Simple Architecture** - No approval queue, no extra endpoints, no frontend stores
+5. **Backend Agnostic** - Works with Express, doesn't need SDK approval features
 
 ---
 
 ## Integration Points
 
-| Connects To                  | How                                |
-| ---------------------------- | ---------------------------------- |
-| Layer 6.1 (State Management) | approval-store                     |
-| Layer 6.2 (SSE Streaming)    | approval-required event            |
-| Layer 3.5 (Backend HITL)     | Approval endpoint resolves promise |
-| Layer 4.7 (Approval Queue)   | Backend queue management           |
+| Connects To | How |
+|-------------|-----|
+| [Layer 3.5: HITL](./LAYER_3.5_HITL.md) | Tool confirmation pattern |
+| [Layer 6.1: State Management](./LAYER_6.1_STATE_MANAGEMENT.md) | trace-store (no approval-store) |
+| [Layer 6.2: SSE Streaming](./LAYER_6.2_SSE_STREAMING.md) | tool-result event parsing |
+| [Layer 6.6: Trace Observability](./LAYER_6.6_TRACE_OBSERVABILITY.md) | Debug panel display |
 
 ---
 
 ## Common Issues / Debugging
 
-### Modal Not Showing
+### Confirmation Not Showing in Trace
 
 ```
-// approval-required event received but no modal
+// Tool result has requiresConfirmation but no trace entry
 ```
 
-**Cause:** pendingApproval not set or modal not mounted.
+**Cause:** Detection logic not triggered.
 
 **Debug:**
-
 ```typescript
-// In useAgent
-console.log('Setting approval:', data);
-useApprovalStore.getState().setPendingApproval({...});
-
-// Check state
-console.log('Approval state:', useApprovalStore.getState());
+case 'tool-result': {
+  console.log('Tool result:', data.result);
+  const requiresConfirmation = data.result?.requiresConfirmation === true;
+  console.log('Requires confirmation:', requiresConfirmation);
+}
 ```
 
-### Approval Timeout
+### Agent Skips Confirmation
 
-```
-// Modal shows but agent times out
-```
+**Cause:** Prompt instructions not followed.
 
-**Cause:** User took too long (5-minute backend timeout).
+**Fix:** Check `react.xml` for proper `<destructive_operations>` section with examples.
 
-**Fix:** Backend handles this - agent receives rejection.
+### User Says "Yes" But Nothing Happens
 
-### Approval Response Not Sent
+**Cause:** Agent didn't recognize confirmation word.
 
-```
-// Click approve but agent doesn't continue
-```
-
-**Cause:** API request failed or wrong approvalId.
-
-**Debug:**
-
-```typescript
-console.log('Sending approval for:', approvalId);
-const response = await fetch(`/api/agent/approval/${approvalId}`, ...);
-console.log('Response:', response.status);
-```
-
-### Modal Closes Unexpectedly
-
-```
-// Modal disappears before user action
-```
-
-**Cause:** setPendingApproval(null) called elsewhere.
-
-**Debug:**
-
-```typescript
-// Search for all setPendingApproval calls
-// Ensure only approve/reject handlers clear it
-```
+**Fix:** Ensure prompt includes confirmation word list: yes, y, yeah, ok, proceed, etc.
 
 ---
 
 ## Further Reading
 
--   [Layer 3.5: Backend HITL](./LAYER_3.5_HITL.md) - Server-side approval queue
--   [Layer 4.7: Approval Queue](./LAYER_4.7_APPROVAL_QUEUE.md) - Queue implementation
--   [Layer 6.1: State Management](./LAYER_6.1_STATE_MANAGEMENT.md) - approval-store
--   [Layer 6.2: SSE Streaming](./LAYER_6.2_SSE_STREAMING.md) - Event dispatching
--   [Layer 6.6: Trace Observability](./LAYER_6.6_TRACE_OBSERVABILITY.md) - Debug panel (separate)
--   [shadcn/ui Dialog](https://ui.shadcn.com/docs/components/dialog)
+- [Layer 3.5: Backend HITL](./LAYER_3.5_HITL.md) - Confirmation flag pattern
+- [Layer 6.1: State Management](./LAYER_6.1_STATE_MANAGEMENT.md) - trace-store
+- [Layer 6.2: SSE Streaming](./LAYER_6.2_SSE_STREAMING.md) - Event parsing
+- [Layer 6.6: Trace Observability](./LAYER_6.6_TRACE_OBSERVABILITY.md) - Debug panel

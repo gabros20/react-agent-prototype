@@ -154,6 +154,14 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 						</div>
 					)}
 
+					{/* Cost */}
+					{metrics.cost > 0 && (
+						<div className='flex items-center gap-1.5 text-emerald-500 font-medium'>
+							<span>$</span>
+							<span>{metrics.cost < 0.01 ? metrics.cost.toFixed(6) : metrics.cost.toFixed(4)}</span>
+						</div>
+					)}
+
 					{/* Errors */}
 					{metrics.errorCount > 0 && (
 						<div className='flex items-center gap-1.5 text-red-500'>

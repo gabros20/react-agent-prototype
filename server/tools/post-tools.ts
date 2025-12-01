@@ -136,28 +136,27 @@ export const cmsUpdatePost = tool({
 })
 
 export const cmsPublishPost = tool({
-  description: 'Publish a draft post (makes it publicly visible). DESTRUCTIVE: Requires confirmed: true.',
+  description: 'Publish a draft post (makes it publicly visible). Requires confirmed: true.',
   inputSchema: z.object({
     postSlug: z.string().describe('Post slug to publish'),
-    confirmed: z.boolean().optional().default(false).describe('Must be true to publish')
+    confirmed: z.boolean().optional().describe('Must be true to publish')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-
-    if (!input.confirmed) {
-      return {
-        success: false,
-        requiresConfirmation: true,
-        message: `Are you sure you want to publish the post "${input.postSlug}"? This will make it publicly visible. Set confirmed: true to proceed.`,
-        action: 'publish',
-        postSlug: input.postSlug
-      }
-    }
 
     // Get post
     const entry = await ctx.services.entryService.getEntryBySlug(input.postSlug)
     if (!entry) {
       throw new Error(`Post "${input.postSlug}" not found`)
+    }
+
+    // Require confirmation
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to publish "${entry.title}"? This will make it publicly visible. Set confirmed: true to proceed.`,
+        post: { slug: entry.slug, title: entry.title, status: entry.status }
+      }
     }
 
     // Publish
@@ -178,28 +177,27 @@ export const cmsPublishPost = tool({
 })
 
 export const cmsArchivePost = tool({
-  description: 'Archive a post (hides from public listings). DESTRUCTIVE: Requires confirmed: true.',
+  description: 'Archive a post (hides from public listings). Requires confirmed: true.',
   inputSchema: z.object({
     postSlug: z.string().describe('Post slug to archive'),
-    confirmed: z.boolean().optional().default(false).describe('Must be true to archive')
+    confirmed: z.boolean().optional().describe('Must be true to archive')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-
-    if (!input.confirmed) {
-      return {
-        success: false,
-        requiresConfirmation: true,
-        message: `Are you sure you want to archive the post "${input.postSlug}"? It will be hidden from public view. Set confirmed: true to proceed.`,
-        action: 'archive',
-        postSlug: input.postSlug
-      }
-    }
 
     // Get post
     const entry = await ctx.services.entryService.getEntryBySlug(input.postSlug)
     if (!entry) {
       throw new Error(`Post "${input.postSlug}" not found`)
+    }
+
+    // Require confirmation
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to archive "${entry.title}"? It will be hidden from public view. Set confirmed: true to proceed.`,
+        post: { slug: entry.slug, title: entry.title, status: entry.status }
+      }
     }
 
     // Archive
@@ -334,28 +332,27 @@ export const cmsGetPost = tool({
 })
 
 export const cmsDeletePost = tool({
-  description: 'Permanently delete a blog post. DESTRUCTIVE: Requires confirmed: true. Use archive instead for soft delete.',
+  description: 'Permanently delete a blog post. This cannot be undone. Consider using cms_archivePost for soft delete. Requires confirmed: true.',
   inputSchema: z.object({
     postSlug: z.string().describe('Post slug to delete'),
-    confirmed: z.boolean().optional().default(false).describe('Must be true to delete')
+    confirmed: z.boolean().optional().describe('Must be true to delete')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
-
-    if (!input.confirmed) {
-      return {
-        success: false,
-        requiresConfirmation: true,
-        message: `Are you sure you want to PERMANENTLY DELETE the post "${input.postSlug}"? This cannot be undone. Consider using cms_archivePost instead for soft delete. Set confirmed: true to proceed.`,
-        action: 'delete',
-        postSlug: input.postSlug
-      }
-    }
 
     // Get post
     const entry = await ctx.services.entryService.getEntryBySlug(input.postSlug)
     if (!entry) {
       throw new Error(`Post "${input.postSlug}" not found`)
+    }
+
+    // Require confirmation
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to PERMANENTLY DELETE "${entry.title}"? This cannot be undone. Consider using cms_archivePost instead. Set confirmed: true to proceed.`,
+        post: { slug: entry.slug, title: entry.title, status: entry.status }
+      }
     }
 
     // Delete the post

@@ -24,47 +24,19 @@ export const webQuickSearchTool: any = tool({
 - Verifying information
 Returns snippets and URLs from top results. For comprehensive research, use web_deepResearch instead.`,
 	inputSchema: z.object({
-		query: z
-			.string()
-			.describe("Search query - be specific for better results"),
-		numResults: z
-			.number()
-			.min(1)
-			.max(20)
-			.optional()
-			.describe("Number of results (1-20, default: 5)"),
+		query: z.string().describe("Search query - be specific for better results"),
+		numResults: z.number().min(1).max(20).optional().describe("Number of results (1-20, default: 5)"),
 		category: z
-			.enum([
-				"company",
-				"research paper",
-				"news",
-				"pdf",
-				"github",
-				"tweet",
-				"personal site",
-				"linkedin profile",
-				"financial report",
-			])
+			.enum(["company", "research paper", "news", "pdf", "github", "tweet", "personal site", "linkedin profile", "financial report"])
 			.optional()
 			.describe("Filter by content category"),
-		includeDomains: z
-			.array(z.string())
-			.optional()
-			.describe("Only include results from these domains"),
-		excludeDomains: z
-			.array(z.string())
-			.optional()
-			.describe("Exclude results from these domains"),
-		recentOnly: z
-			.boolean()
-			.optional()
-			.describe("Only include results from the last 7 days"),
+		includeDomains: z.array(z.string()).optional().describe("Only include results from these domains"),
+		excludeDomains: z.array(z.string()).optional().describe("Exclude results from these domains"),
+		recentOnly: z.boolean().optional().describe("Only include results from the last 7 days"),
 		livecrawl: z
 			.enum(["never", "fallback", "always", "preferred"])
 			.optional()
-			.describe(
-				"Freshness: 'always' for real-time, 'fallback' for balanced (default)"
-			),
+			.describe("Freshness: 'always' for real-time, 'fallback' for balanced (default)"),
 	}),
 	execute: async (input: {
 		query: string;
@@ -80,8 +52,7 @@ Returns snippets and URLs from top results. For comprehensive research, use web_
 		if (!exaService.isConfigured()) {
 			return {
 				success: false,
-				error:
-					"Exa API key not configured. Set EXA_API_KEY environment variable.",
+				error: "Exa API key not configured. Set EXA_API_KEY environment variable.",
 				results: [],
 				totalResults: 0,
 			};
@@ -89,9 +60,7 @@ Returns snippets and URLs from top results. For comprehensive research, use web_
 
 		try {
 			// Calculate date filter for recent results
-			const startPublishedDate = input.recentOnly
-				? ExaResearchService.getDateFilter(7)
-				: undefined;
+			const startPublishedDate = input.recentOnly ? ExaResearchService.getDateFilter(7) : undefined;
 
 			const response = await exaService.quickSearch(input.query, {
 				numResults: input.numResults || 5,
@@ -112,10 +81,7 @@ Returns snippets and URLs from top results. For comprehensive research, use web_
 		} catch (error) {
 			return {
 				success: false,
-				error:
-					error instanceof Error
-						? error.message
-						: "Search failed",
+				error: error instanceof Error ? error.message : "Search failed",
 				results: [],
 				totalResults: 0,
 			};
@@ -137,33 +103,17 @@ export const webDeepResearchTool: any = tool({
 This is an async operation that may take 30-120 seconds. Returns a structured report with citations.
 For quick lookups, use web_quickSearch instead.`,
 	inputSchema: z.object({
-		topic: z
-			.string()
-			.describe(
-				"Research topic or question - be specific about what information you need"
-			),
+		topic: z.string().describe("Research topic or question - be specific about what information you need"),
 		sections: z
 			.array(z.string())
 			.optional()
-			.describe(
-				"Optional: organize research into these sections (e.g., ['overview', 'benefits', 'challenges'])"
-			),
-		includeStatistics: z
-			.boolean()
-			.optional()
-			.describe("Include statistics and data points if available"),
+			.describe("Optional: organize research into these sections (e.g., ['overview', 'benefits', 'challenges'])"),
+		includeStatistics: z.boolean().optional().describe("Include statistics and data points if available"),
 		model: z
 			.enum(["exa-research", "exa-research-pro"])
 			.optional()
-			.describe(
-				"Research model: 'exa-research' (faster/cheaper, default) or 'exa-research-pro' (higher quality)"
-			),
-		maxWaitTime: z
-			.number()
-			.min(30)
-			.max(300)
-			.optional()
-			.describe("Max wait time in seconds (30-300, default: 120)"),
+			.describe("Research model: 'exa-research' (faster/cheaper, default) or 'exa-research-pro' (higher quality)"),
+		maxWaitTime: z.number().min(30).max(300).optional().describe("Max wait time in seconds (30-300, default: 120)"),
 	}),
 	execute: async (input: {
 		topic: string;
@@ -177,8 +127,7 @@ For quick lookups, use web_quickSearch instead.`,
 		if (!exaService.isConfigured()) {
 			return {
 				success: false,
-				error:
-					"Exa API key not configured. Set EXA_API_KEY environment variable.",
+				error: "Exa API key not configured. Set EXA_API_KEY environment variable.",
 				researchId: "",
 				status: "failed" as const,
 				citations: [],
@@ -191,7 +140,7 @@ For quick lookups, use web_quickSearch instead.`,
 				? {
 						sections: input.sections,
 						includeStatistics: input.includeStatistics,
-					}
+				  }
 				: undefined;
 
 			const response = await exaService.deepResearch(input.topic, {
@@ -213,10 +162,7 @@ For quick lookups, use web_quickSearch instead.`,
 		} catch (error) {
 			return {
 				success: false,
-				error:
-					error instanceof Error
-						? error.message
-						: "Research failed",
+				error: error instanceof Error ? error.message : "Research failed",
 				researchId: "",
 				status: "failed" as const,
 				citations: [],
@@ -238,31 +184,11 @@ export const webFetchContentTool: any = tool({
 
 Supports up to 10 URLs per request.`,
 	inputSchema: z.object({
-		urls: z
-			.array(z.string().url())
-			.min(1)
-			.max(10)
-			.describe("URLs to fetch content from (1-10)"),
-		includeText: z
-			.boolean()
-			.optional()
-			.describe("Include full page text (default: true)"),
-		textMaxCharacters: z
-			.number()
-			.optional()
-			.describe(
-				"Max characters of text to return per URL (default: 10000)"
-			),
-		includeSummary: z
-			.boolean()
-			.optional()
-			.describe("Include AI-generated summary of each page"),
-		summaryQuery: z
-			.string()
-			.optional()
-			.describe(
-				"Custom focus for summaries (e.g., 'focus on pricing information')"
-			),
+		urls: z.array(z.string().url()).min(1).max(10).describe("URLs to fetch content from (1-10)"),
+		includeText: z.boolean().optional().describe("Include full page text (default: true)"),
+		textMaxCharacters: z.number().optional().describe("Max characters of text to return per URL (default: 10000)"),
+		includeSummary: z.boolean().optional().describe("Include AI-generated summary of each page"),
+		summaryQuery: z.string().optional().describe("Custom focus for summaries (e.g., 'focus on pricing information')"),
 	}),
 	execute: async (input: {
 		urls: string[];
@@ -276,8 +202,7 @@ Supports up to 10 URLs per request.`,
 		if (!exaService.isConfigured()) {
 			return {
 				success: false,
-				error:
-					"Exa API key not configured. Set EXA_API_KEY environment variable.",
+				error: "Exa API key not configured. Set EXA_API_KEY environment variable.",
 				contents: [],
 			};
 		}
@@ -297,10 +222,7 @@ Supports up to 10 URLs per request.`,
 		} catch (error) {
 			return {
 				success: false,
-				error:
-					error instanceof Error
-						? error.message
-						: "Content fetch failed",
+				error: error instanceof Error ? error.message : "Content fetch failed",
 				contents: [],
 			};
 		}

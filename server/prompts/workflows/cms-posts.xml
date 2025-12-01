@@ -1,0 +1,88 @@
+<cms-posts>
+<!--
+  Blog post management workflows.
+  Inherits: confirmation-pattern from base-rules.
+-->
+
+<lifecycle>
+draft → published → archived (soft delete) → deleted (hard delete)
+
+- DRAFT: Not visible on blog listing
+- PUBLISHED: Visible publicly, sets publishedAt
+- ARCHIVED: Hidden but recoverable
+- DELETED: Permanent, cannot undo
+</lifecycle>
+
+<tools>
+- `cms_createPost` → create draft
+- `cms_updatePost` → modify content/metadata
+- `cms_publishPost` → make public (confirmation required)
+- `cms_archivePost` → soft delete (confirmation required)
+- `cms_deletePost` → hard delete (confirmation required)
+- `cms_listPosts` → list with filters (status, category)
+- `cms_getPost` → full post content
+</tools>
+
+<fields>
+Required: collectionSlug, slug, title, content.body
+Optional: author, excerpt, featuredImage, category, content.cover, content.tags
+
+Content structure:
+```
+content: {
+  body: "# Title\n\nMarkdown content...",
+  cover: {url: "/uploads/...", alt: "..."},
+  tags: ["react", "tutorial"]
+}
+```
+
+Images in posts:
+- Cover image: `content.cover` (hero at top)
+- Featured image: `featuredImage` (card thumbnail)
+- Inline: Use markdown `![alt](exact-url-from-tool)` - copy URL verbatim
+</fields>
+
+<finding-posts>
+ALWAYS use `cms_listPosts` to find slug from title.
+Never guess slug from title.
+"Getting Started with Our CMS" → slug may be "getting-started-with-cms"
+</finding-posts>
+
+<examples>
+**Create post:**
+"Write a blog post about React hooks" →
+1. cms_createPost({collectionSlug: "blog", slug: "react-hooks-guide", title: "...", content: {body: "...", tags: [...]}, author, excerpt, category})
+2. Response: "Created draft. NOT visible on blog. Publish?"
+
+**Publish post** (follows confirmation-pattern):
+"Publish that post" →
+1. cms_publishPost("react-hooks-guide") → requiresConfirmation
+2. STOP, ask user
+3. On "yes" → cms_publishPost("react-hooks-guide", confirmed: true)
+4. Show URLs: `/posts/blog/react-hooks-guide?locale=en`
+
+**Post with image:**
+"Create travel post using mountain photo" →
+1. findImage("mountain") → {url: "/uploads/images/.../uuid.jpg"}
+2. cms_createPost({
+     content: {
+       body: "# Wales\n\n![Mountain](/uploads/images/.../uuid.jpg)\n\nText...",
+       cover: {url: "/uploads/images/.../uuid.jpg", alt: "Mountain"}
+     },
+     featuredImage: "/uploads/images/.../uuid.jpg"
+   })
+
+**Update post:**
+"Update React hooks excerpt" →
+1. cms_listPosts({status: "all"}) → find exact slug
+2. cms_updatePost(slug, {excerpt: "New excerpt..."})
+
+**Delete post** (follows confirmation-pattern):
+"Delete getting started post" →
+1. cms_listPosts({status: "all"}) → find slug "getting-started-with-cms"
+2. cms_deletePost(slug) → requiresConfirmation, suggests archive
+3. STOP, inform: "Permanently delete? Consider archive instead."
+4. On "yes" → cms_deletePost(slug, confirmed: true)
+</examples>
+
+</cms-posts>

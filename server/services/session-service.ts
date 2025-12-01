@@ -40,7 +40,6 @@ export class SessionService {
     const session = {
       id: randomUUID(),
       title: input.title || "New Session",
-      checkpoint: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -207,26 +206,6 @@ export class SessionService {
       .where(eq(schema.sessions.id, sessionId));
 
     return { success: true, clearedSessionId: sessionId };
-  }
-
-  /**
-   * Clear checkpoint from session
-   */
-  async clearCheckpoint(sessionId: string) {
-    const session = await this.db.query.sessions.findFirst({
-      where: eq(schema.sessions.id, sessionId),
-    });
-
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    await this.db
-      .update(schema.sessions)
-      .set({ checkpoint: null, updatedAt: new Date() })
-      .where(eq(schema.sessions.id, sessionId));
-
-    return { success: true, sessionId };
   }
 
   /**

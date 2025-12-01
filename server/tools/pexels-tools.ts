@@ -107,12 +107,21 @@ export const pexelsSearchPhotosTool: any = tool({
 // ============================================================================
 
 export const pexelsDownloadPhotoTool: any = tool({
-	description: `Download a Pexels photo into the system. Checks for duplicates, processes image, stores attribution. Photo becomes searchable via cms_searchImages after processing completes.`,
+	description: `Download a Pexels photo into the system. Checks for duplicates, processes image, stores attribution. Photo becomes searchable via cms_searchImages after processing completes. No sessionId needed - uses current session automatically.`,
 	inputSchema: z.object({
 		photoId: z.number().describe("Pexels photo ID (from search results)"),
-		sessionId: z.string().describe("Current session ID"),
 	}),
-	execute: async (input: { photoId: number; sessionId: string }): Promise<any> => {
+	execute: async (input: { photoId: number }, { experimental_context }): Promise<any> => {
+		const ctx = experimental_context as any;
+		const sessionId = ctx?.sessionId;
+
+		if (!sessionId) {
+			return {
+				success: false,
+				error: "Session ID not available in context",
+			};
+		}
+
 		const pexelsService = getPexelsService();
 
 		if (!pexelsService.isConfigured()) {
@@ -141,7 +150,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 					const alreadyLinked = await db.query.conversationImages.findFirst({
 						where: (ci, { and, eq }) =>
 							and(
-								eq(ci.sessionId, input.sessionId),
+								eq(ci.sessionId, sessionId),
 								eq(ci.imageId, existingImage.id)
 							),
 					});
@@ -150,7 +159,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 					if (!alreadyLinked) {
 						await db.insert(conversationImages).values({
 							id: randomUUID(),
-							sessionId: input.sessionId,
+							sessionId: sessionId,
 							imageId: existingImage.id,
 							uploadedAt: new Date(),
 						});
@@ -173,7 +182,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 			const processResult = await imageProcessingService.processImage({
 				buffer: download.buffer,
 				filename: download.metadata.filename,
-				sessionId: input.sessionId,
+				sessionId: sessionId,
 				mediaType: "image/jpeg",
 			});
 

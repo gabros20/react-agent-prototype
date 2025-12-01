@@ -194,6 +194,7 @@
   },
   "active": "974d0433f089a4b1",
   "lastOpenFiles": [
+    "plans/AI_SDK_6_MIGRATION_PLAN.md",
     "plans/ENHANCED_DEBUG_PANEL_PLAN.md",
     "architecture/LAYER_5.2_QUEUE_DEFINITION.md",
     "architecture/LAYER_4.3_VECTOR_INDEX.md",
@@ -219,7 +220,6 @@
     "architecture/LAYER_6.3_SESSION_UI.md",
     "architecture/LAYER_5.4_JOB_PROCESSORS.md",
     "architecture/LAYER_5.3_WORKER_LIFECYCLE.md",
-    "architecture/LAYER_2.2_ENTITY_HIERARCHY.md",
     "architecture",
     "C - Brease Assistant.canvas",
     "C - Brease Assistant - IMAGE 20251109.png",

@@ -1,16 +1,16 @@
 # Layer 3.5: Human-in-the-Loop (HITL)
 
-> Human oversight for dangerous operations through approval flows
+> Human oversight for dangerous operations through conversational confirmation
 
 ## Overview
 
-Human-in-the-Loop ensures users maintain control over dangerous or irreversible operations. Our system implements two patterns: an async approval queue for runtime confirmation, and explicit confirmation flags for destructive operations.
+Human-in-the-Loop ensures users maintain control over dangerous or irreversible operations. Our system implements a **unified confirmation flag pattern** where destructive tools return a confirmation request, the agent asks the user conversationally, and only proceeds when the user explicitly confirms.
 
 **Key Files:**
-- `server/services/approval-queue.ts` - Approval queue implementation
-- `server/agent/orchestrator.ts` - HITL integration in stream
-- `app/assistant/_stores/approval-store.ts` - Frontend state
-- `app/assistant/_components/hitl-modal.tsx` - Approval UI
+- `server/tools/all-tools.ts` - Tool definitions with `confirmed` parameter
+- `server/tools/post-tools.ts` - Post tools (publish, archive, delete)
+- `server/tools/image-tools.ts` - Image deletion tool
+- `server/prompts/react.xml` - Confirmation workflow instructions
 
 ---
 
@@ -32,8 +32,11 @@ Agent: I found 5 unused pages. Delete them?
   - About Us (draft)
   - Test Page
   - Old Landing
-  [Approve] [Deny]
-User: *reviews, clicks Approve*
+
+Are you sure you want to proceed?
+
+User: yes
+
 Agent: Deleted 5 pages.
 ```
 
@@ -43,28 +46,17 @@ Agent: Deleted 5 pages.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Human-in-the-Loop System                      │
+│               Human-in-the-Loop: Confirmed Flag Pattern          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   Two Patterns:                                                 │
+│   All destructive operations use the same pattern:              │
 │                                                                 │
 │   ┌─────────────────────────────────────────────────────────┐   │
-│   │  Pattern 1: APPROVAL QUEUE (Async)                      │   │
-│   │                                                         │   │
-│   │  Used for: publishPost, archivePost, deleteImage,       │   │
-│   │            http_post                                    │   │
-│   │                                                         │   │
-│   │  Flow:                                                  │   │
-│   │  Tool Call → Orchestrator → Emit approval-required      │   │
-│   │           → Frontend Modal → User Decision              │   │
-│   │           → Response → Continue/Cancel                  │   │
-│   └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │  Pattern 2: CONFIRMATION FLAG (Prompt-Based)            │   │
+│   │  CONFIRMATION FLAG PATTERN (Conversational)             │   │
 │   │                                                         │   │
 │   │  Used for: deletePage, deletePageSection,               │   │
-│   │            deletePageSections                           │   │
+│   │            deletePageSections, publishPost, archivePost,│   │
+│   │            deletePost, deleteImage, httpPost            │   │
 │   │                                                         │   │
 │   │  Flow:                                                  │   │
 │   │  Tool({ confirmed: false }) → requiresConfirmation      │   │
@@ -77,374 +69,127 @@ Agent: Deleted 5 pages.
 
 ---
 
-## Pattern 1: Approval Queue
-
-### When Used
-
-Tools marked with `requiresApproval: true` in metadata:
+## Tools Using Confirmation Pattern
 
 | Tool | Risk | Reason |
 |------|------|--------|
-| `cms_publishPost` | High | Makes content public |
+| `cms_deletePage` | High | Removes page and all sections (cascade) |
+| `cms_deletePageSection` | High | Removes section |
+| `cms_deletePageSections` | High | Bulk section removal |
+| `cms_publishPost` | High | Makes content publicly visible |
 | `cms_archivePost` | High | Hides published content |
 | `cms_deletePost` | High | Permanent deletion |
-| `cms_deleteImage` | High | Removes media |
-| `http_post` | High | External API write |
-
-### Implementation
-
-#### ApprovalQueue Service
-
-```typescript
-// server/services/approval-queue.ts
-interface ApprovalRequest {
-  id: string;              // Unique approval ID
-  toolName: string;        // Which tool
-  input: unknown;          // Tool arguments
-  message: string;         // User-facing description
-  createdAt: number;       // Timestamp
-}
-
-interface ApprovalResponse {
-  approved: boolean;
-  reason?: string;         // Optional denial reason
-}
-
-class ApprovalQueue {
-  private pendingRequests = new Map<string, ApprovalRequest>();
-  private resolvers = new Map<string, (response: ApprovalResponse) => void>();
-  private responses = new Map<string, ApprovalResponse>();
-
-  // Create approval request and wait for response
-  async requestApproval(request: Omit<ApprovalRequest, 'id' | 'createdAt'>): Promise<ApprovalResponse> {
-    const id = nanoid();
-    const fullRequest: ApprovalRequest = {
-      ...request,
-      id,
-      createdAt: Date.now()
-    };
-
-    this.pendingRequests.set(id, fullRequest);
-
-    // Return promise that resolves when user responds
-    return new Promise((resolve) => {
-      this.resolvers.set(id, resolve);
-
-      // Timeout after 5 minutes
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          this.resolvers.delete(id);
-          resolve({
-            approved: false,
-            reason: 'Approval request timed out after 5 minutes'
-          });
-        }
-      }, 5 * 60 * 1000);
-    });
-  }
-
-  // Get pending request (for frontend to display)
-  getPendingRequest(id: string): ApprovalRequest | undefined {
-    return this.pendingRequests.get(id);
-  }
-
-  // Submit user's decision
-  respondToApproval(id: string, approved: boolean, reason?: string): void {
-    const resolver = this.resolvers.get(id);
-    if (resolver) {
-      const response: ApprovalResponse = { approved, reason };
-      this.responses.set(id, response);
-      resolver(response);
-
-      // Cleanup after 1 minute
-      setTimeout(() => {
-        this.pendingRequests.delete(id);
-        this.resolvers.delete(id);
-        this.responses.delete(id);
-      }, 60 * 1000);
-    }
-  }
-
-  // Stats for monitoring
-  getStats() {
-    return {
-      pendingCount: this.pendingRequests.size,
-      resolversCount: this.resolvers.size,
-      responsesCount: this.responses.size
-    };
-  }
-}
-
-export const approvalQueue = new ApprovalQueue();
-```
-
-#### Orchestrator Integration
-
-```typescript
-// server/agent/orchestrator.ts
-export async function* streamAgentWithApproval(
-  messages: CoreMessage[],
-  context: AgentContext
-): AsyncGenerator<StreamEvent> {
-  const agent = createAgent(context);
-
-  for await (const chunk of agent.stream(messages)) {
-    // Check if tool requires approval
-    if (chunk.type === 'tool-call') {
-      const metadata = TOOL_METADATA[chunk.toolName];
-
-      if (metadata?.requiresApproval) {
-        // Emit approval-required event to frontend
-        const approvalId = nanoid();
-        yield {
-          type: 'approval-required',
-          approvalId,
-          toolName: chunk.toolName,
-          input: chunk.input,
-          message: formatApprovalMessage(chunk.toolName, chunk.input)
-        };
-
-        // Wait for user response
-        const response = await approvalQueue.requestApproval({
-          toolName: chunk.toolName,
-          input: chunk.input,
-          message: formatApprovalMessage(chunk.toolName, chunk.input)
-        });
-
-        if (!response.approved) {
-          // Skip tool execution, emit cancellation
-          yield {
-            type: 'tool-result',
-            toolName: chunk.toolName,
-            result: {
-              success: false,
-              cancelled: true,
-              reason: response.reason || 'User denied approval'
-            }
-          };
-          continue;  // Skip to next iteration
-        }
-
-        // User approved - continue with normal execution
-      }
-    }
-
-    // Forward event to frontend
-    yield chunk;
-  }
-}
-
-function formatApprovalMessage(toolName: string, input: unknown): string {
-  switch (toolName) {
-    case 'cms_publishPost':
-      return `Publish post "${input.slug}" to make it publicly visible?`;
-    case 'cms_archivePost':
-      return `Archive post "${input.slug}"? It will be hidden from the public.`;
-    case 'cms_deletePost':
-      return `Permanently delete post "${input.slug}"? This cannot be undone.`;
-    case 'cms_deleteImage':
-      return `Delete image? This cannot be undone.`;
-    case 'http_post':
-      return `Send POST request to ${input.url}?`;
-    default:
-      return `Execute ${toolName}?`;
-  }
-}
-```
-
-#### Frontend Components
-
-**Approval Store:**
-```typescript
-// app/assistant/_stores/approval-store.ts
-interface ApprovalState {
-  pendingApproval: {
-    approvalId: string;
-    toolName: string;
-    input: unknown;
-    message: string;
-  } | null;
-
-  setPendingApproval: (approval: ApprovalState['pendingApproval']) => void;
-  clearPendingApproval: () => void;
-  submitApproval: (approvalId: string, approved: boolean, reason?: string) => Promise<void>;
-}
-
-export const useApprovalStore = create<ApprovalState>((set) => ({
-  pendingApproval: null,
-
-  setPendingApproval: (approval) => set({ pendingApproval: approval }),
-
-  clearPendingApproval: () => set({ pendingApproval: null }),
-
-  submitApproval: async (approvalId, approved, reason) => {
-    await fetch('/api/agent/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approvalId, approved, reason })
-    });
-    set({ pendingApproval: null });
-  }
-}));
-```
-
-**Approval Modal:**
-```tsx
-// app/assistant/_components/hitl-modal.tsx
-export function HITLModal() {
-  const { pendingApproval, submitApproval, clearPendingApproval } = useApprovalStore();
-
-  if (!pendingApproval) return null;
-
-  return (
-    <Dialog open onOpenChange={() => clearPendingApproval()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Confirmation Required</DialogTitle>
-          <DialogDescription>
-            The agent wants to perform an action that requires your approval.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="py-4">
-          <p className="text-sm font-medium mb-2">Action:</p>
-          <p className="text-sm text-gray-600">{pendingApproval.message}</p>
-
-          {pendingApproval.input && (
-            <div className="mt-4">
-              <p className="text-sm font-medium mb-2">Details:</p>
-              <pre className="text-xs bg-gray-100 p-2 rounded overflow-auto">
-                {JSON.stringify(pendingApproval.input, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => submitApproval(pendingApproval.approvalId, false, 'User cancelled')}
-          >
-            Deny
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => submitApproval(pendingApproval.approvalId, true)}
-          >
-            Approve
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-```
-
-### Flow Diagram
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Agent     │     │ Orchestrator│     │  Frontend   │
-└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       │                   │                   │
-       │ calls tool        │                   │
-       │──────────────────▶│                   │
-       │                   │                   │
-       │                   │ check metadata    │
-       │                   │ requiresApproval? │
-       │                   │                   │
-       │                   │ emit SSE:         │
-       │                   │ approval-required │
-       │                   │──────────────────▶│
-       │                   │                   │
-       │                   │                   │ show modal
-       │                   │                   │
-       │                   │                   │ user clicks
-       │                   │                   │ [Approve]
-       │                   │                   │
-       │                   │ POST /approve     │
-       │                   │◀──────────────────│
-       │                   │                   │
-       │                   │ resolve promise   │
-       │                   │                   │
-       │ execute tool      │                   │
-       │◀──────────────────│                   │
-       │                   │                   │
-       │ return result     │                   │
-       │──────────────────▶│                   │
-       │                   │                   │
-       │                   │ emit SSE:         │
-       │                   │ tool-result       │
-       │                   │──────────────────▶│
-       │                   │                   │
-```
+| `cms_deleteImage` | High | Removes media permanently |
+| `http_post` | High | External API write operation |
 
 ---
 
-## Pattern 2: Confirmation Flag
+## Implementation
 
-### When Used
+### Tool Definition Pattern
 
-Tools with `confirmed` parameter:
-
-| Tool | Risk | Reason |
-|------|------|--------|
-| `cms_deletePage` | High | Removes page and sections |
-| `cms_deletePageSection` | High | Removes section |
-| `cms_deletePageSections` | High | Bulk section removal |
-
-### Implementation
-
-#### Tool Definition
+All destructive tools follow the same pattern:
 
 ```typescript
-// server/tools/page-tools.ts
-export const cms_deletePage = tool({
-  description: 'Delete a page and all its sections. Requires explicit confirmation.',
+// server/tools/all-tools.ts
+export const cmsDeletePage = tool({
+  description: 'Delete a page permanently (CASCADE: deletes all sections). This cannot be undone. Requires confirmed: true.',
   inputSchema: z.object({
-    pageId: z.string().describe('ID of the page to delete'),
-    confirmed: z.boolean()
-      .default(false)
-      .describe('Must be true to actually delete. First call without this to get confirmation prompt.')
+    slug: z.string().optional().describe('Page slug'),
+    id: z.string().optional().describe('Page ID'),
+    removeFromNavigation: z.boolean().optional().default(true),
+    confirmed: z.boolean().optional().describe('Must be true to actually delete')
   }),
   execute: async (input, { experimental_context }) => {
-    const ctx = experimental_context as AgentContext;
+    const ctx = experimental_context as AgentCallOptions;
+
+    // Validate at least one identifier
+    if (!input.slug && !input.id) {
+      return { error: 'Either slug or id must be provided' };
+    }
+
+    // Fetch page first
+    const page = input.id
+      ? await ctx.services.pageService.getPageById(input.id, ctx.cmsTarget)
+      : await ctx.services.pageService.getPageBySlug(input.slug!, ctx.cmsTarget);
+
+    if (!page) {
+      return { error: `Page not found: ${input.slug || input.id}` };
+    }
 
     // First call: Return confirmation request
     if (!input.confirmed) {
-      const page = await ctx.services.pageService.getPage(input.pageId);
       return {
         requiresConfirmation: true,
-        message: `Are you sure you want to delete "${page.title}"? This will permanently remove the page and all its sections. This action cannot be undone.`,
-        pageId: input.pageId,
-        pageTitle: page.title,
-        sectionCount: page.sections?.length || 0
+        message: `Are you sure you want to delete page "${page.name}"? This will permanently remove the page and all ${page.sections?.length || 0} sections. This action cannot be undone.`,
+        page: { id: page.id, slug: page.slug, name: page.name }
       };
     }
 
     // Second call: Execute deletion
-    await ctx.services.pageService.deletePage(input.pageId);
+    await ctx.services.pageService.deletePage(page.id, ctx.cmsTarget);
 
     return {
       success: true,
-      message: `Page deleted successfully.`
+      message: `Page "${page.name}" and all its sections have been deleted.`,
+      deletedPage: { id: page.id, slug: page.slug, name: page.name }
     };
   }
 });
 ```
 
-#### Prompt Instructions
+### Post Tools Example
+
+```typescript
+// server/tools/post-tools.ts
+export const cmsPublishPost = tool({
+  description: 'Publish a draft post (makes it publicly visible). Requires confirmed: true.',
+  inputSchema: z.object({
+    postSlug: z.string().describe('Post slug to publish'),
+    confirmed: z.boolean().optional().describe('Must be true to publish')
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentCallOptions;
+    const entry = await ctx.services.entryService.getBySlug(input.postSlug, ctx.cmsTarget);
+
+    if (!entry) {
+      return { error: `Post not found: ${input.postSlug}` };
+    }
+
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to publish "${entry.title}"? This will make it publicly visible.`,
+        post: { slug: entry.slug, title: entry.title, status: entry.status }
+      };
+    }
+
+    const updated = await ctx.services.entryService.updateEntry(entry.id, {
+      status: 'published',
+      publishedAt: new Date()
+    }, ctx.cmsTarget);
+
+    return { success: true, message: `Published "${entry.title}"`, post: updated };
+  }
+});
+```
+
+---
+
+## Prompt Instructions
+
+The agent is instructed on how to handle confirmations:
 
 ```xml
 <!-- In react.xml -->
 <destructive_operations>
   **THREE-STEP WORKFLOW**
 
-  For tools with `confirmed` parameter (deletePage, deletePageSection):
+  For tools with `confirmed` parameter (deletePage, deletePageSection,
+  publishPost, archivePost, deletePost, deleteImage, httpPost):
 
   1. FIRST CALL (without confirmed: true)
-     cms_deletePage({ pageId: "page-123" })
+     cms_deletePage({ slug: "about" })
      → Returns: { requiresConfirmation: true, message: "..." }
 
   2. STOP AND ASK USER
@@ -454,7 +199,7 @@ export const cms_deletePage = tool({
 
   3. SECOND CALL (with confirmed: true)
      Only after user says yes/confirm/proceed:
-     cms_deletePage({ pageId: "page-123", confirmed: true })
+     cms_deletePage({ slug: "about", confirmed: true })
      → Returns: { success: true }
 
   **IMPORTANT:**
@@ -468,7 +213,9 @@ export const cms_deletePage = tool({
 </destructive_operations>
 ```
 
-### Flow Example
+---
+
+## Flow Example
 
 ```
 User: "Delete the about page"
@@ -478,19 +225,18 @@ Agent (internal):
          Memory: pages: - "About Us" (page-123)
          This is destructive. Need to confirm first.
 
-  ACT: cms_deletePage({ pageId: "page-123" })
+  ACT: cms_deletePage({ slug: "about" })
 
   OBSERVE: {
     requiresConfirmation: true,
     message: "Are you sure you want to delete 'About Us'?...",
-    pageTitle: "About Us",
-    sectionCount: 3
+    page: { id: "page-123", slug: "about", name: "About Us" }
   }
 
   THINK: Got confirmation requirement. Must ask user.
 
 FINAL_ANSWER: This will permanently delete the "About Us" page
-along with its 3 sections. This cannot be undone.
+along with all its sections. This cannot be undone.
 
 Are you sure you want to proceed?
 
@@ -499,9 +245,9 @@ Are you sure you want to proceed?
 User: "yes"
 
 Agent (internal):
-  THINK: User confirmed deletion. Proceed.
+  THINK: User confirmed deletion. Proceed with confirmed: true.
 
-  ACT: cms_deletePage({ pageId: "page-123", confirmed: true })
+  ACT: cms_deletePage({ slug: "about", confirmed: true })
 
   OBSERVE: { success: true, message: "Page deleted successfully." }
 
@@ -510,96 +256,84 @@ FINAL_ANSWER: Done! The About Us page has been deleted.
 
 ---
 
-## Comparison: When to Use Which
+## Confirmation Detection
 
-| Aspect | Approval Queue | Confirmation Flag |
-|--------|----------------|-------------------|
-| **UI** | Modal popup | Chat conversation |
-| **Blocking** | Blocks tool execution | Blocks agent (asks in chat) |
-| **User Experience** | Interrupt-based | Conversational |
-| **Implementation** | Service + Frontend | Tool logic + Prompt |
-| **Best For** | Critical operations | Destructive with context |
-
-### Guidelines
-
-**Use Approval Queue when:**
-- Operation affects external systems (http_post)
-- State change is significant (publish)
-- User needs to see details in modal
-
-**Use Confirmation Flag when:**
-- Operation is destructive (delete)
-- Agent should explain context
-- Natural conversation flow preferred
-
----
-
-## Timeout Handling
-
-### Approval Queue Timeout
+The frontend detects `requiresConfirmation: true` in tool results and logs it as a special trace entry type:
 
 ```typescript
-// Default: 5 minutes
-setTimeout(() => {
-  if (this.pendingRequests.has(id)) {
-    resolve({
-      approved: false,
-      reason: 'Approval request timed out after 5 minutes'
+// app/assistant/_hooks/use-agent.ts
+case 'tool-result': {
+  const result = data.result || {};
+  const requiresConfirmation = result.requiresConfirmation === true;
+
+  if (requiresConfirmation) {
+    // Tool returned a confirmation request
+    addEntry({
+      traceId: currentTraceId,
+      type: 'confirmation-required',
+      level: 'warn',
+      toolName: data.toolName,
+      summary: `${data.toolName}: Confirmation required`,
+      output: result,
     });
-  }
-}, 5 * 60 * 1000);
-```
-
-**What happens:**
-1. Request created
-2. 5 minutes pass with no response
-3. Promise resolves with `approved: false`
-4. Tool result: `{ cancelled: true, reason: "timed out" }`
-5. Agent informs user
-
-### Cleanup
-
-```typescript
-// After response, cleanup after 1 minute
-setTimeout(() => {
-  this.pendingRequests.delete(id);
-  this.resolvers.delete(id);
-  this.responses.delete(id);
-}, 60 * 1000);
-```
-
----
-
-## Security Considerations
-
-### Never Auto-Approve
-
-```typescript
-// BAD: Don't do this
-if (userSaidYesBefore) {
-  return { approved: true };
-}
-
-// GOOD: Always require explicit approval
-const response = await approvalQueue.requestApproval(request);
-```
-
-### Validate Approval IDs
-
-```typescript
-respondToApproval(id: string, approved: boolean): void {
-  const resolver = this.resolvers.get(id);
-  if (!resolver) {
-    throw new Error('Invalid or expired approval ID');
   }
   // ...
 }
 ```
 
+---
+
+## Why Conversational Confirmation?
+
+| Aspect | Modal Popup | Conversational (Our Approach) |
+|--------|-------------|-------------------------------|
+| **UI** | Interrupt with modal | Inline in chat |
+| **User Experience** | Jarring, blocks everything | Natural conversation flow |
+| **Context** | User must read modal | Agent explains consequences |
+| **Implementation** | Complex (approval queue, SSE events, endpoints) | Simple (tool logic + prompt) |
+| **Works with Express backend** | Requires special SDK integration | Yes, standard tool pattern |
+
+### Key Advantages
+
+1. **Natural Flow** - User confirms in the same conversation they started
+2. **Agent Explains** - Agent can provide context about what will happen
+3. **Simple Implementation** - No special infrastructure needed
+4. **Backend Agnostic** - Works with any backend, not tied to SDK patterns
+5. **Full Conversation Context** - User can ask follow-up questions before confirming
+
+---
+
+## Security Considerations
+
+### Never Auto-Confirm
+
+```typescript
+// BAD: Don't do this
+if (userSaidYesBefore) {
+  return executeImmediately();
+}
+
+// GOOD: Always require explicit confirmation
+if (!input.confirmed) {
+  return { requiresConfirmation: true, message: '...' };
+}
+```
+
+### Always Show Details
+
+```typescript
+// GOOD: Tell user exactly what will happen
+return {
+  requiresConfirmation: true,
+  message: `Delete "${page.name}" and all ${page.sections.length} sections?`,
+  page: { id: page.id, slug: page.slug, name: page.name }
+};
+```
+
 ### Don't Leak Sensitive Data
 
 ```typescript
-// BAD: Exposing internal IDs
+// BAD: Exposing internal paths
 message: `Delete image ${imageRecord.internalPath}?`
 
 // GOOD: User-friendly description
@@ -613,50 +347,33 @@ message: `Delete image "${imageRecord.filename}"?`
 ### Manual Testing
 
 1. Ask agent to delete a page
-2. Verify confirmation dialog appears (flag-based) or modal shows (queue-based)
-3. Deny - verify operation cancelled
-4. Approve - verify operation executes
+2. Verify agent asks for confirmation (doesn't delete immediately)
+3. Say "no" - verify operation is cancelled
+4. Ask again, say "yes" - verify operation executes
+5. Check working memory is updated after deletion
 
-### Unit Testing
+### Example Test Scenarios
 
-```typescript
-describe('ApprovalQueue', () => {
-  it('resolves with approved:true when user approves', async () => {
-    const queue = new ApprovalQueue();
+```
+# Test 1: Cancellation
+User: "Delete the homepage"
+Agent: "Are you sure? This will delete..."
+User: "no"
+Agent: "Okay, I won't delete the homepage."
 
-    // Start approval request
-    const promise = queue.requestApproval({
-      toolName: 'cms_deletePost',
-      input: { slug: 'test' },
-      message: 'Delete test post?'
-    });
+# Test 2: Confirmation
+User: "Delete the test page"
+Agent: "Are you sure? This will delete..."
+User: "yes"
+Agent: "Done! The test page has been deleted."
 
-    // Simulate user approval
-    const pendingId = Array.from(queue['pendingRequests'].keys())[0];
-    queue.respondToApproval(pendingId, true);
-
-    const result = await promise;
-    expect(result.approved).toBe(true);
-  });
-
-  it('times out after 5 minutes', async () => {
-    jest.useFakeTimers();
-    const queue = new ApprovalQueue();
-
-    const promise = queue.requestApproval({
-      toolName: 'cms_deletePost',
-      input: { slug: 'test' },
-      message: 'Delete?'
-    });
-
-    // Fast-forward 5 minutes
-    jest.advanceTimersByTime(5 * 60 * 1000);
-
-    const result = await promise;
-    expect(result.approved).toBe(false);
-    expect(result.reason).toContain('timed out');
-  });
-});
+# Test 3: Multiple confirmations
+User: "Delete all draft pages"
+Agent: "I found 3 draft pages. Let me delete them one by one..."
+Agent: "Delete 'Draft 1'?"
+User: "yes"
+Agent: "Deleted. Delete 'Draft 2'?"
+...
 ```
 
 ---
@@ -665,11 +382,11 @@ describe('ApprovalQueue', () => {
 
 | Connects To | How |
 |-------------|-----|
-| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | streamAgentWithApproval handles queue |
-| [3.2 Tools](./LAYER_3.2_TOOLS.md) | Tool metadata defines requiresApproval |
+| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | Agent handles tool results with requiresConfirmation |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md) | Tool definitions include confirmed parameter |
 | [3.4 Prompts](./LAYER_3.4_PROMPTS.md) | Confirmation workflow instructions |
-| [3.7 Streaming](./LAYER_3.7_STREAMING.md) | approval-required SSE event |
-| Frontend | Modal component, approval store |
+| [3.7 Streaming](./LAYER_3.7_STREAMING.md) | tool-result events include confirmation state |
+| Frontend Trace | confirmation-required type in trace store |
 
 ---
 
@@ -677,16 +394,16 @@ describe('ApprovalQueue', () => {
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| Modal doesn't appear | SSE event not parsed | Check event type handling |
-| Approval times out immediately | Clock skew or early cleanup | Check timeout values |
-| Agent proceeds without confirmation | Prompt not followed | Add more examples to prompt |
-| Duplicate approvals | Race condition | Use unique approval IDs |
+| Agent deletes without confirming | Prompt not followed | Add more examples to prompt |
+| Agent auto-confirms | Previous "yes" cached | Ensure each deletion is fresh |
+| Confirmation loop | User response not recognized | Check confirmation word detection |
+| Wrong page deleted | Reference resolution | Verify working memory has correct page |
 
 ---
 
 ## Further Reading
 
-- [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Orchestrator integration
-- [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool metadata
+- [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Agent execution flow
+- [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool definitions
 - [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - Confirmation instructions
 - [3.7 Streaming](./LAYER_3.7_STREAMING.md) - SSE events

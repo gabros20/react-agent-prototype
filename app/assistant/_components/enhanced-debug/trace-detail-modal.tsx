@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Copy, Check } from "lucide-react";
 import { type TraceEntry, ENTRY_TYPE_COLORS, ENTRY_TYPE_LABELS, formatDuration, formatTimestamp, useTraceStore } from "../../_stores/trace-store";
+import { countTokens, formatTokenCount } from "@/lib/tokenizer";
 
 // Format data for display - prettify strings, format JSON
 function formatDataForDisplay(data: unknown): string {
@@ -36,17 +37,19 @@ function formatDataForDisplay(data: unknown): string {
 
 // Simple syntax highlighting for JSON
 function highlightJson(text: string): string {
-	return text
-		// Keys
-		.replace(/"([^"]+)":/g, '<span class="text-blue-600 dark:text-blue-400">"$1"</span>:')
-		// String values (handle end of line, comma, or closing brace/bracket)
-		.replace(/: "([^"]*)"([,\n\r\}\]]|$)/g, ': <span class="text-green-600 dark:text-green-400">"$1"</span>$2')
-		// Number values
-		.replace(/: (-?\d+\.?\d*)([,\n\r\}\]]|$)/g, ': <span class="text-amber-600 dark:text-amber-400">$1</span>$2')
-		// Boolean values
-		.replace(/: (true|false)([,\n\r\}\]]|$)/g, ': <span class="text-purple-600 dark:text-purple-400">$1</span>$2')
-		// Null values
-		.replace(/: (null)([,\n\r\}\]]|$)/g, ': <span class="text-gray-500">$1</span>$2');
+	return (
+		text
+			// Keys
+			.replace(/"([^"]+)":/g, '<span class="text-blue-600 dark:text-blue-400">"$1"</span>:')
+			// String values (handle end of line, comma, or closing brace/bracket)
+			.replace(/: "([^"]*)"([,\n\r\}\]]|$)/g, ': <span class="text-green-600 dark:text-green-400">"$1"</span>$2')
+			// Number values
+			.replace(/: (-?\d+\.?\d*)([,\n\r\}\]]|$)/g, ': <span class="text-amber-600 dark:text-amber-400">$1</span>$2')
+			// Boolean values
+			.replace(/: (true|false)([,\n\r\}\]]|$)/g, ': <span class="text-purple-600 dark:text-purple-400">$1</span>$2')
+			// Null values
+			.replace(/: (null)([,\n\r\}\]]|$)/g, ': <span class="text-gray-500">$1</span>$2')
+	);
 }
 
 // Syntax highlighting for XML/prompt content
@@ -95,6 +98,19 @@ export function TraceDetailModal() {
 		return formatDataForDisplay(modalEntry.output);
 	}, [modalEntry?.output]);
 
+	// Calculate token counts for display
+	const inputTokens = useMemo(() => {
+		if (!modalEntry?.input) return 0;
+		const text = typeof modalEntry.input === "string" ? modalEntry.input : JSON.stringify(modalEntry.input);
+		return countTokens(text);
+	}, [modalEntry?.input]);
+
+	const outputTokens = useMemo(() => {
+		if (!modalEntry?.output) return 0;
+		const text = typeof modalEntry.output === "string" ? modalEntry.output : JSON.stringify(modalEntry.output);
+		return countTokens(text);
+	}, [modalEntry?.output]);
+
 	if (!modalEntry) return null;
 
 	const handleCopy = async (data: unknown, tab: string) => {
@@ -113,6 +129,11 @@ export function TraceDetailModal() {
 		toolCallId: modalEntry.toolCallId,
 		jobId: modalEntry.jobId,
 		tokens: modalEntry.tokens,
+		tokenCounts: {
+			input: inputTokens,
+			output: outputTokens,
+			total: inputTokens + outputTokens,
+		},
 		level: modalEntry.level,
 	};
 
@@ -163,10 +184,16 @@ export function TraceDetailModal() {
 				<Tabs defaultValue='input' className='flex-1 flex flex-col min-h-0 overflow-hidden'>
 					<TabsList className='flex-shrink-0 mx-4'>
 						<TabsTrigger value='input' disabled={modalEntry.input === undefined}>
-							Input
+							Input{" "}
+							{inputTokens > 0 && (
+								<span className='ml-1.5 text-xs text-muted-foreground'>({formatTokenCount(inputTokens)} tokens)</span>
+							)}
 						</TabsTrigger>
 						<TabsTrigger value='output' disabled={modalEntry.output === undefined}>
-							Output
+							Output{" "}
+							{outputTokens > 0 && (
+								<span className='ml-1.5 text-xs text-muted-foreground'>({formatTokenCount(outputTokens)} tokens)</span>
+							)}
 						</TabsTrigger>
 						<TabsTrigger value='metadata'>Metadata</TabsTrigger>
 					</TabsList>

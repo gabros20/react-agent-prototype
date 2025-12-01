@@ -112,12 +112,20 @@ export const searchImagesTool: any = tool({
  * List images in current conversation
  */
 export const listConversationImagesTool: any = tool({
-	description: "List all images uploaded in the current conversation",
-	inputSchema: z.object({
-		sessionId: z.string().describe("Session/conversation ID"),
-	}),
-	execute: async (input: { sessionId: string }): Promise<any> => {
-		const { sessionId } = input;
+	description: "List all images uploaded in the current conversation. No parameters needed - uses current session automatically.",
+	inputSchema: z.object({}),
+	execute: async (_input: {}, { experimental_context }): Promise<any> => {
+		const ctx = experimental_context as any;
+		const sessionId = ctx?.sessionId;
+
+		if (!sessionId) {
+			return {
+				success: false,
+				images: [],
+				error: "Session ID not available in context",
+			};
+		}
+
 		try {
 			const conversationImgs = await db.query.conversationImages.findMany({
 				where: eq(conversationImages.sessionId, sessionId),
@@ -490,16 +498,26 @@ export const updateSectionImageTool: any = tool({
  * Delete image
  */
 export const deleteImageTool: any = tool({
-	description: "Delete an image by finding it with natural language",
+	description: "Delete an image permanently. This cannot be undone. Requires confirmed: true.",
 	inputSchema: z.object({
 		description: z.string().describe("Description of image to delete"),
+		confirmed: z.boolean().optional().describe("Must be true to delete"),
 	}),
-	execute: async (input: { description: string }): Promise<any> => {
-		const { description } = input;
+	execute: async (input: { description: string; confirmed?: boolean }): Promise<any> => {
+		const { description, confirmed } = input;
 		try {
-			// Find image
+			// Find image first
 			const { default: vectorIndex } = await import("../services/vector-index");
 			const image = await vectorIndex.findImageByDescription(description);
+
+			// Require confirmation
+			if (!confirmed) {
+				return {
+					requiresConfirmation: true,
+					message: `Are you sure you want to delete image "${image.filename}"? This cannot be undone. Set confirmed: true to proceed.`,
+					image: { id: image.id, filename: image.filename }
+				};
+			}
 
 			// Delete using processing service (handles filesystem + vector index + DB)
 			await imageProcessingService.deleteImage(image.id);

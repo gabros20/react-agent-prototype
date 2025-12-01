@@ -1,0 +1,77 @@
+<cms-pages>
+<!--
+  Page and section management workflows.
+  Inherits: confirmation-pattern, content-fetching, url-formats from base-rules.
+-->
+
+<page-creation>
+`cms_createPageWithContent` creates pages with text but NO images.
+After creation:
+1. `cms_searchImages` → find relevant images for the topic
+2. `cms_updateSectionImage` → attach to sections
+3. Offer to add to navigation (use `/pages/{slug}?locale=en`)
+</page-creation>
+
+<section-workflow>
+Adding sections:
+1. `cms_findResource(query, "page")` → get page ID
+2. `cms_findResource(query, "section")` → get section def ID
+3. `cms_addSectionToPage(pageId, sectionDefId)` → get pageSectionId
+4. `cms_getSectionDef(id)` → check required fields
+5. `cms_syncPageContent(pageSectionId, content)` → populate fields
+
+Content format for links: `{href: "/path", type: "url"|"page"}`
+</section-workflow>
+
+<image-text-sections>
+Layout options: `layout: "image-left"|"image-right"`
+Mobile options: `mobileLayout: "image-first"|"text-first"`
+Background: `backgroundColor: "white"|"gray"`
+
+IMPORTANT: Omit `image` field entirely - template uses placeholder automatically.
+Only set image via `cms_updateSectionImage` after section exists.
+</image-text-sections>
+
+<examples>
+**Add section with content:**
+"Add hero to about page" →
+1. cms_findResource("about", "page") → pageId
+2. cms_findResource("hero", "section") → sectionDefId
+3. cms_addSectionToPage → pageSectionId
+4. cms_getSectionDef → {fields: [title, subtitle, ctaText, ctaLink, image]}
+5. cms_syncPageContent(pageSectionId, {title: "...", ctaLink: {href: "/x", type: "url"}})
+
+**Granular field lookup:**
+"What's the CTA link on about page?" →
+1. cms_getPage("about") → {sectionIds: ["s1", "s2"]}
+2. cms_getPageSections(pageId) → [{id: "s1", sectionKey: "hero"}, {id: "s2", sectionKey: "cta"}]
+3. cms_getSectionContent("s2") → {buttonLink: {href: "/contact"}}
+→ Answer: "/contact"
+
+**Delete sections** (follows confirmation-pattern):
+"Delete all sections from about" →
+1. cms_getPage("about") → sectionIds
+2. cms_deletePageSections(ids) → requiresConfirmation
+3. STOP, inform user, wait
+4. On "yes" → cms_deletePageSections(ids, confirmed: true)
+
+**Delete page with nav cleanup:**
+"Delete about page" →
+1. cms_deletePage("about") → {requiresConfirmation, pageInNavigation: true}
+2. Inform: "Page is in navigation. Delete and remove from nav?"
+3. On "yes" → cms_deletePage("about", confirmed: true, removeFromNavigation: true)
+
+**Create page with images:**
+"Create mountain hiking page with hero" →
+1. cms_createPageWithContent({name, sections: [{sectionKey: "hero"}]}) → page, sectionId
+2. cms_searchImages("mountain landscape hiking") → images[]
+3. cms_updateSectionImage(imageId, sectionId, "image")
+4. Offer: "Add to navigation?"
+
+**Alternating layouts:**
+"Three feature sections, alternating" →
+Create sections with: layout: "image-right", "image-left", "image-right"
+Alternate backgroundColor: "white", "gray", "white"
+</examples>
+
+</cms-pages>
