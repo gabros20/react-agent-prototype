@@ -11,6 +11,7 @@ export interface CreateSessionInput {
 export interface UpdateSessionInput {
   title?: string;
   archived?: boolean;
+  modelId?: string;
 }
 
 export interface CreateMessageInput {
@@ -23,6 +24,7 @@ export interface CreateMessageInput {
 export interface SessionWithMetadata {
   id: string;
   title: string;
+  modelId: string | null;
   messageCount: number;
   lastActivity: Date;
   createdAt: Date;
@@ -106,6 +108,7 @@ export class SessionService {
       return {
         id: session.id,
         title: session.title,
+        modelId: session.modelId,
         messageCount,
         lastActivity,
         createdAt: session.createdAt,
@@ -257,7 +260,7 @@ export class SessionService {
   }
 
   /**
-   * Load messages as CoreMessage array (for AI SDK v6)
+   * Load messages as ModelMessage array (for AI SDK v6)
    */
   async loadMessages(sessionId: string): Promise<any[]> {
     const session = await this.getSessionById(sessionId);

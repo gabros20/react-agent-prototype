@@ -547,7 +547,7 @@ class SessionService {
     return session;
   }
 
-  async loadMessages(sessionId: string): Promise<CoreMessage[]> {
+  async loadMessages(sessionId: string): Promise<ModelMessage[]> {
     const session = await this.getSessionById(sessionId);
     return session.messages.map((msg) => ({
       role: msg.role,
@@ -555,7 +555,7 @@ class SessionService {
     }));
   }
 
-  async saveMessages(sessionId: string, messages: CoreMessage[]) {
+  async saveMessages(sessionId: string, messages: ModelMessage[]) {
     // Auto-create session if needed
     await this.ensureSession(sessionId);
 

@@ -11,6 +11,7 @@ import { useSessionStore } from "../_stores/session-store";
 import { Button } from "@/components/ui/button";
 import { Trash2, MessageSquare } from "lucide-react";
 import { AgentStatusIndicator } from "@/components/ai-elements/agent-status";
+import { ModelSelector } from "./model-selector";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -99,7 +100,7 @@ function ChatInput({ onSendMessage, isStreaming }: { onSendMessage: (text: strin
 			</PromptInputBody>
 			<PromptInputFooter>
 				<div className='flex items-center justify-between w-full'>
-					<span className='text-xs text-muted-foreground'>Press Enter to send</span>
+					<ModelSelector disabled={isStreaming} />
 					<PromptInputSubmit disabled={isStreaming || !input.trim()} />
 				</div>
 			</PromptInputFooter>

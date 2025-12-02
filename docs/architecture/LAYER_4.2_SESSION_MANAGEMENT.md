@@ -64,7 +64,7 @@ session.title = "Untitled Session";
 │  │  Message Operations:                                    │    │
 │  │  ├─ addMessage(sessionId, msg)                          │    │
 │  │  ├─ clearMessages(sessionId)                            │    │
-│  │  ├─ loadMessages(sessionId)  → CoreMessage[]            │    │
+│  │  ├─ loadMessages(sessionId)  → ModelMessage[]            │    │
 │  │  └─ saveMessages(sessionId, msgs)                       │    │
 │  │                                                         │    │
 │  │  WorkingContext Operations:                             │    │
@@ -228,9 +228,9 @@ async clearMessages(sessionId: string) {
 
 ```typescript
 /**
- * Load messages as CoreMessage array (for AI SDK v6)
+ * Load messages as ModelMessage array (for AI SDK v6)
  */
-async loadMessages(sessionId: string): Promise<CoreMessage[]> {
+async loadMessages(sessionId: string): Promise<ModelMessage[]> {
   const session = await this.getSessionById(sessionId);
 
   return session.messages.map((msg: any) => ({
@@ -244,7 +244,7 @@ async loadMessages(sessionId: string): Promise<CoreMessage[]> {
 /**
  * Save messages array (after agent completes)
  */
-async saveMessages(sessionId: string, messages: CoreMessage[]) {
+async saveMessages(sessionId: string, messages: ModelMessage[]) {
   // Create session if doesn't exist
   let session = await this.db.query.sessions.findFirst({
     where: eq(schema.sessions.id, sessionId),
@@ -371,7 +371,7 @@ router.post('/stream', async (req, res) => {
   const services = getContainer();
 
   // Load previous messages
-  let previousMessages: CoreMessage[] = [];
+  let previousMessages: ModelMessage[] = [];
   if (sessionId) {
     try {
       previousMessages = await services.sessionService.loadMessages(sessionId);

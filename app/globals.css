@@ -132,6 +132,51 @@
   .SheetContent[data-state='closed'] {
     animation: slideOutToLeft 300ms cubic-bezier(0.32, 0.72, 0, 1);
   }
+
+  /* Modal dialog animations - uses opacity and scale only to avoid transform conflicts */
+  [data-slot='dialog-content'] {
+    --dialog-enter-duration: 200ms;
+    --dialog-exit-duration: 150ms;
+  }
+
+  [data-slot='dialog-content'][data-state='open'] {
+    animation: dialogEnter var(--dialog-enter-duration) cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-slot='dialog-content'][data-state='closed'] {
+    animation: dialogExit var(--dialog-exit-duration) cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes dialogEnter {
+    from {
+      opacity: 0;
+      scale: 0.95;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+
+  @keyframes dialogExit {
+    from {
+      opacity: 1;
+      scale: 1;
+    }
+    to {
+      opacity: 0;
+      scale: 0.95;
+    }
+  }
+
+  /* Overlay backdrop animation */
+  [data-slot='dialog-overlay'][data-state='open'] {
+    animation: fadeIn 150ms ease-out;
+  }
+
+  [data-slot='dialog-overlay'][data-state='closed'] {
+    animation: fadeOut 100ms ease-in;
+  }
 }
 
 @theme inline {

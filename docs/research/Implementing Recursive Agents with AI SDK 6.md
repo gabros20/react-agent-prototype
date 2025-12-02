@@ -312,7 +312,7 @@ for await (const part of fullStream) {
 For more control, implement the `Agent` interface yourself:
 
 ```typescript
-import { Agent, generateText, CoreMessage } from "ai";
+import { Agent, generateText, ModelMessage } from "ai";
 
 class CustomRecursiveAgent implements Agent {
 	private model = openai("gpt-4o");
@@ -322,11 +322,11 @@ class CustomRecursiveAgent implements Agent {
 		this.maxDepth = maxDepth;
 	}
 
-	async generate({ prompt, messages = [] }: { prompt: string; messages?: CoreMessage[] }) {
+	async generate({ prompt, messages = [] }: { prompt: string; messages?: ModelMessage[] }) {
 		return this.recursiveGenerate(prompt, messages, 0);
 	}
 
-	private async recursiveGenerate(prompt: string, messages: CoreMessage[], depth: number) {
+	private async recursiveGenerate(prompt: string, messages: ModelMessage[], depth: number) {
 		// Base case: max depth reached
 		if (depth >= this.maxDepth) {
 			return {
@@ -795,7 +795,7 @@ async function runAgentWithRetry(
 
 async function getConversationHistory(conversationId: string) {
 	// Retrieve conversation history from your database
-	// Return as CoreMessage[] format
+	// Return as ModelMessage[] format
 	return [];
 }
 ```

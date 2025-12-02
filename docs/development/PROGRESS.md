@@ -1047,7 +1047,7 @@ Used Context7 MCP to read 100+ AI SDK v6 examples and discovered:
 
 -   **`experimental_context` parameter**: Framework-native context injection (NO closures needed!)
 -   **`prepareStep` callback**: Native memory management (replaces entire memory manager)
--   **Native message history**: Just pass `CoreMessage[]` array
+-   **Native message history**: Just pass `ModelMessage[]` array
 -   **Native checkpointing**: Just save/load message arrays
 -   **Tools created ONCE**: Pass to agent AS-IS with execute function included
 
@@ -1160,8 +1160,8 @@ const result = await agent.generate({
 
 **New Methods:**
 
--   `loadMessages()` - Convert DB messages to `CoreMessage[]`
--   `saveMessages()` - Save `CoreMessage[]` to DB
+-   `loadMessages()` - Convert DB messages to `ModelMessage[]`
+-   `saveMessages()` - Save `ModelMessage[]` to DB
 -   Simple checkpoint pattern (just message arrays)
 
 ### Files Deleted (12 files)

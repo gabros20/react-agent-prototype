@@ -552,8 +552,8 @@ Multiple chat sessions with full history persistence:
 ```typescript
 class SessionService {
 	async createSession(title?: string): Promise<Session>;
-	async loadMessages(sessionId: string): Promise<CoreMessage[]>;
-	async saveMessages(sessionId: string, messages: CoreMessage[]): Promise<void>;
+	async loadMessages(sessionId: string): Promise<ModelMessage[]>;
+	async saveMessages(sessionId: string, messages: ModelMessage[]): Promise<void>;
 	async updateSessionTitle(sessionId: string, title: string): Promise<void>;
 	async deleteSession(sessionId: string): Promise<void>;
 	async clearSessionHistory(sessionId: string): Promise<void>;

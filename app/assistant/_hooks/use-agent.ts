@@ -36,6 +36,7 @@ export function useAgent() {
 	const addConversationLog = useTraceStore((state) => state.addConversationLog);
 
 	const loadSessions = useSessionStore((state) => state.loadSessions);
+	const getCurrentSessionModel = useSessionStore((state) => state.getCurrentSessionModel);
 
 	const [error, setError] = useState<Error | null>(null);
 
@@ -73,6 +74,9 @@ export function useAgent() {
 			addMessage(userMessage as any);
 
 			try {
+				// Get current model selection for this session
+				const modelId = getCurrentSessionModel();
+
 				// Call backend API
 				const response = await fetch("/api/agent", {
 					method: "POST",
@@ -80,6 +84,7 @@ export function useAgent() {
 					body: JSON.stringify({
 						sessionId: sessionId || undefined,
 						prompt,
+						modelId: modelId || undefined,
 					}),
 				});
 

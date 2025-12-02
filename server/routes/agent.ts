@@ -12,7 +12,7 @@
 import express from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
-import type { CoreMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { cmsAgent, AGENT_CONFIG, type AgentCallOptions } from "../agent/cms-agent";
 import { getSystemPrompt } from "../agent/system-prompt";
 import { EntityExtractor, WorkingContext } from "../services/working-memory";
@@ -26,6 +26,7 @@ import { countTokens, countChatTokens } from "../../lib/tokenizer";
 const agentRequestSchema = z.object({
   sessionId: z.string().uuid().optional(),
   prompt: z.string().min(1),
+  modelId: z.string().optional(), // Dynamic model selection (e.g. "openai/gpt-4o")
   toolsEnabled: z.array(z.string()).optional(), // Optional: for future use
   cmsTarget: z
     .object({
@@ -145,10 +146,14 @@ export function createAgentRoutes(services: ServiceContainer) {
 			const workingContext = getWorkingContext(sessionId);
 			const extractor = new EntityExtractor();
 
+			// Determine which model to use (request override or default)
+			const effectiveModelId = input.modelId || AGENT_CONFIG.modelId;
+
 			// Build agent call options (type-safe via callOptionsSchema)
 			const agentOptions: AgentCallOptions = {
 				sessionId,
 				traceId,
+				modelId: input.modelId, // Pass through for dynamic model selection
 				workingMemory: workingContext.toContextString(),
 				cmsTarget,
 				db: services.db,
@@ -192,17 +197,17 @@ export function createAgentRoutes(services: ServiceContainer) {
 			});
 
 			// Emit model and pricing info for cost calculation
-			const modelPricing = await getModelPricing(AGENT_CONFIG.modelId);
+			const modelPricing = await getModelPricing(effectiveModelId);
 			writeSSE("model-info", {
 				type: "model-info",
-				modelId: AGENT_CONFIG.modelId,
+				modelId: effectiveModelId,
 				pricing: modelPricing,
 				timestamp: new Date().toISOString(),
 			});
 
 			try {
 				// Load previous messages from session
-				let previousMessages: CoreMessage[] = [];
+				let previousMessages: ModelMessage[] = [];
 				if (input.sessionId) {
 					try {
 						previousMessages = await services.sessionService.loadMessages(input.sessionId);
@@ -220,7 +225,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 				}
 
 				// Build messages array
-				const messages: CoreMessage[] = [
+				const messages: ModelMessage[] = [
 					...previousMessages,
 					{ role: "user", content: input.prompt },
 				];
@@ -407,7 +412,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 				// Save conversation to session
 				if (sessionId) {
 					try {
-						const updatedMessages: CoreMessage[] = [
+						const updatedMessages: ModelMessage[] = [
 							...previousMessages,
 							{ role: "user", content: input.prompt },
 							...responseData.messages,
@@ -523,6 +528,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 			const agentOptions: AgentCallOptions = {
 				sessionId,
 				traceId,
+				modelId: input.modelId, // Pass through for dynamic model selection
 				workingMemory: workingContext.toContextString(),
 				cmsTarget,
 				db: services.db,
@@ -548,7 +554,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 			});
 
 			// Load previous messages
-			let previousMessages: CoreMessage[] = [];
+			let previousMessages: ModelMessage[] = [];
 			if (input.sessionId) {
 				try {
 					previousMessages = await services.sessionService.loadMessages(input.sessionId);
@@ -561,7 +567,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 			}
 
 			// Build messages array
-			const messages: CoreMessage[] = [
+			const messages: ModelMessage[] = [
 				...previousMessages,
 				{ role: "user", content: input.prompt },
 			];
@@ -580,7 +586,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 			// Save to session
 			if (sessionId) {
 				try {
-					const updatedMessages: CoreMessage[] = [
+					const updatedMessages: ModelMessage[] = [
 						...previousMessages,
 						{ role: "user", content: input.prompt },
 						...result.response.messages,

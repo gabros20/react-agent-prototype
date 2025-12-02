@@ -43,6 +43,9 @@ export const AgentCallOptionsSchema = z.object({
 	sessionId: z.string(),
 	traceId: z.string(),
 
+	// Dynamic model selection (e.g. "openai/gpt-4o", "anthropic/claude-3.5-sonnet")
+	modelId: z.string().optional(),
+
 	// Working memory context (injected into system prompt)
 	workingMemory: z.string().optional(),
 
@@ -93,8 +96,15 @@ export const cmsAgent = new ToolLoopAgent({
 			workingMemory: options.workingMemory || "",
 		});
 
+		// Dynamic model selection: use requested model or fall back to default
+		const model = options.modelId
+			? openrouter.languageModel(options.modelId)
+			: openrouter.languageModel(AGENT_CONFIG.modelId);
+
 		return {
 			...settings,
+			// Override model if custom modelId provided
+			model,
 			// Override instructions with dynamic version
 			instructions: dynamicInstructions,
 			maxOutputTokens: AGENT_CONFIG.maxOutputTokens,

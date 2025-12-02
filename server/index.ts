@@ -8,6 +8,7 @@ import { createCMSRoutes } from "./routes/cms";
 import { createAgentRoutes } from "./routes/agent";
 import { createSessionRoutes } from "./routes/sessions";
 import { createWorkerEventsRoutes } from "./routes/worker-events";
+import { createModelsRoutes } from "./routes/models";
 import uploadRoutes from "./routes/upload";
 import imageRoutes from "./routes/images";
 import { ServiceContainer } from "./services/service-container";
@@ -61,6 +62,7 @@ async function startServer() {
     app.use("/v1/teams/:team/sites/:site/environments/:env", createCMSRoutes(services));
     app.use("/v1/agent", createAgentRoutes(services));
     app.use("/v1/sessions", createSessionRoutes(services));
+    app.use("/v1/models", createModelsRoutes());
     app.use("/v1/worker-events", createWorkerEventsRoutes());
 
     // Serve uploaded images
@@ -91,6 +93,7 @@ async function startServer() {
       console.log(`   Health: http://localhost:${PORT}/health`);
       console.log(`   CMS API: http://localhost:${PORT}/v1/teams/dev-team/sites/local-site/environments/main`);
       console.log(`   Agent: http://localhost:${PORT}/v1/agent/stream`);
+      console.log(`   Models: http://localhost:${PORT}/v1/models`);
       console.log(`   Worker Events: http://localhost:${PORT}/v1/worker-events/stream`);
       console.log(`   Images: http://localhost:${PORT}/api/images`);
       console.log(`   Upload: http://localhost:${PORT}/api/upload`);

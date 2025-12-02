@@ -7,7 +7,8 @@ import { SessionSidebar } from './_components/session-sidebar';
 import { useSessionStore } from './_stores/session-store';
 import { useChatStore } from './_stores/chat-store';
 import { useWorkerEvents } from './_hooks/use-worker-events';
-import { Bot } from 'lucide-react';
+import { Bot, ExternalLink } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -74,6 +75,17 @@ export default function AssistantPage() {
               <p className="text-xs sm:text-sm text-muted-foreground">Autonomous AI assistant for content management</p>
             </div>
           </div>
+
+          {/* Preview Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-none gap-2"
+            onClick={() => window.open('http://localhost:4000/pages/home?locale=en', '_blank')}
+          >
+            <ExternalLink className="h-4 w-4" />
+            <span className="hidden sm:inline">Preview</span>
+          </Button>
         </div>
       </div>
 

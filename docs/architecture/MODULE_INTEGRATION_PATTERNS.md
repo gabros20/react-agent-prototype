@@ -490,7 +490,7 @@ export async function streamAgentWithApproval(...) {
 
 **🔧 Key Methods:**
 - `SessionService.createSession()` - Creates new session (line 35)
-- `SessionService.loadMessages(sessionId)` - Returns CoreMessage[] (line 85)
+- `SessionService.loadMessages(sessionId)` - Returns ModelMessage[] (line 85)
 - `SessionService.saveMessages(sessionId, messages)` - Persists to DB (line 110)
 - `useSessionStore.loadSessions()` - Frontend load (session-store.ts:40)
 
@@ -509,7 +509,7 @@ stateDiagram-v2
     UserSendsMessage --> LoadHistory: GET /sessions/:id/messages
     
     LoadHistory --> ConvertMessages: Load from DB
-    ConvertMessages --> CreateAgent: Transform to CoreMessage[]
+    ConvertMessages --> CreateAgent: Transform to ModelMessage[]
     
     CreateAgent --> AgentExecutes: Start ReAct loop
     AgentExecutes --> ToolCalls: Execute tools
@@ -537,7 +537,7 @@ stateDiagram-v2
     
     note right of CreateAgent
         Message format:
-        CoreMessage[] with
+        ModelMessage[] with
         role, content, toolName
     end note
     
@@ -566,13 +566,13 @@ export class SessionService {
     return session;
   }
   
-  async loadMessages(sessionId: string): Promise<CoreMessage[]> {
+  async loadMessages(sessionId: string): Promise<ModelMessage[]> {
     const messages = await this.db.query.messages.findMany({
       where: eq(schema.messages.sessionId, sessionId),
       orderBy: (m) => m.createdAt
     });
     
-    // Transform to CoreMessage format
+    // Transform to ModelMessage format
     return messages.map(m => ({
       role: m.role,
       content: typeof m.content === 'string' 
@@ -583,7 +583,7 @@ export class SessionService {
   
   async saveMessages(
     sessionId: string, 
-    messages: CoreMessage[]
+    messages: ModelMessage[]
   ): Promise<void> {
     // Save each message
     for (const message of messages) {
@@ -1503,7 +1503,7 @@ export async function streamAgentWithApproval(...) {
 - Unlimited sessions
 - Full message history in DB
 - Load/save via SessionService
-- CoreMessage[] format
+- ModelMessage[] format
 
 ### 5. **HITL Approval**
 - Promise-based coordination

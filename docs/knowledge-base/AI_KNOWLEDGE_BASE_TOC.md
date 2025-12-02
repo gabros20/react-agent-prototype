@@ -4,7 +4,7 @@
 **Organization**: 12 layers (Foundation → Advanced) with 72 topics total  
 **Grounding**: Research papers, production systems, proven implementations from this codebase
 
-**Last Updated**: 2025-11-18  
+**Last Updated**: 2025-12-02  
 **Status**: 🚧 In Progress
 
 ---
@@ -75,7 +75,7 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 50/72 topics (69%)
+**Completion**: 51/73 topics (70%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
@@ -83,7 +83,7 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 1: Prompt Engineering          | 3      | ✅ Complete    | 14/14 (100%) |
 | Layer 2: Context Engineering         | 3      | ✅ Complete    | 12/12 (100%) |
 | Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 2/20 (10%)   |
-| Layer 4: Memory & State              | 4      | ✅ Complete    | 20/20 (100%) |
+| Layer 4: Memory & State              | 5      | ✅ Complete    | 21/21 (100%) |
 | Layer 5: Retrieval & RAG             | 4      | ⏳ Pending     | 0/20         |
 | Layer 6: Planning & Orchestration    | 4      | ⏳ Pending     | 0/20         |
 | Layer 7: Error Recovery & Resilience | 5      | ⏳ Pending     | 0/20         |
@@ -93,9 +93,17 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
-**Latest Updates** (2025-11-18):
+**Latest Updates** (2025-12-02):
 
-**Layer 4: Memory & State** (20/20 topics - ✅ 100% COMPLETE):
+**Layer 4: Memory & State** (21/21 topics - ✅ 100% COMPLETE):
+
+_Memory Systems Overview (1/1 - ✅ COMPLETE)_:
+
+-   ✅ 4.0.1 Memory Systems Overview - **NEW!** Comprehensive introduction to memory in AI agents
+    -   CoALA framework (Working, Semantic, Episodic, Procedural memory types)
+    -   Letta/MemGPT self-editing memory architecture
+    -   Mem0 production-ready implementation (26% accuracy improvement, 91% latency reduction)
+    -   Hybrid storage patterns (Vector + Graph), implementation approaches
 
 _State Persistence & Checkpointing (5/5 - ✅ COMPLETE)_:
 
@@ -375,6 +383,13 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 ### Layer 4: Memory & State
 
 **Goal**: Implement memory systems for context retention and state persistence
+
+#### 4.0 Memory Systems Overview
+
+-   [4.0.1 Memory Systems Overview - Memory in AI Agents](./kb/4-memory/4.0.1-memory-systems-overview.md) ✅
+    -   **Status**: Complete - Comprehensive introduction to memory architectures in AI agents
+    -   **Includes**: CoALA framework (Working, Semantic, Episodic, Procedural), Letta/MemGPT, Mem0, hybrid storage patterns
+    -   **Research**: CoALA (2024), Letta (2024-2025), Mem0 (2025), Graphiti
 
 #### 4.1 Working Memory (Short-Term)
 

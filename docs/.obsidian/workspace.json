@@ -194,6 +194,7 @@
   },
   "active": "974d0433f089a4b1",
   "lastOpenFiles": [
+    "knowledge-base/4-memory/4.0.1-memory-systems-overview.md",
     "research/TOOLLOOPAGENT_REACT_IMPLEMENTATION.md",
     "research/resaerch.md",
     "plans/AI_SDK_6_MIGRATION_PLAN.md",
@@ -219,7 +220,6 @@
     "architecture/LAYER_6.4_CHAT_COMPONENTS.md",
     "architecture/LAYER_5.5_RETRY_AND_ERROR.md",
     "architecture/LAYER_6.1_STATE_MANAGEMENT.md",
-    "architecture/LAYER_6.3_SESSION_UI.md",
     "architecture",
     "C - Brease Assistant.canvas",
     "C - Brease Assistant - IMAGE 20251109.png",

@@ -10,6 +10,7 @@ const createSessionSchema = z.object({
 const updateSessionSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   archived: z.boolean().optional(),
+  modelId: z.string().optional(),
 });
 
 const createMessageSchema = z.object({

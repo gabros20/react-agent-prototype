@@ -374,6 +374,7 @@ export const navigationItems = sqliteTable("navigation_items", {
 export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
+  modelId: text("model_id").default("openai/gpt-4o-mini"), // Selected model for this session
   workingContext: text("working_context", { mode: "json" }), // Working memory storage
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),

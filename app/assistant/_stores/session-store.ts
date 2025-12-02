@@ -5,6 +5,7 @@ import { create } from 'zustand';
 export interface SessionMetadata {
   id: string;
   title: string;
+  modelId: string | null;
   messageCount: number;
   lastActivity: Date;
   createdAt: Date;
@@ -14,6 +15,7 @@ export interface SessionMetadata {
 export interface Session {
   id: string;
   title: string;
+  modelId: string | null;
   createdAt: Date;
   updatedAt: Date;
   messages: Array<{
@@ -35,10 +37,12 @@ interface SessionState {
   loadSession: (sessionId: string) => Promise<Session | null>;
   createSession: (title?: string) => Promise<string>;
   updateSession: (sessionId: string, title: string) => Promise<void>;
+  updateSessionModel: (sessionId: string, modelId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<string | null>;
   clearHistory: (sessionId: string) => Promise<void>;
   setCurrentSessionId: (sessionId: string | null) => void;
   setError: (error: string | null) => void;
+  getCurrentSessionModel: () => string | null;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -61,6 +65,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Convert date strings to Date objects
       const sessions = result.data.map((session: any) => ({
         ...session,
+        modelId: session.modelId || null,
         lastActivity: new Date(session.lastActivity),
         createdAt: new Date(session.createdAt),
         updatedAt: new Date(session.updatedAt),
@@ -87,6 +92,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Convert date strings to Date objects
       const session = {
         ...result.data,
+        modelId: result.data.modelId || null,
         createdAt: new Date(result.data.createdAt),
         updatedAt: new Date(result.data.updatedAt),
         messages: result.data.messages.map((msg: any) => ({
@@ -123,6 +129,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const newSession: SessionMetadata = {
         id: result.data.id,
         title: result.data.title,
+        modelId: result.data.modelId || null,
         messageCount: 0,
         lastActivity: new Date(result.data.updatedAt),
         createdAt: new Date(result.data.createdAt),
@@ -172,6 +179,40 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
+  // Update session model
+  updateSessionModel: async (sessionId: string, modelId: string) => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error?.message || 'Failed to update session model');
+      }
+
+      set((state) => ({
+        sessions: state.sessions.map((session) =>
+          session.id === sessionId ? { ...session, modelId, updatedAt: new Date() } : session
+        ),
+      }));
+    } catch (error: any) {
+      console.error('Failed to update session model:', error);
+      throw error;
+    }
+  },
+
+  // Get current session model
+  getCurrentSessionModel: () => {
+    const state = get();
+    if (!state.currentSessionId) return null;
+    const session = state.sessions.find((s) => s.id === state.currentSessionId);
+    return session?.modelId || null;
+  },
+
   // Delete session permanently
   // Returns the new current session ID (either next session or newly created one)
   deleteSession: async (sessionId: string): Promise<string | null> => {
@@ -215,6 +256,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           const newSession: SessionMetadata = {
             id: createResult.data.id,
             title: createResult.data.title,
+            modelId: createResult.data.modelId || null,
             messageCount: 0,
             lastActivity: new Date(createResult.data.updatedAt),
             createdAt: new Date(createResult.data.createdAt),
