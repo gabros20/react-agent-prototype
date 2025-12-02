@@ -187,7 +187,7 @@ export const listConversationImagesTool: any = tool({
  * Add image to page section (using inline JSON content pattern)
  */
 export const addImageToSectionTool: any = tool({
-	description: "Add an uploaded image to a page section field (hero image, background, etc.). Updates section content with image URL and alt text. IMPORTANT: Check section definition first using cms_getSectionDef to get the correct field name.",
+	description: "Add an uploaded image to a page section field (hero image, background, etc.). Updates section content with image URL and alt text. IMPORTANT: Check section fields first using cms_getSectionFields to get the correct field name.",
 	inputSchema: z.object({
 		imageId: z
 			.string()
@@ -197,7 +197,7 @@ export const addImageToSectionTool: any = tool({
 		pageSectionId: z.string().describe("Page section ID"),
 		fieldName: z
 			.string()
-			.describe('Field name from section definition (get exact name using cms_getSectionDef first)'),
+			.describe('Field name from section template (get exact name using cms_getSectionFields first)'),
 		localeCode: z.string().optional().default("en").describe("Locale code (default: 'en')"),
 	}),
 	execute: async (input: { imageId: string; pageSectionId: string; fieldName: string; localeCode?: string }): Promise<any> => {
@@ -389,10 +389,10 @@ export const replaceImageTool: any = tool({
  * Update section content with uploaded image
  */
 export const updateSectionImageTool: any = tool({
-	description: "Update a section's image field with an uploaded image. Use this to change hero images, feature images, etc. to uploaded images from the system. IMPORTANT: Always check the section definition first using cms_getSectionDef to get the correct field name before calling this tool.",
+	description: "Update a section's image field with an uploaded image. Use this to change hero images, feature images, etc. to uploaded images from the system. IMPORTANT: Always check section fields first using cms_getSectionFields to get the correct field name before calling this tool.",
 	inputSchema: z.object({
 		pageSectionId: z.string().describe("Page section ID to update"),
-		imageField: z.string().describe("Image field name from section definition (get exact name using cms_getSectionDef first)"),
+		imageField: z.string().describe("Image field name from section template (get exact name using cms_getSectionFields first)"),
 		imageId: z.string().describe("ID of uploaded image to use"),
 		localeCode: z.string().optional().default("en").describe("Locale code (default: 'en')"),
 	}),

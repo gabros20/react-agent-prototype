@@ -1,7 +1,7 @@
 <cms-images>
 <!--
   Image management workflows.
-  Inherits: confirmation-pattern, url-formats from base-rules.
+  Inherits: confirmation-pattern from base-rules.
 -->
 
 <tools>
@@ -69,6 +69,19 @@ Use descriptive keywords that would appear in image descriptions/tags.
 - Verify descriptions actually match what user asked for
 </semantic-search>
 
+<image-urls>
+**CRITICAL: Image URLs are LOCAL PATHS, not web URLs!**
+
+Tool returns: `/uploads/images/2025/12/01/original/abc123.jpg`
+This is a LOCAL SERVER PATH served as a static file.
+
+CORRECT: `![Alt](/uploads/images/2025/12/01/original/abc123.jpg)`
+WRONG: `![Alt](https://uploads/images/...)` ← BREAKS IMAGE!
+WRONG: `![Alt](https://example.com/uploads/...)` ← BREAKS IMAGE!
+
+**Copy the `url` field EXACTLY. No modifications. No protocols.**
+</image-urls>
+
 <displaying-images>
 When showing images to user in chat, use this format:
 
@@ -76,21 +89,11 @@ When showing images to user in chat, use this format:
 ![Description](/uploads/images/.../uuid.jpg)
 Description text here.
 Tags: tag1, tag2, tag3
-
-⚠️ **STOP! DO NOT ADD https:// TO IMAGE PATHS!** ⚠️
-
-The `url` field is a LOCAL SERVER PATH. Adding https:// BREAKS the image!
-
-✅ Tool returns: `/uploads/images/2025/12/01/original/abc123.jpg`
-✅ You write: `![Alt](/uploads/images/2025/12/01/original/abc123.jpg)`
-❌ NEVER write: `![Alt](https://uploads/images/...)` ← IMAGE WILL NOT LOAD!
-
-**Copy the url field EXACTLY. Character for character. No modifications.**
 </displaying-images>
 
 <field-names>
 ALWAYS check section definition before setting image fields:
-`cms_getSectionDef(id)` → find exact field key (e.g., "image", not "heroImage")
+`cms_getSectionFields(id)` → find exact field key (e.g., "image", not "heroImage")
 </field-names>
 
 <examples>
@@ -104,7 +107,7 @@ ALWAYS check section definition before setting image fields:
 1. cms_listConversationImages → {images: [{id, filename, url, status: "completed"}]}
 2. Verify status is "completed" before proceeding
 3. cms_findResource("hero", "section") → pageSectionId
-4. cms_getSectionDef → {fields: [{key: "image", type: "image"}]}
+4. cms_getSectionFields → {fields: [{key: "image", type: "image"}]}
 5. cms_updateSectionImage(imageId, pageSectionId, imageField: "image")
 
 **Search and display:**
@@ -123,13 +126,16 @@ ALWAYS check section definition before setting image fields:
 2. STOP, inform user
 3. On "yes" → cms_deleteImage("sunset", confirmed: true)
 
-**Download stock photo and attach:**
+**Add image to section (ALWAYS check existing first):**
 "Add a mountain hero image" →
-1. pexels_searchPhotos("mountain landscape") → {photos: [{id: 12345, photographer, previewUrl}]}
-2. pexels_downloadPhoto(12345) → {imageId, status: "completed", photographer}
-3. cms_findResource("hero", "section") → pageSectionId
-4. cms_getSectionDef → {fields: [{key: "image", type: "image"}]}
-5. cms_updateSectionImage(imageId, pageSectionId, imageField: "image")
+1. cms_searchImages("mountain landscape scenery") → check existing images FIRST
+2. If strong/moderate match found → use existing imageId, skip to step 5
+3. If no good match → pexels_searchPhotos("mountain landscape") → {photos: [...]}
+4. pexels_downloadPhoto(photoId) → {imageId, status: "completed"}
+5. cms_findResource("hero", "section") → pageSectionId
+6. cms_getSectionFields → {fields: [{key: "image", type: "image"}]}
+7. cms_updateSectionImage(imageId, pageSectionId, imageField: "image")
+**ALWAYS search existing images before downloading from Pexels!**
 </examples>
 
 <stock-photos>
@@ -137,26 +143,27 @@ ALWAYS check section definition before setting image fields:
 - `pexels_searchPhotos(query, orientation, perPage)` → preview results with photographer credits
 - `pexels_downloadPhoto(photoId)` → download to system, waits for processing
 
-USE PEXELS when user specifies image TYPE: "sunset beach", "modern office"
-USE EXISTING when user says "my photo", "the one I uploaded", "this image"
+**CRITICAL - ALWAYS CHECK EXISTING IMAGES FIRST:**
+1. FIRST: `cms_searchImages(query)` → check if we already have a matching image
+2. If strong/moderate match → USE EXISTING, don't download duplicates
+3. ONLY IF no good match → then use `pexels_searchPhotos` to find new image
+
+This applies even when user says "add a corgi image" - check existing before Pexels!
+Only skip existing check when user explicitly says "download new", "get fresh image"
 
 **pexels_downloadPhoto returns:**
 ```
 {
   imageId: "uuid",
-  url: "/uploads/images/YYYY/MM/DD/original/uuid.ext",  ← USE THIS URL
+  url: "/uploads/images/...",  ← USE THIS LOCAL URL
   filename: "pexels-12345.jpg",
-  description: "...",
-  photographer: "...",
   status: "completed"
 }
 ```
 
-**CRITICAL URL RULES:**
-- ALWAYS use the `url` field from pexels_downloadPhoto for displaying/using images
-- NEVER use the Pexels preview URL (https://images.pexels.com/...)
-- The preview URL is only for search results preview, NOT for final use
-- The local `url` (starts with `/uploads/`) is the permanent image location
+**Pexels URL warning:**
+- Use the LOCAL `url` from pexels_downloadPhoto (starts with `/uploads/`)
+- NEVER use Pexels preview URL (https://images.pexels.com/...) - preview only!
 </stock-photos>
 
 </cms-images>

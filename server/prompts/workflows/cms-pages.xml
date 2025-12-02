@@ -1,96 +1,124 @@
 <cms-pages>
 <!--
   Page and section management workflows.
-  Inherits: confirmation-pattern, content-fetching, url-formats from base-rules.
+  Inherits: confirmation-pattern, content-fetching from base-rules.
 -->
 
-<page-creation>
-`cms_createPageWithContent` creates pages with text but NO images.
-After creation:
-1. `cms_searchImages` → find relevant images for the topic
-2. `cms_updateSectionImage` → attach to sections
-3. Offer to add to navigation (use `/pages/{slug}?locale=en`)
-</page-creation>
+<url-formats>
+Page URLs: `/pages/{slug}?locale=en`
+Link fields: `{href: "/path", type: "url"|"page"}`
+</url-formats>
+
+<update-section-content>
+**cms_updateSectionContent BEHAVIOR:**
+- MERGES with existing content (only fields you provide are updated)
+- Existing fields NOT in your update are PRESERVED
+- REQUIRED: `content` object - NEVER call without it
+
+Safe example:
+1. cms_updateSectionImage → sets `{image: {...}}`
+2. cms_updateSectionContent({content: {title: "New"}}) → `{title: "New", image: {...}}`
+Image preserved because of merge behavior.
+</update-section-content>
 
 <section-workflow>
 **CRITICAL: Check if section exists BEFORE adding!**
 
-Updating existing section (most common):
+**Updating existing section (most common):**
 1. `cms_findResource(query, "page")` → get page ID
 2. `cms_getPageSections(pageId)` → see what sections ALREADY exist
-3. If section exists → use `cms_updateSectionImage` or `cms_syncPageContent` on existing pageSectionId
+3. If section exists → use `cms_updateSectionContent` or `cms_updateSectionImage`
 4. If section NOT exists → THEN use `cms_addSectionToPage`
 
-Adding NEW sections (only when section doesn't exist):
+**Adding NEW sections (only when doesn't exist):**
 1. `cms_findResource(query, "page")` → get page ID
-2. `cms_getPageSections(pageId)` → **VERIFY section doesn't already exist**
-3. `cms_findResource(query, "section")` → get section def ID
+2. `cms_getPageSections(pageId)` → VERIFY section doesn't exist
+3. `cms_findResource(query, "section")` → get section template ID
 4. `cms_addSectionToPage(pageId, sectionDefId)` → get pageSectionId
-5. `cms_getSectionDef(id)` → check required fields
-6. `cms_syncPageContent(pageSectionId, content)` → populate fields
+5. `cms_getSectionFields(id)` → check required fields
+6. `cms_updateSectionContent(pageSectionId, content)` → populate fields
 
-**NEVER add a duplicate section!** Always check existing sections first.
-
-Content format for links: `{href: "/path", type: "url"|"page"}`
+**NEVER add duplicate sections!**
 </section-workflow>
 
+<page-creation>
+`cms_createPageWithContent` creates pages with text but NO images.
+
+After creation:
+1. `cms_searchImages` → find relevant images
+2. `cms_updateSectionImage` → attach to sections
+3. Offer to add to navigation
+</page-creation>
+
 <image-text-sections>
-Layout options: `layout: "image-left"|"image-right"`
-Mobile options: `mobileLayout: "image-first"|"text-first"`
+Layout: `layout: "image-left"|"image-right"`
+Mobile: `mobileLayout: "image-first"|"text-first"`
 Background: `backgroundColor: "white"|"gray"`
 
-IMPORTANT: Omit `image` field entirely - template uses placeholder automatically.
-Only set image via `cms_updateSectionImage` after section exists.
+Omit `image` field - template uses placeholder automatically.
+Set image via `cms_updateSectionImage` after section exists.
 </image-text-sections>
 
 <examples>
-**Update image on existing section (MOST COMMON):**
-"Update the hero image on homepage" →
+**Update text on existing section:**
+"Update the hero title" →
 1. cms_findResource("homepage", "page") → pageId
-2. cms_getPageSections(pageId) → [{id: "abc123", sectionKey: "hero"}, ...] ← FIND EXISTING
-3. cms_updateSectionImage(imageId, "abc123", "image") ← USE EXISTING pageSectionId
-**DO NOT add a new section - update the existing one!**
+2. cms_getPageSections(pageId) → [{id: "abc123", sectionKey: "hero"}]
+3. cms_updateSectionContent(pageSectionId: "abc123", content: {title: "New Title"})
 
-**Add section with content (only if section doesn't exist):**
+**Update image on existing section:**
+"Update the hero image" →
+1. cms_findResource("homepage", "page") → pageId
+2. cms_getPageSections(pageId) → find hero section
+3. cms_updateSectionImage(imageId, pageSectionId, "image")
+
+**Update text AND image:**
+"Change hero title and image" →
+1. cms_findResource("homepage", "page") → pageId
+2. cms_getPageSections(pageId) → find hero section
+3. cms_updateSectionContent(pageSectionId, content: {title: "New"})
+4. cms_searchImages("topic") → find image
+5. cms_updateSectionImage(imageId, pageSectionId, "image")
+
+**Add new section:**
 "Add hero to about page" →
 1. cms_findResource("about", "page") → pageId
-2. cms_getPageSections(pageId) → [] ← VERIFY hero doesn't exist
+2. cms_getPageSections(pageId) → [] (verify doesn't exist)
 3. cms_findResource("hero", "section") → sectionDefId
 4. cms_addSectionToPage → pageSectionId
-5. cms_getSectionDef → {fields: [title, subtitle, ctaText, ctaLink, image]}
-6. cms_syncPageContent(pageSectionId, {title: "...", ctaLink: {href: "/x", type: "url"}})
+5. cms_getSectionFields → {fields: [...]}
+6. cms_updateSectionContent(pageSectionId, {title: "...", ctaLink: {href: "/x", type: "url"}})
 
-**Granular field lookup:**
-"What's the CTA link on about page?" →
-1. cms_getPage("about") → {sectionIds: ["s1", "s2"]}
-2. cms_getPageSections(pageId) → [{id: "s1", sectionKey: "hero"}, {id: "s2", sectionKey: "cta"}]
-3. cms_getSectionContent("s2") → {buttonLink: {href: "/contact"}}
-→ Answer: "/contact"
-
-**Delete sections** (follows confirmation-pattern):
-"Delete all sections from about" →
-1. cms_getPage("about") → sectionIds
-2. cms_deletePageSections(ids) → requiresConfirmation
-3. STOP, inform user, wait
-4. On "yes" → cms_deletePageSections(ids, confirmed: true)
-
-**Delete page with nav cleanup:**
-"Delete about page" →
-1. cms_deletePage("about") → {requiresConfirmation, pageInNavigation: true}
-2. Inform: "Page is in navigation. Delete and remove from nav?"
-3. On "yes" → cms_deletePage("about", confirmed: true, removeFromNavigation: true)
+**Get specific field value:**
+"What's the CTA link?" →
+1. cms_getPage("about") → {sectionIds: [...]}
+2. cms_getPageSections(pageId) → [{id: "s1", sectionKey: "cta"}]
+3. cms_getSectionContent("s1") → {buttonLink: {href: "/contact"}}
 
 **Create page with images:**
-"Create mountain hiking page with hero" →
+"Create hiking page with hero" →
 1. cms_createPageWithContent({name, sections: [{sectionKey: "hero"}]}) → page, sectionId
-2. cms_searchImages("mountain landscape hiking") → images[]
+2. cms_searchImages("mountain hiking") → images[]
 3. cms_updateSectionImage(imageId, sectionId, "image")
 4. Offer: "Add to navigation?"
 
+**Delete sections (requires confirmation):**
+"Delete all sections from about" →
+1. cms_getPage("about") → sectionIds
+2. cms_deletePageSections(ids) → requiresConfirmation
+3. STOP, inform user
+4. On confirm → cms_deletePageSections(ids, confirmed: true)
+
+**Delete page:**
+"Delete about page" →
+1. cms_deletePage("about") → {requiresConfirmation, pageInNavigation: true}
+2. Inform user about nav cleanup
+3. On confirm → cms_deletePage("about", confirmed: true, removeFromNavigation: true)
+
 **Alternating layouts:**
-"Three feature sections, alternating" →
-Create sections with: layout: "image-right", "image-left", "image-right"
-Alternate backgroundColor: "white", "gray", "white"
+"Three feature sections" →
+layout: "image-right", "image-left", "image-right"
+backgroundColor: "white", "gray", "white"
 </examples>
 
 </cms-pages>

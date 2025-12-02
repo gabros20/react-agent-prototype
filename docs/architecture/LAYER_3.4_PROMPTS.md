@@ -1,15 +1,19 @@
 # Layer 3.4: Prompt System
 
-> System prompt composition, structure, and dynamic injection
+> Modular system prompt composition with XML modules and Handlebars injection
 
 ## Overview
 
-The prompt system defines how the agent thinks and behaves. Our implementation uses a 1200+ line XML/Handlebars template that guides the LLM through tool usage, content strategies, and domain-specific workflows. The prompt is dynamically compiled with context before each agent execution.
+The prompt system defines how the agent thinks and behaves. The implementation uses **modular XML files** that are composed at startup and compiled with Handlebars for dynamic injection. The prompt is regenerated for each agent call via the `prepareCall` hook.
 
 **Key Files:**
-- `server/prompts/react.xml` - Main system prompt (1200+ lines)
-- `server/prompts/core/identity.xml` - Agent identity section
-- `server/prompts/components/` - Modular prompt components
+- `server/agent/system-prompt.ts` - Prompt composition and compilation
+- `server/prompts/core/base-rules.xml` - Identity, ReAct pattern, working memory
+- `server/prompts/workflows/cms-pages.xml` - Page and section management
+- `server/prompts/workflows/cms-images.xml` - Image handling and display
+- `server/prompts/workflows/cms-posts.xml` - Blog post lifecycle
+- `server/prompts/workflows/cms-navigation.xml` - Navigation management
+- `server/prompts/workflows/web-research.xml` - Exa AI web research
 
 ---
 
@@ -35,53 +39,44 @@ With a comprehensive prompt:
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│                          Prompt System                            │
+│                       Modular Prompt System                       │
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                   │
+│  server/prompts/                                                  │
+│  ├── core/                                                        │
+│  │   └── base-rules.xml          ← Identity, ReAct, Working Mem   │
+│  └── workflows/                                                   │
+│      ├── cms-pages.xml           ← Page/section CRUD              │
+│      ├── cms-images.xml          ← Image handling                 │
+│      ├── cms-posts.xml           ← Blog lifecycle                 │
+│      ├── cms-navigation.xml      ← Navigation                     │
+│      └── web-research.xml        ← Exa AI research                │
+│                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                  react.xml (Main Template)                  │  │
-│  │                      ~1200 lines                            │  │
+│  │               loadPromptModules() at startup                │  │
 │  │                                                             │  │
-│  │  ┌─────────────────────────────────────────────────────┐    │  │
-│  │  │ Identity                                            │    │  │
-│  │  │ Role, expertise, personality, approach              │    │  │
-│  │  └─────────────────────────────────────────────────────┘    │  │
-│  │                                                             │  │
-│  │  ┌─────────────────────────────────────────────────────┐    │  │
-│  │  │ Dynamic Injection Points                            │    │  │
-│  │  │ {{{workingMemory}}} {{{toolsFormatted}}}            │    │  │
-│  │  │ {{toolCount}} {{sessionId}} {{currentDate}}         │    │  │
-│  │  └─────────────────────────────────────────────────────┘    │  │
-│  │                                                             │  │
-│  │  ┌─────────────────────────────────────────────────────┐    │  │
-│  │  │ Core Loop Rules                                     │    │  │
-│  │  │ Think → Act → Observe → Repeat                      │    │  │
-│  │  └─────────────────────────────────────────────────────┘    │  │
-│  │                                                             │  │
-│  │  ┌─────────────────────────────────────────────────────┐    │  │
-│  │  │ Domain Guides                                       │    │  │ 
-│  │  │ Pages, Sections, Images, Posts, Navigation          │    │  │
-│  │  └─────────────────────────────────────────────────────┘    │  │
-│  │                                                             │  │
-│  │  ┌─────────────────────────────────────────────────────┐    │  │
-│  │  │ Error Handling & Confirmation                       │    │  │
-│  │  │ Retry logic, HITL patterns                          │    │  │
-│  │  └─────────────────────────────────────────────────────┘    │  │
+│  │   Reads all XML files in order, concatenates into:          │  │
+│  │   <agent>\n{module1}\n\n{module2}\n\n...\n</agent>          │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                               │                                   │
 │                               ▼                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                  Handlebars Compilation                     │  │
+│  │              Handlebars.compile() - cached                  │  │
 │  │                                                             │  │
-│  │   Template + Context → Compiled Prompt                      │  │
+│  │   compiledTemplate = Handlebars.compile(composedXML)        │  │
+│  │   (lazy-loaded once, reused across all calls)               │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                               │                                   │
+│                               ▼                                   │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │           getSystemPrompt() in prepareCall                  │  │
 │  │                                                             │  │
 │  │   Context: {                                                │  │
-│  │     toolsList: [...],                                       │  │
-│  │     toolCount: 48,                                          │  │
-│  │     workingMemory: "[WORKING MEMORY]\n...",                 │  │
-│  │     sessionId: "sess-123",                                  │  │
-│  │     currentDate: "2025-01-15"                               │  │
+│  │     currentDate: "2025-01-15",                              │  │
+│  │     workingMemory: "[entities in context]"                  │  │
 │  │   }                                                         │  │
+│  │                                                             │  │
+│  │   Returns: compiled prompt with working memory injected     │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -90,48 +85,59 @@ With a comprehensive prompt:
 
 ## Prompt Structure
 
-### High-Level Sections
+### Module Composition
+
+```typescript
+// server/agent/system-prompt.ts
+const PROMPT_MODULES = [
+  "core/base-rules.xml",        // Identity, ReAct loop, confirmations
+  "workflows/cms-pages.xml",    // Page and section management
+  "workflows/cms-images.xml",   // Image handling and display
+  "workflows/cms-posts.xml",    // Blog post management
+  "workflows/cms-navigation.xml", // Navigation management
+  "workflows/web-research.xml",   // Exa AI web research
+] as const;
+
+function loadPromptModules(): string {
+  const promptsDir = path.join(__dirname, "../prompts");
+
+  const modules = PROMPT_MODULES.map((modulePath) => {
+    const fullPath = path.join(promptsDir, modulePath);
+    return fs.readFileSync(fullPath, "utf-8");
+  }).filter(Boolean);
+
+  return `<agent>\n${modules.join("\n\n")}\n</agent>`;
+}
+```
+
+### Composed Structure
 
 ```xml
 <agent>
-  <!-- 1. IDENTITY -->
-  <identity>
-    Role, expertise, personality, approach
-  </identity>
+  <!-- From core/base-rules.xml -->
+  <base-rules>
+    <identity>Role, expertise, personality</identity>
+    <working-memory>{{{workingMemory}}}</working-memory>
+    <react-pattern>Think → Act → Observe → Repeat</react-pattern>
+    <reasoning-rules>Critical rules</reasoning-rules>
+    <reference-resolution>Entity references</reference-resolution>
+    <confirmation-workflow>Destructive ops</confirmation-workflow>
+  </base-rules>
 
-  <!-- 2. DYNAMIC CONTEXT -->
-  {{{workingMemory}}}
+  <!-- From workflows/cms-pages.xml -->
+  <cms-pages>Page CRUD patterns, section management</cms-pages>
 
-  <!-- 3. CORE LOOP -->
-  <core_loop>
-    Think → Act → Observe instructions
-  </core_loop>
+  <!-- From workflows/cms-images.xml -->
+  <cms-images>Image search, display rules, CRITICAL URL handling</cms-images>
 
-  <!-- 4. TOOL USAGE -->
-  <tools>
-    Available tools, usage patterns
-  </tools>
+  <!-- From workflows/cms-posts.xml -->
+  <cms-posts>Blog lifecycle: draft → publish → archive</cms-posts>
 
-  <!-- 5. DOMAIN GUIDES -->
-  <cms_guide>Pages, sections, entries</cms_guide>
-  <image_guide>Upload, search, attach</image_guide>
-  <post_guide>Draft, publish, archive</post_guide>
-  <navigation_guide>Menu management</navigation_guide>
+  <!-- From workflows/cms-navigation.xml -->
+  <cms-navigation>Menu structure management</cms-navigation>
 
-  <!-- 6. ERROR HANDLING -->
-  <error_handling>
-    Retry logic, graceful degradation
-  </error_handling>
-
-  <!-- 7. CONFIRMATION -->
-  <confirmation>
-    Destructive operations, HITL
-  </confirmation>
-
-  <!-- 8. EXAMPLES -->
-  <examples>
-    Multi-step workflow demonstrations
-  </examples>
+  <!-- From workflows/web-research.xml -->
+  <web-research>Exa AI web research patterns</web-research>
 </agent>
 ```
 
@@ -144,9 +150,6 @@ With a comprehensive prompt:
 | Variable | Source | Purpose |
 |----------|--------|---------|
 | `{{{workingMemory}}}` | WorkingContext.toContextString() | Current entity memory |
-| `{{toolsFormatted}}` | Tool names formatted | Available tools list |
-| `{{toolCount}}` | ALL_TOOLS.length | Number of tools |
-| `{{sessionId}}` | Request context | Session identifier |
 | `{{currentDate}}` | new Date() | Current date (ISO) |
 
 ### Triple Braces `{{{...}}}`
@@ -168,25 +171,46 @@ pages:
 ### Compilation
 
 ```typescript
-// server/agent/orchestrator.ts
-import Handlebars from 'handlebars';
-import fs from 'fs';
-import path from 'path';
+// server/agent/system-prompt.ts
+import Handlebars from "handlebars";
 
-function compilePrompt(context: PromptContext): string {
-  const templatePath = path.join(__dirname, '../prompts/react.xml');
-  const template = fs.readFileSync(templatePath, 'utf-8');
-  const compiled = Handlebars.compile(template);
+export interface SystemPromptContext {
+  currentDate: string;
+  workingMemory?: string;
+}
 
-  return compiled({
-    toolsList: Object.keys(ALL_TOOLS),
-    toolCount: Object.keys(ALL_TOOLS).length,
-    toolsFormatted: Object.keys(ALL_TOOLS).map(t => `- ${t}`).join('\n'),
-    sessionId: context.sessionId,
-    currentDate: new Date().toISOString().split('T')[0],
-    workingMemory: context.workingMemory || '[WORKING MEMORY]\nNo entities tracked yet.'
+let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
+
+export function getSystemPrompt(context: SystemPromptContext): string {
+  // Lazy load and compile template once
+  if (!compiledTemplate) {
+    const template = loadPromptModules();
+    compiledTemplate = Handlebars.compile(template);
+  }
+
+  return compiledTemplate({
+    ...context,
+    workingMemory: context.workingMemory || "",
   });
 }
+```
+
+### Usage in prepareCall
+
+```typescript
+// server/agent/cms-agent.ts
+prepareCall: ({ options, ...settings }) => {
+  const dynamicInstructions = getSystemPrompt({
+    currentDate: new Date().toISOString().split("T")[0],
+    workingMemory: options.workingMemory || "",
+  });
+
+  return {
+    ...settings,
+    instructions: dynamicInstructions,
+    // ...
+  };
+},
 ```
 
 ---
@@ -413,8 +437,8 @@ Comprehensive image guide (~200 lines):
   - Trust ranking over exact keywords
 
   **IMAGE FIELD NAMES:**
-  Before attaching, check section definition:
-  cms_getSectionDef({ id: "section-def-id" })
+  Before attaching, check section fields:
+  cms_getSectionFields({ id: "section-def-id" })
   Use exact "key" from elementsStructure
   NEVER guess field names
 </image_handling>
@@ -592,7 +616,7 @@ Multi-step workflow demonstrations:
 
   THINK: Now attach the image to the hero section.
 
-  ACT: cms_getSectionDef({ id: "hero-def-id" })
+  ACT: cms_getSectionFields({ id: "hero-def-id" })
 
   OBSERVE: Image field is "backgroundImage".
 
@@ -639,59 +663,84 @@ Multi-step workflow demonstrations:
 
 ---
 
-## Modular Components
+## Module Files
 
-Additional prompt files for specialized guidance:
+### core/base-rules.xml
 
-### components/error-handling.md
+Contains fundamental agent behavior:
 
-```markdown
-# Error Handling Guide
+```xml
+<base-rules>
+  <identity>
+    You are an autonomous AI assistant using the ReAct pattern.
+    Your expertise: Content management, data modeling, multi-step workflows
+    Your personality: Confident, transparent, careful with destructive ops
+  </identity>
 
-## Validation Errors
-When a tool returns a validation error:
-1. Identify the missing/invalid field
-2. Ask the user to provide it
-3. Retry with corrected input
+  <CRITICAL-IMAGE-RULE>
+    Image URLs from tools start with `/uploads/...` - LOCAL PATHS!
+    YOU MUST USE THE PATH EXACTLY AS RETURNED. DO NOT ADD ANYTHING.
+    ✅ CORRECT: `![Alt](/uploads/images/2025/12/01/original/abc.jpg)`
+    ❌ WRONG: `![Alt](https://uploads/images/...)` ← BREAKS IMAGE!
+  </CRITICAL-IMAGE-RULE>
 
-## Example
-Tool returns: { error: "title is required" }
-Response: "I need a title for the page. What would you like to call it?"
+  <working-memory>
+    {{{workingMemory}}}
+  </working-memory>
+
+  <react-pattern>
+    **THE REACT LOOP: Think → Act → Observe → Repeat**
+    COMPLETION: Prefix final response with FINAL_ANSWER:
+  </react-pattern>
+
+  <confirmation-workflow>
+    Destructive tools have `confirmed` parameter
+    First call returns requiresConfirmation: true
+    Ask user, then call with confirmed: true
+  </confirmation-workflow>
+</base-rules>
 ```
 
-### components/tool-usage.md
+### workflows/cms-images.xml
 
-```markdown
-# Tool Usage Patterns
+Critical image handling rules:
 
-## Single vs Multiple Tools
-- One operation = one tool
-- Chain tools for multi-step tasks
-- Never call multiple tools simultaneously
+```xml
+<cms-images>
+  <CRITICAL-IMAGE-RULE>
+    Local paths ONLY. Never add https:// to /uploads/ paths.
+  </CRITICAL-IMAGE-RULE>
 
-## Parameter Handling
-- Use exact IDs from working memory
-- Provide all required parameters
-- Use defaults when optional params not specified
+  <image-display>
+    **{filename}**
+    ![{description}]({url})   ← EXACT url from tool
+    {description}
+    Tags: {tags}
+  </image-display>
+
+  <semantic-search>
+    Lower scores = better matches
+    -0.3 or better = strong match
+  </semantic-search>
+</cms-images>
 ```
 
-### components/output-format.md
+### workflows/cms-posts.xml
 
-```markdown
-# Output Formatting
+Blog post lifecycle:
 
-## Messages
-- Be concise but informative
-- Include relevant IDs in technical contexts
-- Format lists with bullets
-- Use code blocks for technical content
+```xml
+<cms-posts>
+  <states>
+    DRAFT → PUBLISHED → ARCHIVED → DELETED
+  </states>
 
-## Images
-Always display as:
-**filename.jpg**
-![Alt text](url)
-Description
-Tags: tag1, tag2
+  <transitions>
+    Draft → Published: cms_publishPost
+    Published → Archived: cms_archivePost
+    Any → Deleted: cms_deletePost (confirmed: true)
+  </transitions>
+</cms-posts>
 ```
 
 ---
@@ -780,17 +829,36 @@ Repeat critical rules:
 
 ## Design Decisions
 
-### Why 1200+ Lines?
-
-**Comprehensive > Concise for agent prompts.**
+### Why Modular Structure?
 
 | Approach | Tradeoff |
 |----------|----------|
-| Short prompt (~100 lines) | Generic behavior, frequent mistakes |
-| Medium prompt (~300 lines) | Covers basics, misses edge cases |
-| Long prompt (~1200 lines) | Specific guidance for all scenarios |
+| Single file (`react.xml`) | Hard to maintain, conflicts on merge |
+| Modular XML files | Easy to update individual workflows |
 
-LLMs handle long context well. The token cost is worth the improved behavior.
+Benefits:
+1. **Separation of concerns** - Each workflow is self-contained
+2. **Easier updates** - Change images.xml without touching posts.xml
+3. **Team collaboration** - Less merge conflicts
+4. **Testability** - Can test individual modules
+
+### Why Lazy Compilation?
+
+```typescript
+let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
+
+export function getSystemPrompt(context: SystemPromptContext): string {
+  if (!compiledTemplate) {
+    const template = loadPromptModules();
+    compiledTemplate = Handlebars.compile(template);
+  }
+  return compiledTemplate(context);
+}
+```
+
+1. **Performance** - Files read once at startup
+2. **Hot reload** - Call `reloadPromptModules()` during dev
+3. **Memory** - Single compiled template reused
 
 ### Why Handlebars?
 
@@ -801,28 +869,17 @@ LLMs handle long context well. The token cost is worth the improved behavior.
 | Jinja2 | Python ecosystem |
 | Handlebars | JS native, simple, sufficient |
 
-### Why Not Dynamic Tool Injection?
+### Why prepareCall for Injection?
 
-We include ALL tools always rather than filtering:
+The `ToolLoopAgent` is a module-level singleton. At construction time:
+- No working memory exists yet
+- No session context
+- Date would be fixed to server start
 
-```xml
-<!-- We DO this: -->
-<tools>
-You have {{toolCount}} tools available:
-{{{toolsFormatted}}}
-</tools>
-
-<!-- We DON'T do this: -->
-<tools>
-Based on context, you have these tools:
-{{#each relevantTools}}...{{/each}}
-</tools>
-```
-
-**Reasons:**
-1. Simpler - no tool selection logic
-2. Flexible - agent can pivot approaches
-3. LLMs handle large tool sets well
+`prepareCall` runs per-call, allowing dynamic injection of:
+- Working memory entities
+- Current date
+- Any call-specific context
 
 ---
 

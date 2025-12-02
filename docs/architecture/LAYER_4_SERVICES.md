@@ -11,6 +11,8 @@ The services layer encapsulates all business logic. Services are stateless class
 - SessionService checkpoint methods removed
 - Added tokenizer and pricing services
 - Messages saved at end of agent execution only
+- NEW: ConversationLogService for debug log persistence
+- NEW: WorkerEventsService for real-time job status via Redis pub/sub
 
 **Location:** `server/services/`
 
@@ -47,6 +49,10 @@ The services layer encapsulates all business logic. Services are stateless class
 │  │  │    Tokenizer      │  │     OpenRouter Pricing          │   ││
 │  │  │  (js-tiktoken)    │  │   (Cost Calculation)            │   ││
 │  │  └───────────────────┘  └─────────────────────────────────┘   ││
+│  │  ┌───────────────────┐  ┌─────────────────────────────────┐   ││
+│  │  │  Conversation     │  │     Worker Events               │   ││
+│  │  │  Log Service      │  │   (Redis Pub/Sub → SSE)         │   ││
+│  │  └───────────────────┘  └─────────────────────────────────┘   ││
 │  └───────────────────────────────────────────────────────────────┘│
 │                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
@@ -76,6 +82,8 @@ The services layer encapsulates all business logic. Services are stateless class
 | `server/services/working-memory/` | Entity tracking |
 | `lib/tokenizer.ts` | Token counting (NEW) |
 | `server/services/openrouter-pricing.ts` | Cost calculation (NEW) |
+| `server/services/conversation-log-service.ts` | Debug log persistence (NEW) |
+| `server/services/worker-events.service.ts` | Redis pub/sub for job events (NEW) |
 
 ---
 
@@ -240,6 +248,189 @@ writeSSE('usage', {
   totalTokens: usage.totalTokens,
   estimatedCost: cost,
   formattedCost: formatCost(cost),
+});
+```
+
+---
+
+## NEW: Conversation Log Service
+
+Persists debug trace entries and metrics for each conversation exchange:
+
+```typescript
+// server/services/conversation-log-service.ts
+
+export interface ConversationLog {
+  id: string;
+  sessionId: string;
+  conversationIndex: number;
+  userPrompt: string;
+  startedAt: Date;
+  completedAt: Date | null;
+  metrics: ConversationMetrics | null;
+  modelInfo: ModelInfo | null;
+  entries: TraceEntryData[] | null;  // All trace entries for this exchange
+}
+
+export interface ConversationMetrics {
+  totalDuration: number;
+  toolCallCount: number;
+  stepCount: number;
+  tokens: { input: number; output: number };
+  cost: number;
+  errorCount: number;
+}
+
+export class ConversationLogService {
+  constructor(private db: DrizzleDB) {}
+
+  // Save after agent completes (called from route handler)
+  async saveConversationLog(input: CreateConversationLogInput): Promise<ConversationLog>;
+
+  // Get all logs for a session (for debug panel history)
+  async getSessionLogs(sessionId: string): Promise<ConversationLog[]>;
+
+  // Aggregated stats for session summary
+  async getSessionStats(sessionId: string): Promise<{
+    totalConversations: number;
+    totalDuration: number;
+    totalToolCalls: number;
+    totalSteps: number;
+    totalTokens: { input: number; output: number };
+    totalCost: number;
+    totalErrors: number;
+  }>;
+
+  // Delete all logs when clearing session history
+  async deleteSessionLogs(sessionId: string): Promise<void>;
+}
+```
+
+**Usage:**
+
+```typescript
+// In agent route, after agent completes
+const conversationLogService = new ConversationLogService(db);
+
+await conversationLogService.saveConversationLog({
+  sessionId,
+  userPrompt: inputMessage,
+  entries: collectedTraceEntries,
+  metrics: {
+    totalDuration: Date.now() - startTime,
+    toolCallCount,
+    stepCount,
+    tokens: { input: promptTokens, output: completionTokens },
+    cost: calculateCost(promptTokens, completionTokens, modelId),
+    errorCount,
+  },
+  modelInfo: { modelId, pricing: getModelPricing(modelId) },
+  startedAt: new Date(startTime),
+  completedAt: new Date(),
+});
+```
+
+---
+
+## NEW: Worker Events Service
+
+Redis pub/sub for real-time worker job status updates via SSE:
+
+```typescript
+// server/services/worker-events.service.ts
+
+// Event types matching trace-store
+export type WorkerEventType =
+  | "job-queued"    // Job added to queue
+  | "job-active"    // Worker started processing
+  | "job-progress"  // Progress update (0-100)
+  | "job-completed" // Job finished successfully
+  | "job-failed";   // Job failed with error
+
+export interface WorkerEvent {
+  type: WorkerEventType;
+  jobId: string;
+  jobName: string;  // generate-metadata, generate-variants, generate-embeddings
+  imageId: string;
+  timestamp: number;
+  progress?: number;   // 0-100 for job-progress
+  duration?: number;   // ms for job-completed
+  error?: string;      // for job-failed
+  queueSize?: number;
+  attempt?: number;
+  maxAttempts?: number;
+}
+
+// Publisher - Used by worker process
+export class WorkerEventPublisher {
+  async publish(event: WorkerEvent): Promise<void>;
+
+  // Convenience methods
+  async jobQueued(jobId: string, jobName: string, imageId: string, queueSize?: number): Promise<void>;
+  async jobActive(jobId: string, jobName: string, imageId: string): Promise<void>;
+  async jobProgress(jobId: string, jobName: string, imageId: string, progress: number): Promise<void>;
+  async jobCompleted(jobId: string, jobName: string, imageId: string, duration: number): Promise<void>;
+  async jobFailed(jobId: string, jobName: string, imageId: string, error: string): Promise<void>;
+}
+
+// Subscriber - Used by main server to forward to SSE
+export class WorkerEventSubscriber extends EventEmitter {
+  async subscribe(): Promise<void>;
+  on(event: 'event', listener: (e: WorkerEvent) => void): this;
+}
+
+// Singleton accessors
+export function getPublisher(): WorkerEventPublisher;
+export function getSubscriber(): WorkerEventSubscriber;
+```
+
+**Architecture:**
+
+```
+┌─────────────────┐    Redis Pub/Sub    ┌─────────────────┐
+│  Worker Process │ ──────────────────▶ │   Main Server   │
+│   (BullMQ)      │   worker:events     │   (Express)     │
+│                 │                     │                 │
+│  Publisher      │                     │  Subscriber     │
+│  ─────────      │                     │  ──────────     │
+│  jobQueued()    │                     │  on('event')    │
+│  jobActive()    │                     │       │         │
+│  jobProgress()  │                     │       ▼         │
+│  jobCompleted() │                     │  SSE stream     │──▶ Browser
+│  jobFailed()    │                     │  writeSSE()     │
+└─────────────────┘                     └─────────────────┘
+```
+
+**Usage in Worker:**
+
+```typescript
+// server/worker/image-worker.ts
+import { getPublisher } from '../services/worker-events.service';
+
+const publisher = getPublisher();
+
+// In job processor
+await publisher.jobActive(job.id!, job.name, imageId);
+
+// During processing
+await publisher.jobProgress(job.id!, job.name, imageId, 50);
+
+// On completion
+await publisher.jobCompleted(job.id!, job.name, imageId, duration);
+```
+
+**Usage in SSE Route:**
+
+```typescript
+// server/routes/agent.ts
+import { getSubscriber } from '../services/worker-events.service';
+
+const subscriber = getSubscriber();
+await subscriber.subscribe();
+
+subscriber.on('event', (event) => {
+  // Forward to connected SSE client
+  writeSSE('worker-event', event);
 });
 ```
 

@@ -21,15 +21,24 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 	const allTraceIds = useTraceStore((state) => state.allTraceIds);
 	const activeTraceId = useTraceStore((state) => state.activeTraceId);
 	const setActiveTrace = useTraceStore((state) => state.setActiveTrace);
-	const clearTrace = useTraceStore((state) => state.clearTrace);
+	const clearAllTraces = useTraceStore((state) => state.clearAllTraces);
 	const exportTrace = useTraceStore((state) => state.exportTrace);
 	const copyAllLogs = useTraceStore((state) => state.copyAllLogs);
 	const liveConversations = useTraceStore((state) => state.conversationLogs);
+	const clearedAt = useTraceStore((state) => state.clearedAt);
 
 	const [copied, setCopied] = useState(false);
 	const [exported, setExported] = useState(false);
 	const [persistedLogs, setPersistedLogs] = useState<ConversationLog[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
+	const [isDeleting, setIsDeleting] = useState(false);
+
+	// Clear persistedLogs when store signals logs were cleared
+	useEffect(() => {
+		if (clearedAt) {
+			setPersistedLogs([]);
+		}
+	}, [clearedAt]);
 
 	// Fetch logs when sessionId changes
 	useEffect(() => {
@@ -131,6 +140,31 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 		setTimeout(() => setExported(false), 2000);
 	};
 
+	const handleClearAllLogs = async () => {
+		if (!sessionId) return;
+
+		setIsDeleting(true);
+		try {
+			// Delete from database
+			const response = await fetch(`/api/sessions/${sessionId}/logs`, {
+				method: "DELETE",
+			});
+
+			if (response.ok) {
+				// Clear in-memory state
+				clearAllTraces();
+				// Clear local persisted logs
+				setPersistedLogs([]);
+			} else {
+				console.error("Failed to delete logs from server");
+			}
+		} catch (error) {
+			console.error("Failed to delete logs:", error);
+		} finally {
+			setIsDeleting(false);
+		}
+	};
+
 	return (
 		<div className={cn("space-y-3", className)}>
 			{/* Title and actions row */}
@@ -190,16 +224,16 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 						</Tooltip>
 					</TooltipProvider>
 
-					{/* Clear */}
+					{/* Clear all logs */}
 					<TooltipProvider>
 						<Tooltip>
 							<TooltipTrigger asChild>
-								<Button variant='ghost' size='icon' className='h-8 w-8' onClick={() => clearTrace()} disabled={totalEventCount === 0}>
+								<Button variant='ghost' size='icon' className='h-8 w-8' onClick={handleClearAllLogs} disabled={totalEventCount === 0 || isDeleting}>
 									<Trash2 className='h-4 w-4' />
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>
-								<p>Clear current trace</p>
+								<p>Delete all logs</p>
 							</TooltipContent>
 						</Tooltip>
 					</TooltipProvider>

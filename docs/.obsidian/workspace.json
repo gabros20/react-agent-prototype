@@ -194,6 +194,8 @@
   },
   "active": "974d0433f089a4b1",
   "lastOpenFiles": [
+    "research/TOOLLOOPAGENT_REACT_IMPLEMENTATION.md",
+    "research/resaerch.md",
     "plans/AI_SDK_6_MIGRATION_PLAN.md",
     "plans/ENHANCED_DEBUG_PANEL_PLAN.md",
     "architecture/LAYER_5.2_QUEUE_DEFINITION.md",
@@ -218,8 +220,6 @@
     "architecture/LAYER_5.5_RETRY_AND_ERROR.md",
     "architecture/LAYER_6.1_STATE_MANAGEMENT.md",
     "architecture/LAYER_6.3_SESSION_UI.md",
-    "architecture/LAYER_5.4_JOB_PROCESSORS.md",
-    "architecture/LAYER_5.3_WORKER_LIFECYCLE.md",
     "architecture",
     "C - Brease Assistant.canvas",
     "C - Brease Assistant - IMAGE 20251109.png",

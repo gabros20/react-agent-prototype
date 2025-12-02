@@ -10,7 +10,8 @@ Human-in-the-Loop ensures users maintain control over dangerous or irreversible 
 - `server/tools/all-tools.ts` - Tool definitions with `confirmed` parameter
 - `server/tools/post-tools.ts` - Post tools (publish, archive, delete)
 - `server/tools/image-tools.ts` - Image deletion tool
-- `server/prompts/react.xml` - Confirmation workflow instructions
+- `server/prompts/core/base-rules.xml` - Confirmation pattern definition
+- `server/prompts/workflows/*.xml` - Workflow-specific confirmation examples
 
 ---
 
@@ -178,39 +179,53 @@ export const cmsPublishPost = tool({
 
 ## Prompt Instructions
 
-The agent is instructed on how to handle confirmations:
+The confirmation pattern is defined in `base-rules.xml` and inherited by workflow modules:
 
 ```xml
-<!-- In react.xml -->
-<destructive_operations>
-  **THREE-STEP WORKFLOW**
+<!-- server/prompts/core/base-rules.xml -->
+<confirmation-pattern>
+**DESTRUCTIVE OPERATIONS:**
 
-  For tools with `confirmed` parameter (deletePage, deletePageSection,
-  publishPost, archivePost, deletePost, deleteImage, httpPost):
+Deletion tools require user confirmation:
+- cms_deletePage, cms_deletePageSection, cms_deletePageSections
+- cms_deletePost, cms_deleteImage
 
-  1. FIRST CALL (without confirmed: true)
-     cms_deletePage({ slug: "about" })
-     → Returns: { requiresConfirmation: true, message: "..." }
+**WORKFLOW:**
+1. Call tool WITHOUT confirmed flag
+2. If requiresConfirmation returned → STOP and inform user clearly
+3. Wait for user approval
+4. Call again WITH confirmed: true
 
-  2. STOP AND ASK USER
-     Tell the user what will happen.
-     DO NOT proceed until they explicitly confirm.
-     Wait for their response.
+**CONFIRMATION RECOGNITION:**
+- YES: "yes", "y", "ok", "proceed", "go ahead", "confirm", "do it", "all"
+- NO: "no", "n", "cancel", "stop", "abort", "don't"
+</confirmation-pattern>
+```
 
-  3. SECOND CALL (with confirmed: true)
-     Only after user says yes/confirm/proceed:
-     cms_deletePage({ slug: "about", confirmed: true })
-     → Returns: { success: true }
+Workflow modules reference this pattern:
 
-  **IMPORTANT:**
-  - NEVER call with confirmed: true on first attempt
-  - NEVER interpret silence as confirmation
-  - NEVER auto-confirm based on previous context
+```xml
+<!-- server/prompts/workflows/cms-pages.xml -->
+**Delete sections** (follows confirmation-pattern):
+"Delete all sections from about" →
+1. cms_getPage("about") → sectionIds
+2. cms_deletePageSections(ids) → requiresConfirmation
+3. STOP, inform user, wait
+4. On "yes" → cms_deletePageSections(ids, confirmed: true)
 
-  **CONFIRMATION WORDS:**
-  YES: yes, y, yeah, ok, okay, sure, proceed, go ahead, confirm, do it
-  NO: no, n, nope, cancel, stop, abort, don't, nevermind
-</destructive_operations>
+<!-- server/prompts/workflows/cms-posts.xml -->
+**Publish post** (follows confirmation-pattern):
+"Publish that post" →
+1. cms_publishPost("react-hooks-guide") → requiresConfirmation
+2. STOP, ask user
+3. On "yes" → cms_publishPost("react-hooks-guide", confirmed: true)
+
+<!-- server/prompts/workflows/cms-images.xml -->
+**Delete image** (follows confirmation-pattern):
+"Delete the sunset photo" →
+1. cms_deleteImage("sunset") → requiresConfirmation
+2. STOP, inform user
+3. On "yes" → cms_deleteImage("sunset", confirmed: true)
 ```
 
 ---

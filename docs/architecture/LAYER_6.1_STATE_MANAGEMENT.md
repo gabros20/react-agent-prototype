@@ -56,10 +56,11 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 │  │  ├─ sessionId: string | null                              │  │
 │  │  ├─ messages: ChatMessage[]                               │  │
 │  │  ├─ currentTraceId: string | null                         │  │
-│  │  └─ isStreaming: boolean                                  │  │
+│  │  ├─ isStreaming: boolean                                  │  │
+│  │  └─ agentStatus: { state, toolName? } | null  (NEW)       │  │
 │  │                                                           │  │
 │  │  Actions:                                                 │  │
-│  │  ├─ setSessionId()                                        │  │
+│  │  ├─ setSessionId() / setAgentStatus()                     │  │
 │  │  ├─ setMessages() / addMessage()                          │  │
 │  │  └─ reset()                                               │  │
 │  │                                                           │  │
@@ -77,25 +78,35 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 │  │                                                           │  │
 │  │  Actions:                                                 │  │
 │  │  ├─ loadSessions() / loadSession()                        │  │
-│  │  ├─ createSession() / updateSession()                     │  │
+│  │  ├─ loadConversationLogs()  (NEW)                         │  │
 │  │  └─ deleteSession() / clearHistory()                      │  │
 │  │                                                           │  │
 │  │  Persistence: None (fetched from backend)                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                     log-store                             │  │
+│  │                   trace-store (ENHANCED)                  │  │
 │  │                                                           │  │
 │  │  State:                                                   │  │
-│  │  ├─ logs: LogEntry[]                                      │  │
-│  │  └─ filterType: 'all' | LogEntry['type']                  │  │
+│  │  ├─ entriesByTrace: Map<string, TraceEntry[]>             │  │
+│  │  ├─ conversationLogs: ConversationLog[]   (NEW)           │  │
+│  │  ├─ modelInfoByTrace: Map<string, {modelId, pricing}>     │  │
+│  │  ├─ filters: TraceFilters                                 │  │
+│  │  └─ expandedConversationIds: Set<string>  (NEW)           │  │
 │  │                                                           │  │
 │  │  Actions:                                                 │  │
-│  │  ├─ addLog()                                              │  │
-│  │  ├─ setFilterType()                                       │  │
-│  │  └─ clearLogs()                                           │  │
+│  │  ├─ addEntry() / updateEntry() / completeEntry()          │  │
+│  │  ├─ addConversationLog() / loadConversationLogs()  (NEW)  │  │
+│  │  ├─ getMetrics() / getTotalMetrics()  (NEW)               │  │
+│  │  └─ copyAllLogs() / exportTrace()                         │  │
 │  │                                                           │  │
-│  │  Persistence: None (debug session only)                   │  │
+│  │  Persistence: None (real-time only)                       │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                   log-store (LEGACY)                      │  │
+│  │                                                           │  │
+│  │  NOTE: Being phased out - use trace-store instead         │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -106,10 +117,10 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 
 | File | Purpose |
 |------|---------|
-| `app/assistant/_stores/chat-store.ts` | Chat messages, sessionId, streaming state |
-| `app/assistant/_stores/session-store.ts` | Session list, CRUD operations |
-| `app/assistant/_stores/trace-store.ts` | Trace entries for debug panel |
-| `app/assistant/_stores/log-store.ts` | Execution logs, filtering |
+| `app/assistant/_stores/chat-store.ts` | Chat messages, sessionId, streaming state, agentStatus |
+| `app/assistant/_stores/session-store.ts` | Session list, conversation logs, CRUD operations |
+| `app/assistant/_stores/trace-store.ts` | Trace entries, conversation logs, metrics, cost tracking |
+| `app/assistant/_stores/log-store.ts` | Legacy execution logs (being phased out) |
 
 ---
 
@@ -227,10 +238,82 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 }));
 ```
 
-### Log Store (Session-Scoped)
+### Trace Store (Enhanced - NEW)
+
+The trace store has been significantly expanded to support conversation logs and cost tracking:
+
+```typescript
+// app/assistant/_stores/trace-store.ts
+
+// Conversation log represents a single user->agent exchange
+export interface ConversationLog {
+  id: string;
+  sessionId: string;
+  conversationIndex: number;
+  userPrompt: string;
+  startedAt: Date;
+  completedAt: Date | null;
+  metrics: TraceMetrics | null;
+  modelInfo: { modelId: string; pricing: ModelPricing | null } | null;
+  entries: TraceEntry[];
+  isLive?: boolean; // True if currently streaming
+}
+
+export interface TraceMetrics {
+  totalDuration: number;
+  toolCallCount: number;
+  stepCount: number;
+  tokens: { input: number; output: number };
+  cost: number; // Calculated cost in $
+  errorCount: number;
+}
+
+export interface ModelPricing {
+  prompt: number; // $ per million tokens
+  completion: number; // $ per million tokens
+}
+
+// Many new entry types for comprehensive debugging
+export type TraceEntryType =
+  | "trace-start" | "trace-complete"
+  | "system-prompt" | "user-prompt" | "llm-response" | "text-streaming"
+  | "tools-available" | "model-info"
+  | "tool-call" | "tool-error" | "confirmation-required"
+  | "step-start" | "step-complete"
+  | "job-queued" | "job-progress" | "job-complete" | "job-failed"
+  | "working-memory-update" | "memory-trimmed" | "session-loaded"
+  | "retry-attempt" | "checkpoint-saved" | "system-log" | "error";
+```
+
+**Key Additions:**
+- **ConversationLog**: Persisted exchange history with metrics
+- **ModelPricing**: Cost tracking per model
+- **TraceMetrics**: Aggregated stats (tokens, cost, duration)
+- **20+ entry types** for comprehensive debugging
+
+**New Actions:**
+```typescript
+// Conversation log management
+loadConversationLogs: (sessionId: string, logs: ConversationLog[]) => void;
+addConversationLog: (log: ConversationLog) => void;
+setActiveSession: (sessionId: string | null) => void;
+toggleConversationExpanded: (conversationId: string) => void;
+
+// Metrics
+getMetrics: () => TraceMetrics;      // Current trace
+getTotalMetrics: () => TraceMetrics; // All conversations
+getTotalEventCount: () => number;
+
+// Export
+copyAllLogs: () => Promise<void>;    // Copy all to clipboard
+```
+
+### Log Store (Legacy)
 
 ```typescript
 // app/assistant/_stores/log-store.ts
+// NOTE: Being phased out in favor of trace-store's ConversationLog
+
 export interface LogEntry {
   id: string;
   traceId: string;
@@ -243,22 +326,6 @@ export interface LogEntry {
   success?: boolean;
   message?: string;
 }
-
-interface LogState {
-  logs: LogEntry[];
-  filterType: LogEntry['type'] | 'all';
-  addLog: (log: LogEntry) => void;
-  setFilterType: (filterType: LogEntry['type'] | 'all') => void;
-  clearLogs: () => void;
-}
-
-export const useLogStore = create<LogState>()((set) => ({
-  logs: [],
-  filterType: 'all',
-  addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
-  setFilterType: (filterType) => set({ filterType }),
-  clearLogs: () => set({ logs: [] }),
-}));
 ```
 
 ---

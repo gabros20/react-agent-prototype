@@ -126,6 +126,7 @@ interface TraceState {
 	conversationLogs: ConversationLog[];
 	activeSessionId: string | null;
 	expandedConversationIds: Set<string>; // Which conversations are expanded
+	clearedAt: number | null; // Timestamp when logs were cleared (for triggering refetch)
 
 	// Actions
 	addEntry: (entry: Omit<TraceEntry, "id"> & { id?: string }) => void;
@@ -178,6 +179,7 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 	conversationLogs: [],
 	activeSessionId: null,
 	expandedConversationIds: new Set(),
+	clearedAt: null,
 
 	addEntry: (entry) => {
 		const id = entry.id || crypto.randomUUID();
@@ -350,6 +352,7 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			// Also clear conversation logs when switching sessions
 			conversationLogs: [],
 			expandedConversationIds: new Set(),
+			clearedAt: Date.now(), // Signal to components to clear persisted logs
 		});
 	},
 

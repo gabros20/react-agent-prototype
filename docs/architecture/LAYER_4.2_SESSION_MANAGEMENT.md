@@ -10,6 +10,7 @@ The SessionService manages conversation state across agent interactions. It pers
 - Checkpoint system removed (was dead code)
 - Messages saved at end of execution only
 - No mid-step checkpointing needed
+- NEW: ConversationLogs table for debug trace persistence (see Layer 4 Services)
 
 ---
 
@@ -86,7 +87,9 @@ session.title = "Untitled Session";
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Note**: `checkpoint` column removed from sessions table.
+**Notes**:
+- `checkpoint` column removed from sessions table
+- `conversation_logs` table added for debug trace persistence (see ConversationLogService in Layer 4)
 
 ---
 

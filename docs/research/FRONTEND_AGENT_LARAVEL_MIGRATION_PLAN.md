@@ -160,10 +160,10 @@
 3. `cms_updatePage` - Update page metadata
 4. `cms_deletePage` - Delete page (requires confirmation)
 5. `cms_listPages` - List all pages
-6. `cms_listSectionDefs` - List section templates
-7. `cms_getSectionDef` - Get section schema
+6. `cms_listSectionTemplates` - List section templates
+7. `cms_getSectionFields` - Get section fields/schema
 8. `cms_addSectionToPage` - Add section instance
-9. `cms_syncPageContent` - Update section content
+9. `cms_updateSectionContent` - Update section content
 10. `cms_deletePageSection` - Delete one section (requires confirmation)
 11. `cms_deletePageSections` - Delete multiple sections (requires confirmation)
 12. `cms_getPageSections` - Granular section fetch (lightweight)
@@ -1947,7 +1947,7 @@ Create similar HTTP client wrappers for:
 -   ✅ cms_deletePage → DELETE /pages/{id}
 -   ✅ cms_listPages → GET /pages
 -   ✅ cms_addSectionToPage → POST /pages/{id}/section
--   ✅ cms_syncPageContent → POST /pages/{id}/sections/{section}/contents
+-   ✅ cms_updateSectionContent→ POST /pages/{id}/sections/{section}/contents
 -   ✅ search_vector → POST /search/resources
 -   ✅ (All 20 tools following same pattern)
 

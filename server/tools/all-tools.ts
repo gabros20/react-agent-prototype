@@ -304,7 +304,7 @@ export const cmsCreatePageWithContent = tool({
       // Get section definition by key
       const sectionDef = await ctx.services.sectionService.getSectionDefByKey(sectionSpec.sectionKey)
       if (!sectionDef) {
-        throw new Error(`Section definition "${sectionSpec.sectionKey}" not found. Use cms_listSectionDefs to see available sections.`)
+        throw new Error(`Section definition "${sectionSpec.sectionKey}" not found. Use cms_listSectionTemplates to see available sections.`)
       }
 
       // Add section to page
@@ -364,8 +364,8 @@ export const cmsCreatePageWithContent = tool({
 // CMS - Section Tools
 // ============================================================================
 
-export const cmsListSectionDefs = tool({
-  description: 'List all available section definitions (templates)',
+export const cmsListSectionTemplates = tool({
+  description: 'List all available section templates (hero, feature, cta, etc.)',
   inputSchema: z.object({}),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
@@ -384,8 +384,8 @@ export const cmsListSectionDefs = tool({
   }
 })
 
-export const cmsGetSectionDef = tool({
-  description: 'Get section definition with schema (elements_structure). Use this to see what fields a section needs before adding content.',
+export const cmsGetSectionFields = tool({
+  description: 'Get section template fields/schema. Use this to see what fields a section needs (title, subtitle, image, etc.) before adding content.',
   inputSchema: z.object({
     id: z.string().optional().describe('Section definition ID'),
     key: z.string().optional().describe('Section definition key')
@@ -413,7 +413,7 @@ export const cmsGetSectionDef = tool({
 })
 
 export const cmsAddSectionToPage = tool({
-  description: 'Add a section to a page. Returns pageSectionId - use with cms_getSectionDef to see schema, then cms_syncPageContent to add content.',
+  description: 'Add a section to a page. Returns pageSectionId - use with cms_getSectionFields to see required fields, then cms_updateSectionContent to add content.',
   inputSchema: z.object({
     pageId: z.string().describe('Page ID to add section to'),
     sectionDefId: z.string().describe('Section definition ID'),
@@ -434,17 +434,17 @@ export const cmsAddSectionToPage = tool({
       success: true, 
       pageSectionId: pageSection.id,
       sectionDefId: input.sectionDefId,
-      message: 'Section added. Use cms_getSectionDef to see schema, then cms_syncPageContent to add content.'
+      message: 'Section added. Use cms_getSectionFields to see required fields, then cms_updateSectionContent to add content.'
     }
   }
 })
 
-export const cmsSyncPageContent = tool({
-  description: 'Update content for a page section',
+export const cmsUpdateSectionContent = tool({
+  description: 'Update content for a page section. MERGES with existing content (only provided fields are updated, others preserved). REQUIRED: content object with at least one field.',
   inputSchema: z.object({
     pageSectionId: z.string().describe('Page section ID'),
     localeCode: z.string().optional().default('en').describe('Locale code'),
-    content: z.record(z.string(), z.any()).describe('Content data matching section schema')
+    content: z.record(z.string(), z.any()).describe('REQUIRED: Content data matching section schema. Only fields you provide are updated; existing fields preserved.')
   }),
   execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext
@@ -843,10 +843,10 @@ export const ALL_TOOLS = {
   'cms_listPages': cmsListPages,
   
   // Sections
-  'cms_listSectionDefs': cmsListSectionDefs,
-  'cms_getSectionDef': cmsGetSectionDef,
+  'cms_listSectionTemplates': cmsListSectionTemplates,
+  'cms_getSectionFields': cmsGetSectionFields,
   'cms_addSectionToPage': cmsAddSectionToPage,
-  'cms_syncPageContent': cmsSyncPageContent,
+  'cms_updateSectionContent': cmsUpdateSectionContent,
   'cms_deletePageSection': cmsDeletePageSection,
   'cms_deletePageSections': cmsDeletePageSections,
   'cms_getPageSections': cmsGetPageSections,
@@ -944,13 +944,13 @@ export const TOOL_METADATA = {
     requiresApproval: false,
     tags: ['read', 'list']
   },
-  'cms_listSectionDefs': {
+  'cms_listSectionTemplates': {
     category: 'cms',
     riskLevel: 'safe',
     requiresApproval: false,
     tags: ['read', 'section', 'list']
   },
-  'cms_getSectionDef': {
+  'cms_getSectionFields': {
     category: 'cms',
     riskLevel: 'safe',
     requiresApproval: false,
@@ -962,7 +962,7 @@ export const TOOL_METADATA = {
     requiresApproval: false,
     tags: ['write', 'section', 'page']
   },
-  'cms_syncPageContent': {
+  'cms_updateSectionContent': {
     category: 'cms',
     riskLevel: 'moderate',
     requiresApproval: false,

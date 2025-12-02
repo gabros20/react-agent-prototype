@@ -2474,7 +2474,7 @@ Implement granular content fetching architecture to reduce token consumption by 
 
 1. `cms_getPage` returned page metadata but **not section content**
 2. Agent had no tool to retrieve individual section content
-3. Attempting to use `cms_syncPageContent` (write-only tool) failed
+3. Attempting to use `cms_updateSectionContent` (write-only tool) failed
 4. Fetching entire page with all sections wastes 1500-1800 tokens for single field queries
 
 **Architecture Decision**: Implement hybrid approach - lightweight by default, granular fetching for targeted queries, full fetch opt-in.
@@ -3296,7 +3296,7 @@ When agent updated button links in the database, they were stored as plain strin
 ```
 Agent via tool
   ↓
-cms_syncPageContent(content: {buttonLink: {href: "/contact", type: "url"}})
+cms_updateSectionContent(content: {buttonLink: {href: "/contact", type: "url"}})
   ↓
 SectionService.syncPageContents()
   ↓

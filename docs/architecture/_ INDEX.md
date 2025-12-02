@@ -13,12 +13,17 @@ The codebase was migrated to **AI SDK v6 native patterns** in commit `1e1963e`. 
 
 | Component | Before | After |
 |-----------|--------|-------|
-| Agent Loop | Custom `ToolLoopAgent` | Native `generateText` + `maxSteps` |
+| Agent Loop | Custom `generateText` + while loop | Native `ToolLoopAgent` class (singleton) |
+| Call Options | Manual context injection | Type-safe `callOptionsSchema` via Zod |
+| Instructions | Static system prompt | Dynamic via `prepareCall` hook |
+| Stop Conditions | Manual step counting | Native `stopWhen` array (OR logic) |
+| Context Trimming | Manual message slicing | Native `prepareStep` hook |
 | Retry Logic | Custom `executeWithRetry` | Native `maxRetries: 2` |
-| HITL | `confirmed` flag + `ApprovalQueue` | Native `needsApproval` on tools |
+| HITL | `confirmed` flag only | Confirmed flag + conversational pattern |
 | Checkpoints | Every 3 steps (dead code) | Removed - messages at end only |
-| Cost Tracking | None | Tokenizer + OpenRouter pricing |
-| Tool States | Multiple events | Consolidated states |
+| Cost Tracking | None | Tokenizer + OpenRouter pricing + trace metrics |
+| Debug Logging | Basic logs | 20+ trace entry types + conversation logs |
+| Worker Events | None | Redis pub/sub → SSE real-time updates |
 
 ---
 
@@ -33,13 +38,14 @@ The codebase was migrated to **AI SDK v6 native patterns** in commit `1e1963e`. 
 │  Nunjucks Templates • Section Variants • Asset Pipeline         │
 ├─────────────────────────────────────────────────────────────────┤
 │                        AGENT LAYER                              │
-│  AI SDK 6 generateText • maxSteps • Native needsApproval        │
+│  AI SDK 6 ToolLoopAgent • stopWhen • Confirmed Flag Pattern     │
 ├─────────────────────────────────────────────────────────────────┤
 │                       SERVICES LAYER                            │
-│  PageService • SessionService • Tokenizer • Pricing • Vector    │
+│  PageService • SessionService • ConversationLogService • Vector │
+│  Tokenizer • OpenRouter Pricing • WorkerEventsService           │
 ├─────────────────────────────────────────────────────────────────┤
 │                    BACKGROUND LAYER                             │
-│  BullMQ • Redis • Image Worker • Async Processing               │
+│  BullMQ • Redis • Image Worker • Redis Pub/Sub Events           │
 ├─────────────────────────────────────────────────────────────────┤
 │                      DATABASE LAYER                             │
 │  SQLite + Drizzle ORM • LanceDB Vector Store                    │
@@ -312,15 +318,19 @@ External:
 ```
 server/
 ├── agent/           # CMS Agent module (AI SDK 6)
-│   ├── cms-agent.ts     # Agent definition (NEW)
-│   └── system-prompt.ts # Prompt compilation (NEW)
+│   ├── cms-agent.ts     # ToolLoopAgent singleton (NEW)
+│   └── system-prompt.ts # Modular prompt composition (NEW)
 ├── db/              # Schema, migrations
 ├── middleware/      # Express middleware
-├── prompts/         # System prompts (Handlebars)
+├── prompts/         # Modular XML prompts
+│   ├── core/            # base-rules.xml
+│   └── workflows/       # cms-pages.xml, cms-images.xml, etc.
 ├── queues/          # BullMQ job definitions
 ├── routes/          # API endpoints
 ├── services/        # Business logic
-│   ├── openrouter-pricing.ts # Cost calculation (NEW)
+│   ├── conversation-log-service.ts # Debug log persistence (NEW)
+│   ├── openrouter-pricing.ts       # Cost calculation (NEW)
+│   ├── worker-events.service.ts    # Redis pub/sub (NEW)
 │   └── ...
 ├── templates/       # Nunjucks templates
 ├── tools/           # Agent tools (21 total)
@@ -333,11 +343,10 @@ lib/
 
 app/
 ├── assistant/       # Chat UI (main interface)
-│   ├── _components/ # React components
+│   ├── _components/ # React components (debug-pane enhanced)
 │   ├── _hooks/      # Custom hooks (useAgent with AI SDK 6)
-│   └── _stores/     # Zustand stores (+ usage store)
+│   └── _stores/     # Zustand stores (trace-store enhanced)
 ├── api/             # Next.js API routes
-│   └── agent/approve/ # HITL approval endpoint (NEW)
 └── components/      # Shared UI components
 
 scripts/
@@ -369,6 +378,9 @@ scripts/
 | Services  | Database       | Drizzle ORM queries               |
 | Services  | Vector Store   | LanceDB embeddings                |
 | Routes    | Background     | BullMQ job dispatch               |
+| Worker    | Redis          | Publish job events via pub/sub (NEW) |
+| Server    | Client         | Forward worker events via SSE (NEW) |
+| Agent     | ConversationLog | Save trace entries + metrics (NEW) |
 | Worker    | Services       | Image metadata/variant storage    |
 | Rendering | Database       | Page/section data for templates   |
 

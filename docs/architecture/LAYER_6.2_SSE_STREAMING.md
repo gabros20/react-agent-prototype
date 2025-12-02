@@ -117,16 +117,20 @@ setSessionId(data.traceId);  // Wrong! traceId ≠ sessionId
 
 | Event | Data Shape | Store Action |
 |-------|------------|--------------|
-| `text-delta` | `{ delta }` | accumulate (no store) |
-| `tool-call` | `{ toolCallId, toolName, args, state }` | logStore.addLog() |
-| `tool-result` | `{ toolCallId, toolName, result }` | logStore.addLog() |
-| `step-start` | `{ stepNumber }` | logStore.addLog() |
-| `step-finish` | `{ stepNumber, usage }` | logStore + usageStore |
-| `usage` | `{ promptTokens, completionTokens, totalTokens, cost }` | usageStore.update() |
-| `result` | `{ traceId, sessionId, text }` | chatStore.addMessage() |
-| `error` | `{ error, traceId }` | setError(), logStore |
-| `log` | `{ traceId, message, metadata }` | logStore.addLog() |
-| `done` / `finish` | `{}` | cleanup |
+| `log` | `{ traceId, message, metadata }` | Initialize trace, traceStore.addEntry() |
+| `system-prompt` | `{ prompt, tokens, workingMemoryTokens }` | traceStore.addEntry('system-prompt') |
+| `user-prompt` | `{ prompt, tokens, messageHistoryTokens }` | traceStore.addEntry('user-prompt') |
+| `model-info` | `{ modelId, pricing }` | traceStore.setModelInfo() |
+| `step-start` | `{ stepNumber }` | traceStore.addEntry('step-start'), create streaming entry |
+| `text-delta` | `{ delta }` | accumulate text, update streaming entry |
+| `tool-call` | `{ toolCallId, toolName, args }` | traceStore.addEntry('tool-call'), track timing |
+| `tool-result` | `{ toolCallId, toolName, result }` | traceStore.completeEntry(), check confirmation |
+| `tool-error` | `{ toolCallId, toolName, error }` | traceStore.completeEntry() with error |
+| `step-finish` | `{ stepNumber, duration, usage }` | finalize streaming entry, traceStore.addEntry('step-complete') |
+| `result` | `{ traceId, sessionId, text, usage }` | chatStore.addMessage(), traceStore.addEntry('llm-response') |
+| `error` | `{ error, traceId }` | setError(), traceStore.addEntry('error') |
+| `finish` | `{ finishReason, usage }` | log completion |
+| `done` | `{ traceId, sessionId }` | traceStore.addEntry('trace-complete'), save conversation log |
 
 ---
 
@@ -363,47 +367,39 @@ tool-result event → state: 'completed'
 
 ---
 
-## Usage Store (NEW)
+## Usage & Cost Tracking (via trace-store)
 
-Tracks token usage and costs:
+Token usage and costs are tracked in the trace-store, not a separate usage-store:
 
 ```typescript
-// app/assistant/_stores/usage-store.ts
-interface UsageState {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
-  formattedCost: string;
-  sessionTotals: {
-    tokens: number;
-    cost: number;
-  };
+// app/assistant/_stores/trace-store.ts
+interface TraceMetrics {
+  totalDuration: number;
+  toolCallCount: number;
+  stepCount: number;
+  tokens: { input: number; output: number };
+  cost: number;          // Calculated from model pricing
+  errorCount: number;
 }
 
-export const useUsageStore = create<UsageState & UsageActions>((set, get) => ({
-  promptTokens: 0,
-  completionTokens: 0,
-  totalTokens: 0,
-  estimatedCost: 0,
-  formattedCost: '$0.0000',
-  sessionTotals: { tokens: 0, cost: 0 },
+// Model pricing stored per trace for cost calculation
+modelInfoByTrace: Map<string, { modelId: string; pricing: ModelPricing | null }>
 
-  setUsage: (usage) => {
-    const current = get();
-    set({
-      ...usage,
-      sessionTotals: {
-        tokens: current.sessionTotals.tokens + usage.totalTokens,
-        cost: current.sessionTotals.cost + usage.estimatedCost,
-      }
-    });
-  },
+// getMetrics() calculates totals from entries
+getMetrics: () => {
+  const entries = entriesByTrace.get(activeTraceId) || [];
+  return entries.reduce((acc, entry) => ({
+    ...acc,
+    tokens: {
+      input: acc.tokens.input + (entry.tokens?.input || 0),
+      output: acc.tokens.output + (entry.tokens?.output || 0),
+    },
+    // Cost calculated from model pricing
+  }), initialMetrics);
+}
 
-  resetSessionTotals: () => {
-    set({ sessionTotals: { tokens: 0, cost: 0 } });
-  }
-}));
+// Total metrics across all conversation logs
+getTotalMetrics: () => TraceMetrics;
 ```
 
 ---
@@ -500,9 +496,9 @@ buffer = lines.pop() || '';
 | Connects To | How |
 |-------------|-----|
 | Layer 3.7 (Agent Streaming) | Backend emits SSE events |
-| Layer 6.1 (State Management) | Updates chat, log, usage stores |
+| Layer 6.1 (State Management) | Updates chat store, trace store (metrics, entries) |
 | Layer 6.4 (Chat Components) | ChatPane consumes messages |
-| Layer 6.5 (Debug Panel) | Shows tool states and usage |
+| Layer 6.5 (Debug Panel) | Shows trace entries, tool states, usage metrics |
 
 ### Event Flow Diagram
 

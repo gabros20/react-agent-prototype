@@ -517,10 +517,10 @@ export const cmsGetPageTool = tool({
 | `cms_updatePage` | `PUT /pages/:page` |
 | `cms_deletePage` | `DELETE /pages/:page` |
 | `cms_listPages` | `GET /pages` |
-| `cms_listSectionDefs` | `GET /section-defs` |
-| `cms_getSectionDef` | `GET /section-defs/:sectionDef` |
+| `cms_listSectionTemplates` | `GET /section-defs` |
+| `cms_getSectionFields` | `GET /section-defs/:sectionDef` |
 | `cms_addSectionToPage` | `POST /pages/:page/section` |
-| `cms_syncPageContent` | `POST /pages/:page/sections/:section/contents` |
+| `cms_updateSectionContent` | `POST /pages/:page/sections/:section/contents` |
 | `cms_deletePageSection` | `DELETE /sections/:section` |
 | `cms_getPageSections` | Custom (need to add) |
 | `cms_getSectionContent` | Custom (need to add) |
@@ -603,10 +603,10 @@ export const allTools = {
   cms_updatePage: cmsUpdatePageTool,
   cms_deletePage: cmsDeletePageTool,
   cms_listPages: cmsListPagesTool,
-  cms_listSectionDefs: cmsListSectionDefsTool,
-  cms_getSectionDef: cmsGetSectionDefTool,
+  cms_listSectionTemplates: cmsListSectionTemplatesTool,
+  cms_getSectionFields: cmsGetSectionFieldsTool,
   cms_addSectionToPage: cmsAddSectionToPageTool,
-  cms_syncPageContent: cmsSyncPageContentTool,
+  cms_updateSectionContent: cmsUpdateSectionContentTool,
   cms_deletePageSection: cmsDeletePageSectionTool,
   cms_deletePageSections: cmsDeletePageSectionsTool,
   cms_getPageSections: cmsGetPageSectionsTool,

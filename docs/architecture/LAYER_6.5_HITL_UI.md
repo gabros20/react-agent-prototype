@@ -51,15 +51,19 @@ approval-required SSE event → approval-store → HITLModal → POST /approve
 
 ## Trace Entry Types for Confirmations
 
-The trace store tracks confirmation-related events:
+The trace store tracks confirmation-related events among 20+ entry types:
 
 ```typescript
 // app/assistant/_stores/trace-store.ts
 export type TraceEntryType =
-  | "tool-call"
-  | "tool-result"  // Includes requiresConfirmation responses
-  | "confirmation-required" // Special type for confirmation requests
-  // ... other types
+  | "trace-start" | "trace-complete"
+  | "system-prompt" | "user-prompt" | "llm-response" | "text-streaming"
+  | "tools-available" | "model-info"
+  | "tool-call" | "tool-error" | "confirmation-required"  // <-- confirmation
+  | "step-start" | "step-complete"
+  | "job-queued" | "job-progress" | "job-complete" | "job-failed"
+  | "working-memory-update" | "memory-trimmed" | "session-loaded"
+  | "retry-attempt" | "checkpoint-saved" | "system-log" | "error";
 ```
 
 ### Confirmation Detection
@@ -247,7 +251,7 @@ case 'tool-result': {
 
 **Cause:** Prompt instructions not followed.
 
-**Fix:** Check `react.xml` for proper `<destructive_operations>` section with examples.
+**Fix:** Check `server/prompts/core/base-rules.xml` for proper `<confirmation-pattern>` section with examples.
 
 ### User Says "Yes" But Nothing Happens
 

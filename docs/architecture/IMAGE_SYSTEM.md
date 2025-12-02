@@ -1,7 +1,7 @@
 # Image Handling System - Current Implementation
 
 **Status:** ✅ PRODUCTION READY
-**Last Updated:** 2025-11-23
+**Last Updated:** 2025-12-02
 **System:** Text-based semantic search with OpenRouter embeddings
 **Architecture:** Inline JSON pattern for section images ([details](./IMAGE_ARCHITECTURE.md))
 
@@ -15,13 +15,14 @@ AI-powered image management system with automatic metadata generation and semant
 
 ### Core Features ✅
 
-- 🤖 **AI Metadata Generation** - GPT-4o-mini with vision generates rich, structured metadata
-- 🔍 **Semantic Search** - Natural language image search using OpenRouter text embeddings
-- 🎯 **Agent Integration** - 6 specialized tools for natural language image operations
-- ♻️ **Deduplication** - SHA256 hash checking prevents duplicate storage
-- 📦 **Async Processing** - BullMQ queue handles metadata, variants, and embedding generation
-- 🖼️ **Responsive Variants** - WebP/AVIF formats in 3 sizes (640w, 1024w, 1920w)
-- 🔒 **Security** - Magic byte validation, path traversal protection, sanitization
+-   🤖 **AI Metadata Generation** - GPT-4o-mini with vision generates rich, structured metadata
+-   🔍 **Semantic Search** - Natural language image search using OpenRouter text embeddings
+-   🎯 **Agent Integration** - 8 specialized tools for natural language image operations
+-   ♻️ **Deduplication** - SHA256 hash checking prevents duplicate storage
+-   📦 **Async Processing** - BullMQ queue handles metadata, variants, and embedding generation
+-   🖼️ **Responsive Variants** - WebP/AVIF formats in 3 sizes (640w, 1024w, 1920w)
+-   🔒 **Security** - Magic byte validation, path traversal protection, sanitization
+-   📡 **Real-time Events** - Redis pub/sub broadcasts worker events to debug UI via SSE
 
 ---
 
@@ -46,14 +47,72 @@ Generate Thumbnail (150x150 WebP BLOB)
     ↓
 Insert Database Record (status: processing)
     ↓
-Queue 3 Async Jobs (BullMQ + Redis)
-        ├─ generate-metadata → GPT-4o-mini
-        ├─ generate-variants → Sharp (WebP/AVIF)
-        └─ generate-embeddings → OpenRouter text-embedding-3-small
+Queue 2 Async Jobs (BullMQ + Redis)
+        ├─ generate-metadata → GPT-4o-mini (chains → generate-embeddings)
+        └─ generate-variants → Sharp (WebP/AVIF) [runs in parallel]
+            ↓
+Worker Processing (with real-time SSE events)
+    ├─ Metadata Job:
+    │   ├─ Read file from disk
+    │   ├─ GPT-4o-mini generates description, tags, categories, colors, mood
+    │   ├─ Store in image_metadata table
+    │   └─ Queue generate-embeddings job ← CHAINS
+    │
+    ├─ Embeddings Job (chained from metadata):
+    │   ├─ Generate embedding from searchableText via OpenRouter
+    │   ├─ Store in LanceDB vector index
+    │   └─ Update image status → completed
+    │
+    └─ Variants Job (parallel):
+        └─ Generate 6 variants (640w, 1024w, 1920w × WebP/AVIF)
             ↓
 Store Results (DB + LanceDB Vector Index)
     ↓
 Update Status (status: completed)
+```
+
+### Job Chain Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Image Processing Pipeline                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Upload Request                                                            │
+│        │                                                                    │
+│        ▼                                                                    │
+│   ImageProcessingService.processImage()                                     │
+│        │                                                                    │
+│        ├─────────────────┬─────────────────────────────────┐               │
+│        │                 │                                  │               │
+│        ▼                 ▼                                  ▼               │
+│   [generate-metadata] [generate-variants]             Response (202)        │
+│        │                 │                                                  │
+│        │                 └─── 6 variants in parallel                        │
+│        │                      (640w, 1024w, 1920w × WebP/AVIF)             │
+│        │                                                                    │
+│        ▼                                                                    │
+│   GPT-4o-mini Vision                                                        │
+│        │                                                                    │
+│        ▼                                                                    │
+│   Store metadata in DB                                                      │
+│        │                                                                    │
+│        ▼                                                                    │
+│   imageQueue.add("generate-embeddings")  ← CHAINS TO NEXT JOB              │
+│        │                                                                    │
+│        ▼                                                                    │
+│   [generate-embeddings]                                                     │
+│        │                                                                    │
+│        ▼                                                                    │
+│   OpenRouter text-embedding-3-small                                         │
+│        │                                                                    │
+│        ▼                                                                    │
+│   LanceDB vector index                                                      │
+│        │                                                                    │
+│        ▼                                                                    │
+│   Update image.status = "completed"                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Embedding Strategy
@@ -63,37 +122,98 @@ Update Status (status: completed)
 ```typescript
 // 1. GPT-4o-mini generates rich metadata from image
 const metadata = {
-  description: "Golden retriever puppy playing in green grass",
-  tags: ["puppy", "dog", "golden retriever", "grass", "outdoor"],
-  categories: ["animals", "pets"],
-  objects: [{name: "dog", confidence: 0.98}],
-  colors: {dominant: ["golden", "green"]},
-  mood: "playful",
-  style: "natural photography"
-}
+	description: "Golden retriever puppy playing in green grass",
+	tags: ["puppy", "dog", "golden retriever", "grass", "outdoor"],
+	categories: ["animals", "pets"],
+	objects: [{ name: "dog", confidence: 0.98 }],
+	colors: { dominant: ["golden", "green"] },
+	mood: "playful",
+	style: "natural photography",
+};
 
 // 2. Create searchable text from metadata
-const searchableText = `${description} ${tags.join(' ')} ${categories.join(' ')}`
+const searchableText = `${description} ${tags.join(" ")} ${categories.join(" ")}`;
 
 // 3. Generate embedding via OpenRouter
-const response = await fetch('https://openrouter.ai/api/v1/embeddings', {
-  headers: { 'Authorization': `Bearer ${OPENROUTER_API_KEY}` },
-  body: JSON.stringify({
-    model: 'openai/text-embedding-3-small',
-    input: searchableText
-  })
-})
+const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
+	headers: { Authorization: `Bearer ${OPENROUTER_API_KEY}` },
+	body: JSON.stringify({
+		model: "openai/text-embedding-3-small",
+		input: searchableText,
+	}),
+});
 
 // 4. Store 1536-dimensional vector in LanceDB
-const embedding = response.data[0].embedding // [0.123, -0.456, ...]
+const embedding = response.data[0].embedding; // [0.123, -0.456, ...]
 ```
 
 **Why text-only?**
-- ✅ Rich metadata from GPT-4o-mini provides excellent search quality
-- ✅ Unified embedding model (OpenRouter) for both images and text queries
-- ✅ No additional infrastructure (CLIP would require ~500MB model download)
-- ✅ Lower cost ($0.02/M tokens vs visual embedding services)
-- ✅ Consistent results across image and text search
+
+-   ✅ Rich metadata from GPT-4o-mini provides excellent search quality
+-   ✅ Unified embedding model (OpenRouter) for both images and text queries
+-   ✅ No additional infrastructure (CLIP would require ~500MB model download)
+-   ✅ Lower cost ($0.02/M tokens vs visual embedding services)
+-   ✅ Consistent results across image and text search
+
+### Worker Events (Real-time SSE)
+
+The worker process publishes events to Redis pub/sub, which the main server subscribes to and forwards to connected debug UI clients via SSE.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Worker Events SSE Architecture                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Worker Process                    Main Server                    Client   │
+│   ──────────────                    ───────────                    ──────   │
+│                                                                             │
+│   image-worker.ts                   worker-events.ts route         Debug    │
+│        │                                  │                        Panel    │
+│        │ WorkerEventPublisher             │ WorkerEventSubscriber    │      │
+│        │        │                         │         │                │      │
+│        ▼        │                         │         ▼                │      │
+│   Redis ◄───────┴─── pub/sub channel ─────┴───────► EventEmitter ───►│      │
+│   (worker:events)                                       │            │      │
+│                                                         ▼            │      │
+│                                                    SSE Stream ───────┘      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Event Types:**
+
+| Event           | Description               | Fields                                               |
+| --------------- | ------------------------- | ---------------------------------------------------- |
+| `job-queued`    | Job added to queue        | jobId, jobName, imageId, queueSize                   |
+| `job-active`    | Worker started processing | jobId, jobName, imageId, attempt, maxAttempts        |
+| `job-progress`  | Progress update           | jobId, jobName, imageId, progress (0-100)            |
+| `job-completed` | Job finished successfully | jobId, jobName, imageId, duration                    |
+| `job-failed`    | Job failed with error     | jobId, jobName, imageId, error, attempt, maxAttempts |
+
+**Progress Throttling:**
+
+Events are throttled to prevent UI flooding:
+
+-   500ms minimum interval between progress updates
+-   Milestone values (10%, 50%, 90%, 100%) bypass throttle
+
+**SSE Endpoints:**
+
+```bash
+# Stream worker events (SSE)
+GET /v1/worker-events/stream
+
+# Get current queue status (JSON)
+GET /v1/worker-events/status
+```
+
+**Source Files:**
+
+-   `server/services/worker-events.service.ts` - Publisher/Subscriber classes
+-   `server/routes/worker-events.ts` - SSE endpoint
+-   `server/workers/image-worker.ts` - Event emission
 
 ---
 
@@ -144,6 +264,7 @@ GET /uploads/images/2025/11/22/original/967f1d05-bebb-446a-b228-4147df3c30ee.jpg
 ```
 
 **Image variants:**
+
 ```bash
 GET /uploads/images/2025/11/22/640w/:filename.webp   # 640px wide
 GET /uploads/images/2025/11/22/1024w/:filename.webp  # 1024px wide
@@ -253,7 +374,7 @@ DELETE /api/images/:id
 
 ---
 
-## Agent Tools
+## Agent Tools (8 total)
 
 ### cms_findImage
 
@@ -270,61 +391,104 @@ Find single best matching image by description.
   image: {
     id: "img-abc123",
     filename: "puppy.jpg",
+    url: "/uploads/images/2025/12/02/original/img-abc123.jpg",
     description: "Golden retriever puppy...",
-    score: 0.95
+    tags: ["puppy", "dog", "golden retriever"]
   }
 }
 ```
 
 ### cms_searchImages
 
-Search for multiple images.
+Search for multiple images with semantic similarity scoring.
+
+**Score Interpretation:**
+
+-   `score >= -0.3`: **strong** match (highly relevant)
+-   `-0.3 to -0.6`: **moderate** match
+-   `< -0.6`: **weak** match
+
+**Important:** Expand short queries for better results (e.g., "AI" → "artificial intelligence robot technology").
 
 ```javascript
 {
-  query: "sunset photos",
-  limit: 10  // optional, default 10
+  query: "sunset photos landscape orange sky",
+  limit: 5,      // optional, default 5
+  minScore: -0.7 // optional, default -0.7 (includes moderate matches)
 }
 
 // Returns
 {
   success: true,
   count: 3,
-  images: [...]
+  query: "sunset photos landscape orange sky",
+  scoreThreshold: -0.7,
+  images: [
+    {
+      id: "img-abc123",
+      filename: "sunset.jpg",
+      url: "/uploads/images/2025/12/02/original/sunset.jpg",
+      description: "A sunset over the ocean",
+      score: -0.25,
+      relevance: "strong"
+    }
+  ],
+  hint: "Found strong matches - the top result is highly relevant."
 }
 ```
 
 ### cms_listConversationImages
 
-List images uploaded in current session.
+List images uploaded in current session. **No parameters needed** - uses current session automatically from context.
 
 ```javascript
-{
-  sessionId: "session-abc"
-}
+{}  // Empty - sessionId auto-detected from context
 
 // Returns
 {
   success: true,
-  count: 2,
-  images: [...]
+  images: [
+    {
+      id: "img-abc123",
+      filename: "puppy.jpg",
+      originalFilename: "my-puppy.jpg",
+      url: "/uploads/images/2025/12/02/original/img-abc123.jpg",
+      status: "completed",
+      uploadedAt: "2025-12-02T10:30:00Z",
+      description: "Golden retriever puppy...",
+      tags: ["puppy", "dog"]
+    }
+  ]
 }
 ```
 
 ### cms_listAllImages
 
-List all images in the entire system (not session-scoped).
+List all images in the entire system (not just current conversation).
 
 ```javascript
 {
-  limit: 50,      // optional, default 50
+  limit: 50,           // optional, default 50
   status: "completed"  // optional: completed | processing | failed
 }
 
 // Returns
 {
   success: true,
-  images: [...]
+  count: 23,
+  images: [
+    {
+      id: "img-abc123",
+      filename: "sunset.jpg",
+      originalFilename: "sunset-photo.jpg",
+      url: "/uploads/images/2025/12/02/original/img-abc123.jpg",
+      status: "completed",
+      uploadedAt: "2025-12-02T10:30:00Z",
+      description: "A sunset over the ocean",
+      tags: ["sunset", "ocean"],
+      categories: ["nature", "landscape"]
+    }
+  ]
 }
 ```
 
@@ -386,11 +550,31 @@ Replace image across all sections (searches content JSON recursively).
 
 ### cms_deleteImage
 
-Delete image (requires confirmation).
+Delete image permanently. **Requires conversational confirmation** (HITL pattern).
 
 ```javascript
+// First call - no confirmed flag
 {
   description: "outdated banner"
+}
+
+// Returns confirmation request
+{
+  requiresConfirmation: true,
+  message: "Are you sure you want to delete image \"banner.jpg\"? This cannot be undone.",
+  image: { id: "img-abc123", filename: "banner.jpg" }
+}
+
+// Second call - with confirmed: true
+{
+  description: "outdated banner",
+  confirmed: true
+}
+
+// Returns
+{
+  success: true,
+  message: "Deleted image: banner.jpg"
 }
 ```
 
@@ -402,115 +586,121 @@ Delete image (requires confirmation).
 
 Core image storage.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | TEXT | UUID primary key |
-| filename | TEXT | Generated filename (UUID.ext) |
-| originalFilename | TEXT | User's original filename |
-| mediaType | TEXT | MIME type (image/jpeg, etc.) |
-| storageType | TEXT | 'filesystem' |
-| filePath | TEXT | Relative path |
-| cdnUrl | TEXT | NULL (not implemented) |
-| thumbnailData | BLOB | 150x150 WebP thumbnail |
-| fileSize | INTEGER | Bytes |
-| width | INTEGER | Pixels |
-| height | INTEGER | Pixels |
-| sha256Hash | TEXT | For deduplication (unique) |
-| status | TEXT | processing/completed/failed |
-| error | TEXT | Error message if failed |
-| uploadedAt | TIMESTAMP | Upload time |
-| processedAt | TIMESTAMP | Completion time |
+| Column           | Type      | Description                   |
+| ---------------- | --------- | ----------------------------- |
+| id               | TEXT      | UUID primary key              |
+| filename         | TEXT      | Generated filename (UUID.ext) |
+| originalFilename | TEXT      | User's original filename      |
+| mediaType        | TEXT      | MIME type (image/jpeg, etc.)  |
+| storageType      | TEXT      | 'filesystem'                  |
+| filePath         | TEXT      | Relative path                 |
+| cdnUrl           | TEXT      | NULL (not implemented)        |
+| thumbnailData    | BLOB      | 150x150 WebP thumbnail        |
+| fileSize         | INTEGER   | Bytes                         |
+| width            | INTEGER   | Pixels                        |
+| height           | INTEGER   | Pixels                        |
+| sha256Hash       | TEXT      | For deduplication (unique)    |
+| status           | TEXT      | processing/completed/failed   |
+| error            | TEXT      | Error message if failed       |
+| uploadedAt       | TIMESTAMP | Upload time                   |
+| processedAt      | TIMESTAMP | Completion time               |
 
 **Indexes:**
-- `idx_images_status` ON `status`
-- `idx_images_sha256` ON `sha256Hash`
+
+-   `idx_images_status` ON `status`
+-   `idx_images_sha256` ON `sha256Hash`
 
 ### image_metadata
 
 AI-generated metadata from GPT-4o-mini.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | TEXT | UUID primary key |
-| imageId | TEXT | FK to images.id (unique) |
-| description | TEXT | 1-2 sentence summary |
-| detailedDescription | TEXT | 3-4 sentence a11y description |
-| tags | JSON | Array of keywords |
-| categories | JSON | High-level categories |
-| objects | JSON | [{name, confidence}] |
-| colors | JSON | {dominant[], palette[]} |
-| mood | TEXT | Emotional tone |
-| style | TEXT | Visual style |
-| composition | JSON | {orientation, subject, background} |
-| searchableText | TEXT | Concatenated search content |
-| altText | TEXT | Optional alt text override |
-| caption | TEXT | Optional caption |
-| generatedAt | TIMESTAMP | Generation time |
-| model | TEXT | "gpt-4o-mini" |
+| Column              | Type      | Description                        |
+| ------------------- | --------- | ---------------------------------- |
+| id                  | TEXT      | UUID primary key                   |
+| imageId             | TEXT      | FK to images.id (unique)           |
+| description         | TEXT      | 1-2 sentence summary               |
+| detailedDescription | TEXT      | 3-4 sentence a11y description      |
+| tags                | JSON      | Array of keywords                  |
+| categories          | JSON      | High-level categories              |
+| objects             | JSON      | [{name, confidence}]               |
+| colors              | JSON      | {dominant[], palette[]}            |
+| mood                | TEXT      | Emotional tone                     |
+| style               | TEXT      | Visual style                       |
+| composition         | JSON      | {orientation, subject, background} |
+| searchableText      | TEXT      | Concatenated search content        |
+| altText             | TEXT      | Optional alt text override         |
+| caption             | TEXT      | Optional caption                   |
+| generatedAt         | TIMESTAMP | Generation time                    |
+| model               | TEXT      | "gpt-4o-mini"                      |
 
 **Indexes:**
-- `idx_metadata_image` ON `imageId`
+
+-   `idx_metadata_image` ON `imageId`
 
 ### image_variants
 
 Responsive image variants.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | TEXT | UUID primary key |
-| imageId | TEXT | FK to images.id |
-| variantType | TEXT | small/medium/large |
-| format | TEXT | webp/avif |
-| width | INTEGER | Pixels |
-| height | INTEGER | Pixels |
-| fileSize | INTEGER | Bytes |
-| filePath | TEXT | Relative path |
-| cdnUrl | TEXT | NULL (not implemented) |
-| createdAt | TIMESTAMP | Creation time |
+| Column      | Type      | Description            |
+| ----------- | --------- | ---------------------- |
+| id          | TEXT      | UUID primary key       |
+| imageId     | TEXT      | FK to images.id        |
+| variantType | TEXT      | small/medium/large     |
+| format      | TEXT      | webp/avif              |
+| width       | INTEGER   | Pixels                 |
+| height      | INTEGER   | Pixels                 |
+| fileSize    | INTEGER   | Bytes                  |
+| filePath    | TEXT      | Relative path          |
+| cdnUrl      | TEXT      | NULL (not implemented) |
+| createdAt   | TIMESTAMP | Creation time          |
 
 **Variants:**
-- Small: 640w (webp + avif)
-- Medium: 1024w (webp + avif)
-- Large: 1920w (webp + avif)
+
+-   Small: 640w (webp + avif)
+-   Medium: 1024w (webp + avif)
+-   Large: 1920w (webp + avif)
 
 **Indexes:**
-- `idx_variants_image` ON `imageId`
-- `idx_variants_type` ON `(imageId, variantType)`
+
+-   `idx_variants_image` ON `imageId`
+-   `idx_variants_type` ON `(imageId, variantType)`
 
 ### conversation_images
 
 Link images to chat sessions.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | TEXT | UUID primary key |
-| sessionId | TEXT | FK to sessions.id |
-| imageId | TEXT | FK to images.id |
-| messageId | TEXT | Optional message reference |
-| uploadedAt | TIMESTAMP | Upload time |
-| orderIndex | INTEGER | Display order |
+| Column     | Type      | Description                |
+| ---------- | --------- | -------------------------- |
+| id         | TEXT      | UUID primary key           |
+| sessionId  | TEXT      | FK to sessions.id          |
+| imageId    | TEXT      | FK to images.id            |
+| messageId  | TEXT      | Optional message reference |
+| uploadedAt | TIMESTAMP | Upload time                |
+| orderIndex | INTEGER   | Display order              |
 
 **Indexes:**
-- `idx_conv_images_session` ON `sessionId`
-- `idx_conv_images_image` ON `imageId`
+
+-   `idx_conv_images_session` ON `sessionId`
+-   `idx_conv_images_image` ON `imageId`
 
 ### page_section_images
 
 Link images to CMS sections.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | TEXT | UUID primary key |
-| pageSectionId | TEXT | FK to page_sections.id |
-| imageId | TEXT | FK to images.id |
-| fieldName | TEXT | Field name (e.g., "heroImage") |
-| sortOrder | INTEGER | Display order for arrays |
-| createdAt | TIMESTAMP | Creation time |
-| updatedAt | TIMESTAMP | Last update time |
+| Column        | Type      | Description                    |
+| ------------- | --------- | ------------------------------ |
+| id            | TEXT      | UUID primary key               |
+| pageSectionId | TEXT      | FK to page_sections.id         |
+| imageId       | TEXT      | FK to images.id                |
+| fieldName     | TEXT      | Field name (e.g., "heroImage") |
+| sortOrder     | INTEGER   | Display order for arrays       |
+| createdAt     | TIMESTAMP | Creation time                  |
+| updatedAt     | TIMESTAMP | Last update time               |
 
 **Indexes:**
-- `idx_section_images_section` ON `pageSectionId`
-- `idx_section_images_image` ON `imageId`
+
+-   `idx_section_images_section` ON `pageSectionId`
+-   `idx_section_images_image` ON `imageId`
 
 ---
 
@@ -549,6 +739,7 @@ METADATA_GENERATION_RATE_LIMIT=10  # jobs per minute
 ### Required Services
 
 **Redis** (for BullMQ job queue):
+
 ```bash
 # macOS (Homebrew)
 brew install redis
@@ -608,26 +799,26 @@ redis-cli
 
 ### Cost Analysis (per 10,000 images)
 
-| Service | Usage | Cost |
-|---------|-------|------|
-| GPT-4o-mini metadata | 10K × 300 tokens × $0.60/M | $1.80 |
-| Text embeddings | 10K × 100 tokens × $0.02/M | $0.02 |
-| **Total** | | **$1.82** |
+| Service              | Usage                      | Cost      |
+| -------------------- | -------------------------- | --------- |
+| GPT-4o-mini metadata | 10K × 300 tokens × $0.60/M | $1.80     |
+| Text embeddings      | 10K × 100 tokens × $0.02/M | $0.02     |
+| **Total**            |                            | **$1.82** |
 
 ### Processing Time
 
-- Upload & validation: < 100ms
-- GPT-4o-mini metadata: 1-2s
-- Variant generation (Sharp): 500ms-1s
-- Embedding generation: 200ms (API call)
-- **Total**: ~2-4s per image (async, non-blocking)
+-   Upload & validation: < 100ms
+-   GPT-4o-mini metadata: 1-2s
+-   Variant generation (Sharp): 500ms-1s
+-   Embedding generation: 200ms (API call)
+-   **Total**: ~2-4s per image (async, non-blocking)
 
 ### Storage Usage
 
-- Original: Variable (user upload)
-- Thumbnail: ~10KB (150x150 WebP BLOB)
-- Variants: 6 files × ~50-200KB = ~300-1200KB
-- **Total**: ~500KB-1500KB per image with all variants
+-   Original: Variable (user upload)
+-   Thumbnail: ~10KB (150x150 WebP BLOB)
+-   Variants: 6 files × ~50-200KB = ~300-1200KB
+-   **Total**: ~500KB-1500KB per image with all variants
 
 ---
 
@@ -635,26 +826,26 @@ redis-cli
 
 ### Upload Validation
 
-- ✅ Magic byte MIME type verification (not just extension)
-- ✅ File size limits (configurable, default 5MB)
-- ✅ Filename sanitization (prevents path traversal)
-- ✅ Allowed types: JPEG, PNG, GIF, WebP, AVIF only
-- ✅ Buffer validation before processing
+-   ✅ Magic byte MIME type verification (not just extension)
+-   ✅ File size limits (configurable, default 5MB)
+-   ✅ Filename sanitization (prevents path traversal)
+-   ✅ Allowed types: JPEG, PNG, GIF, WebP, AVIF only
+-   ✅ Buffer validation before processing
 
 ### Storage Security
 
-- ✅ UUID-based filenames (prevents guessing)
-- ✅ Date-based directory structure
-- ✅ SHA256 deduplication
-- ✅ Secure path resolution (no `../` attacks)
-- ✅ Isolated upload directory
+-   ✅ UUID-based filenames (prevents guessing)
+-   ✅ Date-based directory structure
+-   ✅ SHA256 deduplication
+-   ✅ Secure path resolution (no `../` attacks)
+-   ✅ Isolated upload directory
 
 ### API Security
 
-- ✅ Rate limiting on upload endpoint
-- ✅ Session-based access control
-- ✅ Parameterized database queries (SQL injection protection)
-- ✅ Input validation with Zod schemas
+-   ✅ Rate limiting on upload endpoint
+-   ✅ Session-based access control
+-   ✅ Parameterized database queries (SQL injection protection)
+-   ✅ Input validation with Zod schemas
 
 ---
 
@@ -663,17 +854,20 @@ redis-cli
 ### Worker Not Processing Jobs
 
 **Check Redis connection:**
+
 ```bash
 redis-cli ping  # Should return PONG
 ```
 
 **Check worker is running:**
+
 ```bash
 # Look for this in logs:
 🚀 Image processing worker started
 ```
 
 **Check job queue:**
+
 ```bash
 redis-cli LLEN bull:image-processing:waiting
 # If > 0 but worker not processing, restart worker
@@ -682,12 +876,14 @@ redis-cli LLEN bull:image-processing:waiting
 ### Search Returns No Results
 
 **Verify image status:**
+
 ```bash
 curl http://localhost:8787/api/images/{imageId}/status
 # Should show status: "completed"
 ```
 
 **Check vector index:**
+
 ```bash
 # In vector-index.ts debug mode
 const results = await this.table?.query()
@@ -699,11 +895,13 @@ console.log('Images in index:', results?.length);
 ### OpenRouter API Errors
 
 **Rate limit exceeded:**
-- Worker has built-in rate limiting (10 jobs/min)
-- Check OpenRouter dashboard for usage
-- Increase delay between jobs if needed
+
+-   Worker has built-in rate limiting (10 jobs/min)
+-   Check OpenRouter dashboard for usage
+-   Increase delay between jobs if needed
 
 **Invalid API key:**
+
 ```bash
 echo $OPENROUTER_API_KEY  # Should start with sk-or-v1-
 ```
@@ -717,6 +915,7 @@ echo $OPENROUTER_API_KEY  # Should start with sk-or-v1-
 **Decision:** Use `openai/text-embedding-3-small` on GPT-4o-mini metadata, not visual embeddings.
 
 **Rationale:**
+
 1. ✅ **Rich metadata** - GPT-4o-mini provides detailed, accurate descriptions
 2. ✅ **Unified platform** - Same API key as metadata generation (OpenRouter)
 3. ✅ **Cost-effective** - $0.02/M tokens (extremely cheap)
@@ -726,6 +925,7 @@ echo $OPENROUTER_API_KEY  # Should start with sk-or-v1-
 7. ❌ **CLIP removed** - Never worked properly, added complexity
 
 **Example:**
+
 ```
 Image: puppy.jpg
 ↓
@@ -741,6 +941,7 @@ Search: "find dog photo" → High similarity match ✅
 **Decision:** Removed redundant database table, BullMQ handles all job tracking in Redis.
 
 **Rationale:**
+
 1. ✅ **DRY principle** - BullMQ already tracks job state comprehensively
 2. ✅ **Reduced complexity** - One source of truth (Redis)
 3. ✅ **Better performance** - No dual writes to DB + Redis
@@ -752,6 +953,7 @@ Search: "find dog photo" → High similarity match ✅
 **Decision:** Export singleton instances, never `new` in routes/tools.
 
 **Rationale:**
+
 1. ✅ **Shared state** - LanceDB connections, Sharp instances
 2. ✅ **Better performance** - No repeated initialization
 3. ✅ **Predictable behavior** - Same instance everywhere
@@ -775,19 +977,21 @@ server/
 │   │   └── image-processing.service.ts      # ✅ Main orchestrator
 │   ├── ai/
 │   │   └── metadata-generation.service.ts   # ✅ GPT-4o-mini metadata
-│   └── vector-index.ts                      # ✅ OpenRouter embeddings + search
+│   ├── vector-index.ts                      # ✅ OpenRouter embeddings + search
+│   └── worker-events.service.ts             # ✅ Redis pub/sub for SSE
 ├── workers/
-│   └── image-worker.ts                      # ✅ BullMQ job processor
+│   └── image-worker.ts                      # ✅ BullMQ job processor + event publisher
 ├── queues/
-│   └── image-queue.ts                       # ✅ Job queue setup
+│   └── image-queue.ts                       # ✅ Job queue setup + QueueEvents
 ├── middleware/
 │   ├── upload.ts                            # ✅ Multer + validation
 │   └── rate-limit.ts                        # ✅ Rate limiting
 ├── routes/
 │   ├── upload.ts                            # ✅ POST /api/upload
-│   └── images.ts                            # ✅ Search, status, details
+│   ├── images.ts                            # ✅ Search, status, details
+│   └── worker-events.ts                     # ✅ SSE stream for debug UI
 ├── tools/
-│   └── image-tools.ts                       # ✅ 6 agent tools
+│   └── image-tools.ts                       # ✅ 8 agent tools
 └── utils/
     ├── hash.ts                              # ✅ SHA256 generation
     └── file-validation.ts                   # ✅ Security validation
@@ -801,36 +1005,48 @@ uploads/
 
 ---
 
-## Recent Changes (2025-11-22)
+## Recent Changes
 
-### Major Refactor Complete ✅
+### 2025-12-02 - Worker Events SSE
+
+1. **Real-time Worker Events**
+
+    - Added `WorkerEventPublisher` and `WorkerEventSubscriber` classes
+    - Redis pub/sub channel `worker:events` for cross-process communication
+    - SSE endpoint `/v1/worker-events/stream` for debug UI
+    - Progress throttling (500ms interval, milestone bypass)
+
+2. **Job Chain Architecture**
+
+    - `generate-metadata` → chains to `generate-embeddings`
+    - `generate-variants` runs in parallel independently
+    - Status update to `completed` happens in embeddings job
+
+3. **8 Agent Tools**
+
+    - Added `cms_listAllImages` for system-wide image listing
+    - Added `cms_updateSectionImage` with field validation
+    - Enhanced `cms_searchImages` with relevance scoring
+
+4. **Queue Events Integration**
+    - `QueueEvents` for job lifecycle tracking
+    - Automatic queue status reporting on SSE connect
+
+### 2025-11-22 - Initial Refactor
 
 1. **Removed CLIP embeddings**
-   - Deleted `embedding-generation.service.ts`
-   - Removed all CLIP-related code from worker
-   - Simplified vector index to use OpenRouter only
+
+    - Deleted `embedding-generation.service.ts`
+    - Simplified vector index to use OpenRouter only
 
 2. **Removed `imageProcessingQueue` table**
-   - Migration removes table and relations
-   - BullMQ handles all job tracking in Redis
-   - Cleaner schema, less redundancy
+
+    - BullMQ handles all job tracking in Redis
+    - Cleaner schema, less redundancy
 
 3. **Standardized API responses**
-   - All routes use `ApiResponse<T>` format
-   - Consistent error handling
-   - Pagination support for search
-
-4. **No backward compatibility**
-   - Clean refactor, this is a prototype
-   - Direct data in responses
-   - HttpStatus and ErrorCodes constants
-
-5. **Verified all integrations**
-   - ✅ Server routes updated
-   - ✅ Database schema clean
-   - ✅ Worker using correct APIs
-   - ✅ Tools using correct vector index methods
-   - ✅ Zero TypeScript errors
+    - All routes use `ApiResponse<T>` format
+    - Consistent error handling
 
 ---
 
@@ -839,27 +1055,30 @@ uploads/
 ### Not Required for Core Functionality
 
 1. **CDN Integration**
-   - S3 / Cloudflare R2 upload
-   - CDN URL generation
-   - Automatic failover
+
+    - S3 / Cloudflare R2 upload
+    - CDN URL generation
+    - Automatic failover
 
 2. **Chat UI Components**
-   - AI Elements file upload
-   - Drag-and-drop interface
-   - Progress indicators
+
+    - AI Elements file upload
+    - Drag-and-drop interface
+    - Progress indicators
 
 3. **Nunjucks Templates**
-   - Responsive image macro
-   - `<picture>` elements with srcset
-   - WebP/AVIF fallback
+
+    - Responsive image macro
+    - `<picture>` elements with srcset
+    - WebP/AVIF fallback
 
 4. **Advanced Features**
-   - Image editing (crop, resize, filters)
-   - Face detection
-   - OCR for text extraction
-   - Object detection with bounding boxes
+    - Image editing (crop, resize, filters)
+    - Face detection
+    - OCR for text extraction
+    - Object detection with bounding boxes
 
 ---
 
-**Documentation Current as of:** 2025-11-22
+**Documentation Current as of:** 2025-12-02
 **System Status:** Production Ready ✅

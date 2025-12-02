@@ -79,8 +79,7 @@ const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
 export const cmsAgent = new ToolLoopAgent({
 	model: openrouter.languageModel(AGENT_CONFIG.modelId),
 
-	// Base instructions - will be replaced with dynamic version in prepareCall
-	instructions: "CMS Agent - Instructions will be dynamically generated",
+	instructions: "", // overwritten by prepareCall with dynamic system prompt
 
 	tools: ALL_TOOLS,
 

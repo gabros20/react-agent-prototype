@@ -157,7 +157,7 @@ export class SessionService {
   }
 
   /**
-   * Delete session permanently (cascade deletes messages via FK)
+   * Delete session permanently (cascade deletes messages and conversation logs)
    */
   async deleteSession(sessionId: string) {
     const existing = await this.db.query.sessions.findFirst({
@@ -168,6 +168,10 @@ export class SessionService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    // Delete conversation logs first (no FK cascade in SQLite)
+    await this.db.delete(schema.conversationLogs).where(eq(schema.conversationLogs.sessionId, sessionId));
+
+    // Delete session (messages are deleted via FK cascade)
     await this.db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
 
     return { success: true, deletedId: sessionId };
@@ -226,7 +230,7 @@ export class SessionService {
   }
 
   /**
-   * Clear all messages from session (keep session)
+   * Clear all messages and conversation logs from session (keep session)
    */
   async clearMessages(sessionId: string) {
     const session = await this.db.query.sessions.findFirst({
@@ -237,6 +241,10 @@ export class SessionService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    // Delete conversation logs
+    await this.db.delete(schema.conversationLogs).where(eq(schema.conversationLogs.sessionId, sessionId));
+
+    // Delete messages
     await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
 
     // Update session timestamp

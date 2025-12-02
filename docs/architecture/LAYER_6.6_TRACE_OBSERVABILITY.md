@@ -8,12 +8,14 @@ The Trace Observability layer provides deep visibility into agent execution thro
 
 **Key Responsibilities:**
 
--   Capture and display 23 distinct trace entry types
--   Track tool call durations and calculate metrics
+-   Capture and display 26 distinct trace entry types
+-   Track tool call durations and calculate metrics (including cost)
+-   Persist conversation logs to backend for session history
 -   Visualize working memory entities in real-time
 -   Enable system prompt inspection for debugging
 -   Provide filtering, search, and export capabilities
 -   Support multiple trace sessions with selector
+-   Aggregate metrics across all conversations in session (NEW)
 
 ---
 
@@ -107,19 +109,12 @@ tool1.call(); tool2.call();  // Which took longer? Why did retry happen?
 
 | File                                                   | Purpose                           |
 | ------------------------------------------------------ | --------------------------------- |
-| `app/assistant/_stores/trace-store.ts`                 | Zustand store for trace entries   |
-| `app/assistant/_components/enhanced-debug/index.tsx`   | Main debug panel container        |
-| `app/assistant/_components/enhanced-debug/trace-header.tsx` | Metrics display, trace selector |
-| `app/assistant/_components/enhanced-debug/trace-filters.tsx` | Type/level filters, search     |
-| `app/assistant/_components/enhanced-debug/trace-timeline.tsx` | Entry list with scroll       |
-| `app/assistant/_components/enhanced-debug/timeline-entry.tsx` | Individual entry component   |
-| `app/assistant/_components/enhanced-debug/working-memory-panel.tsx` | Entity visualization   |
-| `app/assistant/_components/enhanced-debug/json-viewer.tsx` | Collapsible JSON display       |
-| `app/assistant/_hooks/use-agent.ts`                    | SSE parsing, pattern detection    |
-| `app/assistant/_hooks/use-worker-events.ts`            | Worker events SSE consumer        |
-| `server/agent/orchestrator.ts`                         | system-prompt emission            |
+| `app/assistant/_stores/trace-store.ts`                 | Zustand store for trace entries + conversation logs |
+| `app/assistant/_components/debug-pane.tsx`             | Main debug panel container        |
+| `app/assistant/_hooks/use-agent.ts`                    | SSE parsing, pattern detection, trace entry creation |
+| `server/routes/agent.ts`                               | SSE emission (system-prompt, model-info, etc.) |
+| `server/services/conversation-log-service.ts`          | Conversation log persistence (NEW) |
 | `server/services/worker-events.service.ts`             | Redis pub/sub for worker events   |
-| `server/routes/worker-events.ts`                       | Worker events SSE endpoint        |
 
 ---
 
@@ -130,29 +125,50 @@ tool1.call(); tool2.call();  // Which took longer? Why did retry happen?
 ```typescript
 // app/assistant/_stores/trace-store.ts
 export type TraceEntryType =
-  | 'trace-start'           // Trace initialization
-  | 'prompt-sent'           // User prompt to LLM
-  | 'llm-response'          // LLM response received
-  | 'tool-call'             // Tool invocation with args
-  | 'tool-result'           // Tool execution result
-  | 'tool-error'            // Tool execution failed
-  | 'step-complete'         // Agent step completed
-  | 'approval-request'      // HITL approval needed
-  | 'approval-response'     // HITL decision made
-  | 'confirmation-required' // Tool confirmation flag pattern
-  | 'job-queued'            // Background job queued
-  | 'job-progress'          // Job progress update
-  | 'job-complete'          // Job finished
-  | 'job-failed'            // Job failed
-  | 'trace-complete'        // Trace finished
-  | 'error'                 // General error
-  | 'working-memory-update' // Entity extraction
-  | 'memory-trimmed'        // Message history trimmed
-  | 'checkpoint-saved'      // Session checkpoint
-  | 'retry-attempt'         // Retry with backoff
-  | 'session-loaded'        // Previous messages loaded
-  | 'system-log'            // General backend log
-  | 'system-prompt';        // Compiled system prompt
+  // Trace lifecycle
+  | "trace-start"           // Trace initialization
+  | "trace-complete"        // Trace finished
+
+  // LLM interaction
+  | "system-prompt"         // Compiled system prompt (for inspection)
+  | "user-prompt"           // User prompt with token count (NEW)
+  | "prompt-sent"           // User prompt to LLM (legacy)
+  | "llm-response"          // LLM response received
+  | "text-streaming"        // LLM generating text - updated in place (NEW)
+  | "tools-available"       // List of tools passed to agent (NEW)
+  | "model-info"            // Model ID and pricing info (NEW)
+
+  // Tool execution (tool-call is updated in-place with output/error)
+  | "tool-call"             // Tool invocation - updated with output when complete
+
+  // Agent steps
+  | "step-start"            // Step starting (NEW)
+  | "step-complete"         // Agent step completed
+
+  // HITL (conversational pattern)
+  | "approval-request"      // HITL approval needed (legacy)
+  | "approval-response"     // HITL decision made (legacy)
+  | "confirmation-required" // Tool returned requiresConfirmation flag
+
+  // Background jobs
+  | "job-queued"            // Background job queued
+  | "job-progress"          // Job progress update
+  | "job-complete"          // Job finished
+  | "job-failed"            // Job failed
+
+  // Memory and session
+  | "working-memory-update" // Entity extraction happened
+  | "memory-trimmed"        // Message history was trimmed
+  | "session-loaded"        // Previous messages loaded
+  | "checkpoint-saved"      // Session checkpoint saved (legacy)
+
+  // System
+  | "system-log"            // General log from backend
+  | "retry-attempt"         // Retry with backoff
+  | "error";                // General error
+
+// NOTE: tool-result and tool-error are NOT separate types.
+// Tool results/errors update the existing tool-call entry via completeEntry()
 ```
 
 ### Trace Entry Structure
@@ -183,6 +199,45 @@ export interface TraceEntry {
   jobProgress?: number;
 }
 ```
+
+### Conversation Log (NEW)
+
+Persisted exchange history with metrics for session-level aggregation:
+
+```typescript
+export interface ConversationLog {
+  id: string;                // Same as traceId
+  sessionId: string;
+  conversationIndex: number; // 1-indexed within session
+  userPrompt: string;        // Original user message
+  startedAt: Date;
+  completedAt: Date | null;
+  metrics: TraceMetrics | null;
+  modelInfo: { modelId: string; pricing: ModelPricing | null } | null;
+  entries: TraceEntry[];     // All trace entries for this exchange
+  isLive?: boolean;          // True if currently streaming
+}
+
+export interface TraceMetrics {
+  totalDuration: number;
+  toolCallCount: number;
+  stepCount: number;
+  tokens: { input: number; output: number };
+  cost: number;              // Calculated from model pricing
+  errorCount: number;
+}
+
+export interface ModelPricing {
+  prompt: number;            // $ per million tokens
+  completion: number;        // $ per million tokens
+}
+```
+
+**Key Additions:**
+- Conversation logs are saved to backend via `/api/sessions/:id/logs` on trace completion
+- `getTotalMetrics()` aggregates metrics across all conversation logs
+- `getTotalEventCount()` counts total events in session
+- Logs can be expanded/collapsed in UI via `expandedConversationIds`
 
 ### Trace Store
 
@@ -364,11 +419,11 @@ if (context.stream) {
 
 ```typescript
 const TYPE_GROUPS = {
-  'LLM': ['system-prompt', 'prompt-sent', 'llm-response'],
-  'Tools': ['tool-call', 'tool-result', 'tool-error', 'confirmation-required'],
-  'Flow': ['trace-start', 'step-complete', 'trace-complete'],
+  'LLM': ['system-prompt', 'user-prompt', 'prompt-sent', 'llm-response', 'text-streaming', 'model-info', 'tools-available'],
+  'Tools': ['tool-call', 'confirmation-required'],  // tool-call updated in-place with result/error
+  'Flow': ['trace-start', 'step-start', 'step-complete', 'trace-complete'],
   'Memory': ['working-memory-update', 'memory-trimmed', 'session-loaded', 'checkpoint-saved'],
-  'Approval': ['approval-request', 'approval-response'],
+  'Approval': ['approval-request', 'approval-response'],  // Legacy - mostly unused
   'Jobs': ['job-queued', 'job-progress', 'job-complete', 'job-failed'],
   'System': ['system-log', 'retry-attempt', 'error'],
 };
@@ -391,29 +446,47 @@ const TYPE_GROUPS = {
 
 ```typescript
 const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
-  'trace-start': 'bg-slate-500',
-  'prompt-sent': 'bg-blue-500',
-  'llm-response': 'bg-indigo-500',
-  'tool-call': 'bg-amber-500',
-  'tool-result': 'bg-green-500',
-  'tool-error': 'bg-red-500',
-  'step-complete': 'bg-purple-500',
-  'approval-request': 'bg-orange-500',
-  'approval-response': 'bg-cyan-500',
-  'confirmation-required': 'bg-orange-400',
-  'job-queued': 'bg-yellow-500',
-  'job-progress': 'bg-blue-400',
-  'job-complete': 'bg-emerald-500',
-  'job-failed': 'bg-rose-500',
-  'trace-complete': 'bg-slate-600',
-  'error': 'bg-red-600',
-  'working-memory-update': 'bg-teal-500',
-  'memory-trimmed': 'bg-gray-500',
-  'checkpoint-saved': 'bg-sky-500',
-  'retry-attempt': 'bg-yellow-600',
-  'session-loaded': 'bg-violet-500',
-  'system-log': 'bg-gray-400',
-  'system-prompt': 'bg-pink-500',
+  // Trace lifecycle
+  "trace-start": "bg-slate-500",
+  "trace-complete": "bg-slate-600",
+
+  // LLM interaction
+  "system-prompt": "bg-pink-500",
+  "user-prompt": "bg-blue-600",       // NEW
+  "prompt-sent": "bg-blue-500",
+  "llm-response": "bg-indigo-500",
+  "text-streaming": "bg-violet-500",  // NEW
+  "tools-available": "bg-amber-600",  // NEW
+  "model-info": "bg-cyan-600",        // NEW
+
+  // Tool execution
+  "tool-call": "bg-amber-500",        // Updated in-place with output/error
+
+  // Agent steps
+  "step-start": "bg-emerald-500",     // NEW
+  "step-complete": "bg-emerald-500",
+
+  // HITL
+  "approval-request": "bg-orange-500",
+  "approval-response": "bg-cyan-500",
+  "confirmation-required": "bg-orange-400",
+
+  // Background jobs
+  "job-queued": "bg-yellow-500",
+  "job-progress": "bg-blue-400",
+  "job-complete": "bg-emerald-500",
+  "job-failed": "bg-rose-500",
+
+  // Memory and session
+  "working-memory-update": "bg-teal-500",
+  "memory-trimmed": "bg-gray-500",
+  "session-loaded": "bg-violet-500",
+  "checkpoint-saved": "bg-sky-500",
+
+  // System
+  "system-log": "bg-gray-400",
+  "retry-attempt": "bg-yellow-600",
+  "error": "bg-red-600",
 };
 ```
 
@@ -467,13 +540,16 @@ output: data.prompt,  // Full system prompt
 
 Layer 6.5 handles HITL approval and basic execution logs. This layer (6.6) provides:
 
-1. **23 trace types** vs 6 log types
+1. **26 trace types** vs 6 log types
 2. **Duration tracking** with start/end correlation
 3. **Working memory visualization**
 4. **System prompt inspection**
 5. **Multi-trace session support**
 6. **Advanced filtering and search**
 7. **Export capabilities**
+8. **Conversation log persistence** to backend (NEW)
+9. **Cost tracking** via model pricing (NEW)
+10. **Session-level metrics aggregation** (NEW)
 
 ---
 

@@ -271,16 +271,30 @@ export class SectionService {
     });
 
     if (existing) {
+      // Parse existing content to merge with new content
+      let existingContent: Record<string, any> = {};
+      try {
+        existingContent = typeof existing.content === 'string'
+          ? JSON.parse(existing.content)
+          : (existing.content as Record<string, any>) || {};
+      } catch {
+        // If parsing fails, start fresh
+        existingContent = {};
+      }
+
+      // MERGE: existing content + new content (new content wins on conflicts)
+      const mergedContent = { ...existingContent, ...normalizedContent };
+
       // Update existing
       await this.db
         .update(schema.pageSectionContents)
         .set({
-          content: JSON.stringify(normalizedContent),
+          content: JSON.stringify(mergedContent),
           updatedAt: new Date(),
         })
         .where(eq(schema.pageSectionContents.id, existing.id));
 
-      return { ...existing, content: JSON.stringify(normalizedContent), updatedAt: new Date() };
+      return { ...existing, content: JSON.stringify(mergedContent), updatedAt: new Date() };
     } else {
       // Create new
       const newContent = {

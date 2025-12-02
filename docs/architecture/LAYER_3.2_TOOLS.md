@@ -328,14 +328,15 @@ export const cms_createPage = tool({
 
 ### CMS - Sections (6 tools)
 
-| Tool                     | Purpose                                | Risk     |
-| ------------------------ | -------------------------------------- | -------- |
-| `cms_getPageSections`    | List sections on a page                | Safe     |
-| `cms_getSectionContent`  | Get specific section content           | Safe     |
-| `cms_getSectionDef`      | Get section definition/schema          | Safe     |
-| `cms_addPageSection`     | Add section to page                    | Safe     |
-| `cms_syncSectionContent` | Update section content                 | Moderate |
-| `cms_deletePageSection`  | Remove section (requires confirmation) | High     |
+| Tool                       | Purpose                                | Risk     |
+| -------------------------- | -------------------------------------- | -------- |
+| `cms_getPageSections`      | List sections on a page                | Safe     |
+| `cms_getSectionContent`    | Get specific section content           | Safe     |
+| `cms_getSectionFields`     | Get section template fields/schema     | Safe     |
+| `cms_listSectionTemplates` | List available section templates       | Safe     |
+| `cms_addSectionToPage`     | Add section to page                    | Safe     |
+| `cms_updateSectionContent` | Update section content (merges)        | Moderate |
+| `cms_deletePageSection`    | Remove section (requires confirmation) | High     |
 
 ### CMS - Images (6 tools)
 

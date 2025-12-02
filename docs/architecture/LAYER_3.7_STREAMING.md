@@ -130,24 +130,87 @@ data: {"name": "cms_createPage", "args": {...}}
 
 ## Event Types
 
-### Complete Event Catalog
+### Complete Event Catalog (AI SDK 6)
 
 | Event | When Emitted | Payload |
 |-------|--------------|---------|
+| `system-prompt` | Before agent starts | `{ prompt, tokens, workingMemory, workingMemoryTokens }` |
+| `model-info` | Before agent starts | `{ modelId, pricing: { prompt, completion } }` |
+| `user-prompt` | After loading session | `{ prompt, tokens, messageHistoryTokens, messageCount }` |
+| `step-start` | Agent step begins | `{ stepNumber }` |
 | `text-delta` | LLM generates text | `{ delta: string }` |
-| `tool-call` | Tool invocation starts | `{ name, args, id }` |
-| `tool-result` | Tool completes | `{ name, result, id }` |
-| `tool-error` | Tool execution fails | `{ name, error, id }` |
-| `step-completed` | Agent step done | `{ stepNumber, usage }` |
-| `log` | Logger output | `{ level, message, metadata }` |
-| `finish` | Stream ends | `{ finishReason, usage }` |
-| `result` | Final response with text | `{ text, sessionId, traceId }` |
+| `tool-call` | Tool invocation starts | `{ toolName, toolCallId, args }` |
+| `tool-result` | Tool completes | `{ toolName, toolCallId, result }` |
+| `tool-error` | Tool execution fails | `{ toolName, toolCallId, error }` |
+| `step-finish` | Agent step done | `{ stepNumber, duration, usage, finishReason }` |
+| `log` | Logger output | `{ level, message, metadata, traceId }` |
+| `finish` | Stream ends | `{ finishReason, usage, toolCallsCount }` |
+| `result` | Final response with text | `{ text, sessionId, traceId, toolCalls, toolResults }` |
 | `done` | Stream complete | `{ traceId, sessionId }` |
-| `error` | Error occurred | `{ error, code }` |
+| `error` | Error occurred | `{ traceId, error }` |
 
 **Note:** HITL confirmations are handled conversationally through tool-result events with `requiresConfirmation: true`. No separate approval event is emitted.
 
 ### Event Details
+
+#### system-prompt (NEW)
+
+Emitted before agent starts, contains system prompt for debugging:
+
+```typescript
+{
+  type: "system-prompt";
+  prompt: string;           // Full system prompt
+  promptLength: number;     // Character count
+  tokens: number;           // Token count (server-calculated)
+  workingMemory: string;    // Current working memory
+  workingMemoryTokens: number;
+  timestamp: string;
+}
+```
+
+#### model-info (NEW)
+
+Model and pricing info for cost calculation:
+
+```typescript
+{
+  type: "model-info";
+  modelId: string;          // e.g., "openai/gpt-4o-mini"
+  pricing: {
+    prompt: number;         // $ per million input tokens
+    completion: number;     // $ per million output tokens
+  } | null;
+  timestamp: string;
+}
+```
+
+#### user-prompt (NEW)
+
+User prompt with token counts for cost tracking:
+
+```typescript
+{
+  type: "user-prompt";
+  prompt: string;           // User's input
+  tokens: number;           // Token count
+  messageHistoryTokens: number;  // Previous messages token count
+  messageCount: number;     // Number of previous messages
+  timestamp: string;
+}
+```
+
+#### step-start (NEW)
+
+Marks the beginning of an agent step:
+
+```typescript
+{
+  type: "step-start";
+  stepNumber: number;       // 1-indexed step number
+  timestamp: string;
+}
+```
 
 #### text-delta
 
@@ -176,19 +239,23 @@ When agent decides to call a tool:
 
 ```typescript
 {
-  id: string;        // Unique call ID
-  name: string;      // Tool name (e.g., "cms_createPage")
-  args: object;      // Tool arguments
+  type: "tool-call";
+  toolCallId: string;   // Unique call ID
+  toolName: string;     // Tool name (e.g., "cms_createPage")
+  args: object;         // Tool arguments
+  timestamp: string;
 }
 
 // Example
 {
-  id: "call-abc123",
-  name: "cms_createPage",
+  type: "tool-call",
+  toolCallId: "call-abc123",
+  toolName: "cms_createPage",
   args: {
     title: "About Us",
     slug: "about"
-  }
+  },
+  timestamp: "2025-01-15T10:30:00.000Z"
 }
 ```
 
@@ -198,21 +265,55 @@ After tool execution completes:
 
 ```typescript
 {
-  id: string;        // Matches tool-call ID
-  name: string;      // Tool name
-  result: object;    // Tool return value
-  duration?: number; // Execution time (ms)
+  type: "tool-result";
+  toolCallId: string;   // Matches tool-call ID
+  toolName: string;     // Tool name
+  result: object;       // Tool return value
+  timestamp: string;
 }
 
 // Example
 {
-  id: "call-abc123",
-  name: "cms_createPage",
+  type: "tool-result",
+  toolCallId: "call-abc123",
+  toolName: "cms_createPage",
   result: {
     success: true,
     page: { id: "page-123", title: "About Us" }
   },
-  duration: 245
+  timestamp: "2025-01-15T10:30:00.000Z"
+}
+```
+
+#### tool-error (NEW)
+
+When a tool execution fails:
+
+```typescript
+{
+  type: "tool-error";
+  toolCallId: string;   // Matches tool-call ID
+  toolName: string;     // Tool name
+  error: string;        // Error message
+  timestamp: string;
+}
+```
+
+#### step-finish (NEW)
+
+Marks the end of an agent step with metrics:
+
+```typescript
+{
+  type: "step-finish";
+  stepNumber: number;       // 1-indexed step number
+  duration: number;         // Step duration in ms
+  finishReason: string;     // "stop", "tool-calls", etc.
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+  };
+  timestamp: string;
 }
 ```
 
@@ -300,95 +401,129 @@ Error during execution:
 
 ## Server Implementation
 
-### Express Route
+### Express Route (AI SDK 6)
 
 ```typescript
 // server/routes/agent.ts
-import { Router } from 'express';
+import express from "express";
+import { cmsAgent, AGENT_CONFIG, type AgentCallOptions } from "../agent/cms-agent";
+import { getModelPricing } from "../services/openrouter-pricing";
+import { countTokens, countChatTokens } from "../../lib/tokenizer";
 
-const router = Router();
-
-router.post('/stream', async (req, res) => {
+router.post("/stream", async (req, res) => {
   // Set SSE headers
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');  // Disable nginx buffering
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
 
-  // Helper to write SSE events
-  const writeSSE = (event: string, data: unknown) => {
+  // SSE helper
+  const writeSSE = (event: string, data: any) => {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  // Create logger that streams to client
+  // Create logger that writes to SSE
   const logger = {
-    info: (message: string, metadata?: object) => {
-      console.log('[INFO]', message, metadata);
-      writeSSE('log', {
-        level: 'info',
-        message,
-        metadata,
-        timestamp: new Date().toISOString(),
-        traceId: context.traceId
-      });
+    info: (msg: string, meta?: any) => {
+      writeSSE("log", { level: "info", message: msg, metadata: meta, traceId });
     },
-    warn: (message: string, metadata?: object) => {
-      console.warn('[WARN]', message, metadata);
-      writeSSE('log', { level: 'warn', message, metadata, ... });
+    warn: (msg: string, meta?: any) => {
+      writeSSE("log", { level: "warn", message: msg, metadata: meta, traceId });
     },
-    error: (message: string, metadata?: object) => {
-      console.error('[ERROR]', message, metadata);
-      writeSSE('log', { level: 'error', message, metadata, ... });
+    error: (msg: string, meta?: any) => {
+      writeSSE("log", { level: "error", message: msg, metadata: meta, traceId });
     }
   };
 
-  try {
-    // Create agent context
-    const context = createAgentContext(req, logger);
+  // Emit system prompt and model info for debugging
+  writeSSE("system-prompt", {
+    type: "system-prompt",
+    prompt: systemPrompt,
+    tokens: countTokens(systemPrompt),
+    workingMemory: workingContext.toContextString(),
+    timestamp: new Date().toISOString()
+  });
 
-    // Stream agent execution
-    for await (const event of streamAgentWithApproval(messages, context)) {
-      switch (event.type) {
-        case 'text-delta':
-          writeSSE('text-delta', { delta: event.text });
-          break;
+  const modelPricing = await getModelPricing(AGENT_CONFIG.modelId);
+  writeSSE("model-info", {
+    type: "model-info",
+    modelId: AGENT_CONFIG.modelId,
+    pricing: modelPricing
+  });
 
-        case 'tool-call':
-          writeSSE('tool-call', {
-            id: event.id,
-            name: event.name,
-            args: event.args
-          });
-          break;
+  // Stream using cmsAgent (ToolLoopAgent)
+  const streamResult = await cmsAgent.stream({
+    messages,
+    options: agentOptions  // Type-safe via callOptionsSchema
+  });
 
-        case 'tool-result':
-          writeSSE('tool-result', {
-            id: event.id,
-            name: event.name,
-            result: event.result
-          });
-          break;
+  // Process fullStream chunks
+  for await (const chunk of streamResult.fullStream) {
+    switch (chunk.type) {
+      case "text-delta":
+        writeSSE("text-delta", { type: "text-delta", delta: chunk.text });
+        break;
 
+      case "tool-call":
+        writeSSE("tool-call", {
+          type: "tool-call",
+          toolName: chunk.toolName,
+          toolCallId: chunk.toolCallId,
+          args: chunk.input
+        });
+        break;
 
-        case 'finish':
-          writeSSE('finish', {
-            finishReason: event.reason,
-            usage: event.usage,
-            stepCount: event.steps
-          });
-          break;
-      }
+      case "tool-result":
+        // Extract entities to working memory
+        const entities = extractor.extract(chunk.toolName, chunk.output);
+        if (entities.length > 0) workingContext.addMany(entities);
+
+        writeSSE("tool-result", {
+          type: "tool-result",
+          toolCallId: chunk.toolCallId,
+          toolName: chunk.toolName,
+          result: chunk.output
+        });
+        break;
+
+      case "tool-error":
+        writeSSE("tool-error", {
+          type: "tool-error",
+          toolCallId: chunk.toolCallId,
+          toolName: chunk.toolName,
+          error: chunk.error?.message || String(chunk.error)
+        });
+        break;
+
+      case "start-step":
+        currentStep++;
+        stepStartTime = Date.now();
+        writeSSE("step-start", { type: "step-start", stepNumber: currentStep });
+        break;
+
+      case "finish-step":
+        writeSSE("step-finish", {
+          type: "step-finish",
+          stepNumber: currentStep,
+          duration: Date.now() - stepStartTime,
+          usage: chunk.usage
+        });
+        break;
+
+      case "finish":
+        writeSSE("finish", {
+          type: "finish",
+          finishReason: chunk.finishReason,
+          usage: chunk.totalUsage
+        });
+        break;
     }
-  } catch (error) {
-    writeSSE('error', {
-      error: error.message,
-      code: error.code,
-      recoverable: isRecoverableError(error)
-    });
-  } finally {
-    res.end();
   }
+
+  // Send final result and close
+  writeSSE("result", { traceId, sessionId, text: finalText, toolCalls, toolResults });
+  writeSSE("done", { traceId, sessionId });
+  res.end();
 });
 ```
 

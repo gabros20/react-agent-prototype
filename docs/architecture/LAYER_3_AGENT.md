@@ -1,15 +1,22 @@
 # Layer 3: Agent System
 
-> Native AI SDK 6 agent, tool registry, working memory, and human-in-the-loop approval
+> Native AI SDK 6 ToolLoopAgent, tool registry, working memory, and human-in-the-loop approval
 
 ## Overview
 
-The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v6 native patterns**. Since the migration to AI SDK 6 (commit `1e1963e`), the agent uses a centralized `cmsAgent` module with `generateText`, native stop conditions, and streamlined context injection via `prepareCall`.
+The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v6 `ToolLoopAgent` class**. Since the migration to AI SDK 6 (commit `1e1963e`), the agent uses a centralized module-level singleton with:
+- **`ToolLoopAgent`** class with `.stream()` and `.generate()` methods
+- **`callOptionsSchema`** for type-safe runtime options via Zod
+- **`prepareCall`** hook for dynamic system prompt injection
+- **`stopWhen`** conditions (step count + FINAL_ANSWER detection)
+- **`prepareStep`** for context window management
 
 **Key Files:**
-- `server/agent/cms-agent.ts` - Centralized agent definition
-- `server/agent/system-prompt.ts` - Prompt compilation
+- `server/agent/cms-agent.ts` - ToolLoopAgent singleton definition
+- `server/agent/system-prompt.ts` - Modular prompt compilation
 - `server/routes/agent.ts` - Streaming route handler
+- `server/prompts/core/` - Base rules XML module
+- `server/prompts/workflows/` - Workflow-specific XML modules
 - `server/tools/` - Tool definitions
 
 ---
@@ -65,102 +72,150 @@ The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v
 
 ## Key Files
 
-| File                                | Purpose                          |
-| ----------------------------------- | -------------------------------- |
-| `server/agent/cms-agent.ts`         | Centralized agent definition     |
-| `server/agent/system-prompt.ts`     | Prompt compilation (extracted)   |
-| `server/routes/agent.ts`            | Stream handler with AI SDK UI    |
-| `server/tools/all-tools.ts`         | Tool registry                    |
-| `server/tools/*.ts`                 | Individual tool definitions      |
-| `server/prompts/react.xml`          | System prompt template           |
-| `server/services/working-memory/`   | Entity extraction                |
-| `lib/tokenizer.ts`                  | Token counting (tiktoken)        |
-| `server/services/openrouter-pricing.ts` | Cost calculation             |
+| File                                    | Purpose                          |
+| --------------------------------------- | -------------------------------- |
+| `server/agent/cms-agent.ts`             | ToolLoopAgent singleton          |
+| `server/agent/system-prompt.ts`         | Modular prompt compilation       |
+| `server/routes/agent.ts`                | Stream/generate route handlers   |
+| `server/tools/all-tools.ts`             | Tool registry                    |
+| `server/tools/*.ts`                     | Individual tool definitions      |
+| `server/prompts/core/base-rules.xml`    | Identity, ReAct, working memory  |
+| `server/prompts/workflows/*.xml`        | Workflow-specific prompts        |
+| `server/services/working-memory/`       | Entity extraction                |
+| `lib/tokenizer.ts`                      | Token counting (tiktoken)        |
+| `server/services/openrouter-pricing.ts` | Cost calculation                 |
 
 ---
 
 ## CMS Agent Module
 
-The centralized agent module replaces the old orchestrator pattern:
+The centralized agent module uses `ToolLoopAgent` - a module-level singleton:
 
 ```typescript
 // server/agent/cms-agent.ts
-import { generateText, tool, type CoreMessage } from 'ai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { ALL_TOOLS } from '../tools/all-tools';
-import { getSystemPrompt } from './system-prompt';
-import type { AgentContext } from '../tools/types';
+import { ToolLoopAgent, stepCountIs } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { z } from "zod";
+import { ALL_TOOLS } from "../tools/all-tools";
+import { getSystemPrompt } from "./system-prompt";
+import type { AgentContext } from "../tools/types";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-// Agent configuration
-const AGENT_CONFIG = {
+export const AGENT_CONFIG = {
   maxSteps: 15,
-  modelId: 'openai/gpt-4o-mini',
-  maxRetries: 2,  // Native SDK retry
-  maxTokens: 4096,
+  modelId: "openai/gpt-4o-mini",
+  maxOutputTokens: 4096,
+} as const;
+
+// Type-safe call options via Zod schema
+export const AgentCallOptionsSchema = z.object({
+  sessionId: z.string(),
+  traceId: z.string(),
+  workingMemory: z.string().optional(),
+  cmsTarget: z.object({
+    siteId: z.string(),
+    environmentId: z.string(),
+  }),
+  // Runtime-injected services
+  db: z.custom<any>(),
+  services: z.custom<any>(),
+  sessionService: z.custom<any>(),
+  vectorIndex: z.custom<any>(),
+  logger: z.custom<any>(),
+  stream: z.custom<any>().optional(),
+});
+
+export type AgentCallOptions = z.infer<typeof AgentCallOptionsSchema>;
+
+// Custom stop condition: FINAL_ANSWER detection
+const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
+  const lastStep = steps[steps.length - 1];
+  return lastStep?.text?.includes("FINAL_ANSWER:") || false;
 };
 
-export interface AgentOptions {
-  sessionId: string;
-  traceId: string;
-  workingMemory: string;
-  cmsTarget: { siteId: string; environmentId: string };
-  db: any;
-  services: any;
-  sessionService: any;
-  vectorIndex: any;
-  logger: any;
-}
+// Module-level singleton agent
+export const cmsAgent = new ToolLoopAgent({
+  model: openrouter.languageModel(AGENT_CONFIG.modelId),
 
-export async function runAgent(
-  messages: CoreMessage[],
-  options: AgentOptions
-) {
-  const systemPrompt = getSystemPrompt({
-    toolsList: Object.keys(ALL_TOOLS),
-    toolCount: Object.keys(ALL_TOOLS).length,
-    sessionId: options.sessionId,
-    currentDate: new Date().toISOString().split('T')[0],
-    workingMemory: options.workingMemory,
-  });
+  // Placeholder - replaced dynamically in prepareCall
+  instructions: "CMS Agent - Instructions will be dynamically generated",
 
-  // Create context for tools
-  const agentContext: AgentContext = {
-    db: options.db,
-    services: options.services,
-    sessionService: options.sessionService,
-    vectorIndex: options.vectorIndex,
-    logger: options.logger,
-    traceId: options.traceId,
-    sessionId: options.sessionId,
-    cmsTarget: options.cmsTarget,
-  };
+  tools: ALL_TOOLS,
+  callOptionsSchema: AgentCallOptionsSchema,
 
-  return generateText({
-    model: openrouter(AGENT_CONFIG.modelId),
-    system: systemPrompt,
-    messages,
-    tools: ALL_TOOLS,
-    maxSteps: AGENT_CONFIG.maxSteps,
-    maxRetries: AGENT_CONFIG.maxRetries,
-    maxTokens: AGENT_CONFIG.maxTokens,
-    experimental_context: agentContext,
-  });
-}
+  // Dynamic instruction injection + context setup
+  prepareCall: ({ options, ...settings }) => {
+    const dynamicInstructions = getSystemPrompt({
+      currentDate: new Date().toISOString().split("T")[0],
+      workingMemory: options.workingMemory || "",
+    });
+
+    return {
+      ...settings,
+      instructions: dynamicInstructions,
+      maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
+      experimental_context: {
+        db: options.db,
+        services: options.services,
+        sessionService: options.sessionService,
+        vectorIndex: options.vectorIndex,
+        logger: options.logger,
+        stream: options.stream,
+        traceId: options.traceId,
+        sessionId: options.sessionId,
+        cmsTarget: options.cmsTarget,
+      } as AgentContext,
+    };
+  },
+
+  // Stop conditions (OR logic)
+  stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
+
+  // Context window management
+  prepareStep: async ({ messages }: { messages: any[] }) => {
+    if (messages.length > 20) {
+      return {
+        messages: [
+          messages[0], // Keep system prompt
+          ...messages.slice(-10), // Keep last 10
+        ],
+      };
+    }
+    return {};
+  },
+});
+```
+
+### Usage in Routes
+
+```typescript
+// Streaming
+const streamResult = await cmsAgent.stream({
+  messages,
+  options: agentOptions, // Type-checked via callOptionsSchema
+});
+
+// Non-streaming
+const result = await cmsAgent.generate({
+  messages,
+  options: agentOptions,
+});
 ```
 
 ### Key Changes from Migration
 
-| Before (Custom Orchestrator) | After (AI SDK 6 Native) |
+| Before (Custom Orchestrator) | After (ToolLoopAgent) |
 |------------------------------|-------------------------|
-| Custom while loop + retry | Native `maxRetries: 2` |
-| Custom step tracking | Native `maxSteps` |
+| `generateText` function | `ToolLoopAgent` class |
+| Custom while loop + retry | SDK handles internally |
+| Custom step tracking | `stopWhen` conditions |
 | Checkpoint every 3 steps | Messages saved at end only |
-| `ApprovalQueue` service | Native `needsApproval` on tools |
-| `experimental_context` direct | `prepareCall` + typed options |
+| `ApprovalQueue` service | Confirmed flag pattern |
+| Untyped options | `callOptionsSchema` with Zod |
+| Static system prompt | `prepareCall` dynamic injection |
 
 ---
 
@@ -354,37 +409,84 @@ POST /api/agent/approve
 
 ## System Prompt
 
-The prompt is compiled from Handlebars template:
+The prompt is compiled from modular XML files using Handlebars:
 
 ```typescript
 // server/agent/system-prompt.ts
-import Handlebars from 'handlebars';
-import fs from 'fs';
-import path from 'path';
+import Handlebars from "handlebars";
+import fs from "node:fs";
+import path from "node:path";
 
-interface SystemPromptContext {
-  toolsList: string[];
-  toolCount: number;
-  sessionId: string;
+export interface SystemPromptContext {
   currentDate: string;
   workingMemory?: string;
 }
 
+// Modular prompt structure
+const PROMPT_MODULES = [
+  "core/base-rules.xml",       // Identity, ReAct loop, confirmations
+  "workflows/cms-pages.xml",   // Page and section management
+  "workflows/cms-images.xml",  // Image handling and display
+  "workflows/cms-posts.xml",   // Blog post management
+  "workflows/cms-navigation.xml", // Navigation management
+  "workflows/web-research.xml",   // Exa AI web research
+] as const;
+
 let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
+
+function loadPromptModules(): string {
+  const promptsDir = path.join(__dirname, "../prompts");
+
+  const modules = PROMPT_MODULES.map((modulePath) => {
+    const fullPath = path.join(promptsDir, modulePath);
+    try {
+      return fs.readFileSync(fullPath, "utf-8");
+    } catch (error) {
+      console.warn(`Warning: Could not load prompt module: ${modulePath}`);
+      return "";
+    }
+  }).filter(Boolean);
+
+  // Compose into single agent prompt
+  return `<agent>\n${modules.join("\n\n")}\n</agent>`;
+}
 
 export function getSystemPrompt(context: SystemPromptContext): string {
   if (!compiledTemplate) {
-    const promptPath = path.join(__dirname, '../prompts/react.xml');
-    const template = fs.readFileSync(promptPath, 'utf-8');
+    const template = loadPromptModules();
     compiledTemplate = Handlebars.compile(template);
   }
 
   return compiledTemplate({
     ...context,
-    toolsFormatted: context.toolsList.map(t => `- ${t}`).join('\n'),
-    workingMemory: context.workingMemory || '',
+    workingMemory: context.workingMemory || "",
   });
 }
+```
+
+### Prompt Module Structure
+
+```
+server/prompts/
+├── core/
+│   └── base-rules.xml       # Identity, ReAct pattern, working memory
+└── workflows/
+    ├── cms-pages.xml        # Page/section CRUD patterns
+    ├── cms-images.xml       # Image search and display rules
+    ├── cms-posts.xml        # Blog post management
+    ├── cms-navigation.xml   # Navigation editing
+    └── web-research.xml     # Exa AI research patterns
+```
+
+### Working Memory Injection
+
+The `{{{workingMemory}}}` Handlebars triple-stash injects entity context:
+
+```xml
+<!-- core/base-rules.xml -->
+<working-memory>
+{{{workingMemory}}}
+</working-memory>
 ```
 
 ---

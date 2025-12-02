@@ -17,10 +17,11 @@ This diagram shows how all agent components connect. Use it as a map to understa
 
 **Source Files:**
 
--   Agent Orchestrator: `server/agent/orchestrator.ts`
+-   CMS Agent: `server/agent/cms-agent.ts` (ToolLoopAgent singleton)
+-   System Prompt: `server/agent/system-prompt.ts` (modular composition)
 -   Routes: `server/routes/agent.ts`
 -   Tools: `server/tools/all-tools.ts`
--   Prompts: `server/prompts/react.xml`
+-   Prompts: `server/prompts/core/` + `server/prompts/workflows/`
 -   Working Memory: `server/services/working-memory/`
 -   Client Hook: `app/assistant/_hooks/use-agent.ts`
 -   Stores: `app/assistant/_stores/`
@@ -71,11 +72,11 @@ flowchart TB
         end
 
         subgraph PromptCompilation["Prompt System - prompts/"]
-            ReactXML["react.xml<br/>Handlebars Template"]
+            PromptModules["Modular Prompts<br/>core/*.xml + workflows/*.xml"]
             WorkingMemStr["workingMemory variable"]
             ToolsFormatted["toolsFormatted variable"]
-            HandlebarsCompile["Handlebars.compile()"]
-            SystemPrompt["Compiled System Prompt<br/>~2800 tokens"]
+            PromptCompose["Prompt Composition"]
+            SystemPrompt["Compiled System Prompt"]
         end
 
         subgraph WorkingMem["Working Memory - services/working-memory/"]
@@ -84,22 +85,23 @@ flowchart TB
             ToContextString["toContextString()<br/>Groups by entity type"]
         end
 
-        subgraph Orchestrator["Agent Orchestrator - agent/orchestrator.ts"]
-            CreateAgent["createAgent()<br/>Instantiates ToolLoopAgent"]
-            StreamWithApproval["streamAgentWithApproval()<br/>Main entry point"]
+        subgraph CMSAgent["CMS Agent - agent/cms-agent.ts"]
+            AgentSingleton["cmsAgent singleton<br/>ToolLoopAgent instance"]
+            StreamEndpoint["handleAgentStream()<br/>Main entry point"]
 
             subgraph ReActLoop["ReAct Loop - AI SDK v6 ToolLoopAgent"]
-                PrepareStep["prepareStep<br/>Auto-checkpoint every 3 steps<br/>Trim history if more than 20 msgs"]
+                PrepareCall["prepareCall<br/>Dynamic system prompt injection"]
+                PrepareStep["prepareStep<br/>Per-step logging & metrics"]
                 Think["THINK<br/>Analyze user request + context"]
                 Act["ACT<br/>Select and call tool"]
                 Observe["OBSERVE<br/>Process tool result"]
                 OnStepFinish["onStepFinish<br/>Emit SSE events"]
-                StopCondition{"Stop Condition<br/>FINAL_ANSWER detected?<br/>maxSteps: 15 reached?"}
+                StopCondition{"stopWhen()<br/>All text generated?<br/>maxSteps: 15 reached?"}
             end
         end
 
         subgraph ToolSystem["Tool Registry - tools/"]
-            AllTools["ALL_TOOLS constant<br/>48 tools"]
+            AllTools["ALL_TOOLS constant<br/>46 tools"]
 
             subgraph ToolCategories["Tool Categories"]
                 CmsTools["cms_* tools<br/>getPage, createPage,<br/>addSectionToPage, etc."]
@@ -134,9 +136,8 @@ flowchart TB
         end
 
         subgraph ErrorRecovery["Error Recovery"]
-            ExecuteWithRetry["executeAgentWithRetry()<br/>max 3 retries"]
+            ExecuteWithRetry["Retry Logic<br/>max 3 retries"]
             ExponentialBackoff["Exponential Backoff<br/>1s, 2s, 4s, max 10s"]
-            Checkpoint["Checkpoint<br/>Every 3 steps via prepareStep"]
         end
     end
 
@@ -162,20 +163,21 @@ flowchart TB
     ToContextString --> WorkingMemStr
 
     %% === FLOW 4: Prompt Compilation ===
-    ReactXML --> HandlebarsCompile
-    WorkingMemStr --> HandlebarsCompile
-    ToolsFormatted --> HandlebarsCompile
+    PromptModules --> PromptCompose
+    WorkingMemStr --> PromptCompose
+    ToolsFormatted --> PromptCompose
     AllTools -->|"Object.keys()"| ToolsFormatted
-    HandlebarsCompile --> SystemPrompt
+    PromptCompose --> SystemPrompt
 
-    %% === FLOW 5: Agent Creation ===
-    SystemPrompt --> CreateAgent
-    AgentContext --> CreateAgent
-    AllTools --> CreateAgent
-    CreateAgent --> StreamWithApproval
+    %% === FLOW 5: Agent Invocation ===
+    SystemPrompt --> PrepareCall
+    AgentContext --> AgentSingleton
+    AllTools --> AgentSingleton
+    AgentSingleton --> StreamEndpoint
 
     %% === FLOW 6: ReAct Loop Execution ===
-    StreamWithApproval --> PrepareStep
+    StreamEndpoint --> PrepareCall
+    PrepareCall --> PrepareStep
     PrepareStep --> Think
     Think -->|"check WorkingContext"| WorkingContext
     Think --> Act
@@ -225,9 +227,7 @@ flowchart TB
     ExecuteWithRetry -.-> ExponentialBackoff
     ExponentialBackoff -.-> ExperimentalContext
 
-    %% === FLOW 14: Checkpointing ===
-    PrepareStep -->|"every 3 steps"| Checkpoint
-    Checkpoint --> SessionService
+    %% === FLOW 14: Session Persistence ===
     SessionService --> SQLiteDB
 
     %% === FLOW 15: Response Stream ===
@@ -256,14 +256,14 @@ flowchart TB
     class ChatStore,SessionStore,TraceStore,LogStore store
     class StreamRoute,WriteSSE,ProxyRoute route
     class AgentContext,ContainerSingleton,DbInstance,VectorIndex,Services context
-    class ReactXML,WorkingMemStr,ToolsFormatted,HandlebarsCompile,SystemPrompt prompt
+    class PromptModules,WorkingMemStr,ToolsFormatted,PromptCompose,SystemPrompt prompt
     class WorkingContext,EntityExtractor,ToContextString memory
-    class CreateAgent,StreamWithApproval,PrepareStep,Think,Act,Observe,OnStepFinish,StopCondition agent
+    class AgentSingleton,StreamEndpoint,PrepareCall,PrepareStep,Think,Act,Observe,OnStepFinish,StopCondition agent
     class AllTools,CmsTools,SearchTools,WebTools,PexelsTools,HttpTools,ToolDef,ZodSchema,ExperimentalContext tool
     class ConfirmationFlow hitl
     class PageService,SectionService,EntryService,ImageService,SessionService,VectorService service
     class DrizzleORM,SQLiteDB,LanceDB db
-    class ExecuteWithRetry,ExponentialBackoff,Checkpoint error
+    class ExecuteWithRetry,ExponentialBackoff error
 ```
 
 ### How to Read This Diagram
@@ -272,9 +272,9 @@ flowchart TB
 
 **Context Assembly:** Backend builds `AgentContext` from `ServiceContainer` singleton - this is the "bag of dependencies" every tool receives
 
-**Prompt Compilation:** `react.xml` template + `workingMemory` + `toolsFormatted` → Handlebars compiles → final system prompt
+**Prompt Compilation:** Modular prompts (`core/*.xml` + `workflows/*.xml`) + `workingMemory` + `toolsFormatted` → composed into final system prompt
 
-**ReAct Loop:** `ToolLoopAgent` runs Think→Act→Observe cycle up to 15 steps or until `FINAL_ANSWER` is detected
+**ReAct Loop:** `ToolLoopAgent` singleton runs Think→Act→Observe cycle up to 15 steps or until `stopWhen()` returns true
 
 **Tool Execution:** Tools access services via `experimental_context as AgentContext` - no globals, no closures
 
@@ -526,56 +526,57 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    subgraph TemplateFiles["📄 Template Files"]
-        ReactXML[react.xml<br/>~1200 lines]
-        Identity[Identity Section]
-        CoreLoop[Core Loop Rules]
-        DomainGuides[Domain Guides<br/>CMS, Images, Posts, Nav]
-        ErrorHandling[Error Handling]
-        Examples[Few-Shot Examples]
+    subgraph CorePrompts["📄 Core Prompts - core/"]
+        BaseRules[base-rules.xml<br/>Fundamental behavior]
+        ToolGuidance[tool-guidance.xml<br/>Tool usage patterns]
+        ErrorPatterns[error-patterns.xml<br/>Error handling]
+    end
+
+    subgraph WorkflowPrompts["📄 Workflow Prompts - workflows/"]
+        CmsWorkflow[cms.xml<br/>CMS operations]
+        ImageWorkflow[images.xml<br/>Image management]
+        PostWorkflow[posts.xml<br/>Blog/post content]
+        NavWorkflow[navigation.xml<br/>Nav structure]
     end
 
     subgraph DynamicData["📊 Dynamic Data"]
         ToolsList[Object.keys ALL_TOOLS]
-        ToolCount[48 tools]
+        ToolCount[46 tools]
         CurrentDate[new Date ISO]
         SessionIdVal[sessionId]
         WorkingMem[WorkingContext.toContextString]
     end
 
-    subgraph Compilation["⚙️ Handlebars Compilation"]
-        Compile[Handlebars.compile]
-        Variables["Variables:<br/>toolCount<br/>sessionId<br/>currentDate<br/>workingMemory<br/>toolsFormatted"]
+    subgraph Composition["⚙️ Prompt Composition"]
+        SystemPromptTS[system-prompt.ts]
+        PrepareCall[prepareCall callback]
     end
 
     subgraph Output["📤 Compiled Prompt"]
-        Final[Final System Prompt<br/>~2800 tokens]
+        Final[Final System Prompt]
     end
 
-    ReactXML --> Identity
-    ReactXML --> CoreLoop
-    ReactXML --> DomainGuides
-    ReactXML --> ErrorHandling
-    ReactXML --> Examples
+    BaseRules --> SystemPromptTS
+    ToolGuidance --> SystemPromptTS
+    ErrorPatterns --> SystemPromptTS
+    CmsWorkflow --> SystemPromptTS
+    ImageWorkflow --> SystemPromptTS
+    PostWorkflow --> SystemPromptTS
+    NavWorkflow --> SystemPromptTS
 
-    Identity --> Compile
-    CoreLoop --> Compile
-    DomainGuides --> Compile
-    ErrorHandling --> Compile
-    Examples --> Compile
+    ToolsList --> PrepareCall
+    ToolCount --> PrepareCall
+    CurrentDate --> PrepareCall
+    SessionIdVal --> PrepareCall
+    WorkingMem --> PrepareCall
 
-    ToolsList --> Variables
-    ToolCount --> Variables
-    CurrentDate --> Variables
-    SessionIdVal --> Variables
-    WorkingMem --> Variables
+    SystemPromptTS --> PrepareCall
+    PrepareCall --> Final
 
-    Variables --> Compile
-    Compile --> Final
-
-    style TemplateFiles fill:#f3e5f5
+    style CorePrompts fill:#f3e5f5
+    style WorkflowPrompts fill:#e8f5e9
     style DynamicData fill:#fff4e1
-    style Compilation fill:#e1f5ff
+    style Composition fill:#e1f5ff
 ```
 
 ---
@@ -767,7 +768,7 @@ flowchart LR
 
 ---
 
-## 9. Error Recovery & Checkpointing
+## 9. Error Recovery & Session Persistence
 
 **Reliability mechanisms that ensure data integrity**
 
@@ -777,7 +778,7 @@ flowchart LR
 flowchart TB
     subgraph Execution["⚡ Execution"]
         ToolExec[Tool Execution]
-        StepN[Step N]
+        AgentLoop[Agent Loop]
     end
 
     subgraph RetryLogic["🔄 Retry Logic"]
@@ -786,16 +787,15 @@ flowchart TB
         MaxRetries[Max Retries Exceeded]
     end
 
-    subgraph Checkpoint["💾 Checkpoint System"]
-        StepCheck{Every 3 steps?}
-        SaveMessages[sessionService.saveMessages]
-        SaveMemory[Serialize WorkingMemory]
+    subgraph SessionPersistence["💾 Session Persistence"]
+        ConvLog[ConversationLogService]
+        SaveMessages[Save conversation log]
+        SaveMetrics[Save trace metrics]
     end
 
     subgraph Recovery["🔧 Recovery"]
         SessionLoad[Load Session]
         RestoreMessages[Restore Messages]
-        RestoreMemory[Restore WorkingMemory]
         ResumeAgent[Resume Agent]
     end
 
@@ -811,14 +811,12 @@ flowchart TB
     Backoff --> ToolExec
     Attempt -->|no| MaxRetries
 
-    StepN --> StepCheck
-    StepCheck -->|yes| SaveMessages
-    SaveMessages --> SaveMemory
-    StepCheck -->|no| StepN
+    AgentLoop -->|on finish| ConvLog
+    ConvLog --> SaveMessages
+    ConvLog --> SaveMetrics
 
     SessionLoad --> RestoreMessages
-    RestoreMessages --> RestoreMemory
-    RestoreMemory --> ResumeAgent
+    RestoreMessages --> ResumeAgent
 
     MaxRetries --> Transient
     MaxRetries --> Validation
@@ -826,7 +824,7 @@ flowchart TB
     MaxRetries --> Critical
 
     style RetryLogic fill:#ffebeb
-    style Checkpoint fill:#e8f5e9
+    style SessionPersistence fill:#e8f5e9
     style Recovery fill:#e1f5ff
 ```
 
@@ -906,14 +904,14 @@ sequenceDiagram
 
 | Diagram Component | Source File                            | Layer Doc                                                 |
 | ----------------- | -------------------------------------- | --------------------------------------------------------- |
-| ToolLoopAgent     | `server/agent/orchestrator.ts`         | [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)               |
+| ToolLoopAgent     | `server/agent/cms-agent.ts`            | [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)               |
 | ALL_TOOLS         | `server/tools/all-tools.ts`            | [3.2 Tools](./LAYER_3.2_TOOLS.md)                         |
 | WorkingContext    | `server/services/working-memory/`      | [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       |
-| react.xml         | `server/prompts/react.xml`             | [3.4 Prompts](./LAYER_3.4_PROMPTS.md)                     |
+| Prompts           | `server/prompts/core/` + `workflows/`  | [3.4 Prompts](./LAYER_3.4_PROMPTS.md)                     |
 | ConfirmationFlow  | `server/tools/all-tools.ts` (confirmed flag) | [3.5 HITL](./LAYER_3.5_HITL.md)                      |
-| Retry Logic       | `server/agent/orchestrator.ts`         | [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       |
+| Retry Logic       | `server/agent/cms-agent.ts`            | [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       |
 | SSE Writer        | `server/routes/agent.ts`               | [3.7 Streaming](./LAYER_3.7_STREAMING.md)                 |
-| AgentContext      | `server/agent/orchestrator.ts`         | [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) |
+| AgentContext      | `server/agent/cms-agent.ts`            | [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) |
 | ServiceContainer  | `server/services/service-container.ts` | [1.2 Service Container](./LAYER_1.2_SERVICE_CONTAINER.md) |
 | useAgent          | `app/assistant/_hooks/use-agent.ts`    | [6.2 SSE Streaming](./LAYER_6.2_SSE_STREAMING.md)         |
 | useChatStore      | `app/assistant/_stores/`               | [6.1 State Management](./LAYER_6.1_STATE_MANAGEMENT.md)   |
@@ -928,7 +926,7 @@ Tools receive context via `experimental_context`, eliminating closures and globa
 
 ### 2. Single Agent, All Tools
 
-No mode switching or tool filtering. The agent always has access to all 21 tools.
+No mode switching or tool filtering. The agent always has access to all 46 tools.
 
 ### 3. Working Memory = Token Savings
 
@@ -938,9 +936,9 @@ Entity tracking reduces repeated context by 70%, enabling natural reference reso
 
 Destructive operations request confirmation through chat, executed only after user says "yes".
 
-### 5. Checkpoint = Reliability
+### 5. Session Persistence = Continuity
 
-State is saved every 3 steps, enabling recovery from crashes.
+Conversation history persisted to SQLite via SessionService, enabling session resumption.
 
 ### 6. SSE = Real-time UX
 

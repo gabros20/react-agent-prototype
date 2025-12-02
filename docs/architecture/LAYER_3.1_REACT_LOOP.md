@@ -1,15 +1,19 @@
-# Layer 3.1: ReAct Loop (AI SDK 6 Native)
+# Layer 3.1: ReAct Loop (AI SDK 6 ToolLoopAgent)
 
-> The core execution loop using native AI SDK 6 `generateText` with `maxSteps`
+> The core execution loop using AI SDK 6 `ToolLoopAgent` class with native stop conditions
 
 ## Overview
 
-The ReAct (Reasoning + Acting) pattern enables the LLM to break complex tasks into steps, execute tools, observe results, and iterate until complete. Since the AI SDK 6 migration, the loop uses native `generateText` with `maxSteps` instead of custom orchestration.
+The ReAct (Reasoning + Acting) pattern enables the LLM to break complex tasks into steps, execute tools, observe results, and iterate until complete. The agent uses `ToolLoopAgent` - a module-level singleton with:
+- **`callOptionsSchema`** for type-safe runtime options
+- **`prepareCall`** for dynamic instruction injection
+- **`stopWhen`** conditions (step count + FINAL_ANSWER detection)
+- **`prepareStep`** for context window management
 
 **Key Files:**
-- `server/agent/cms-agent.ts` - Agent module
-- `server/agent/system-prompt.ts` - Prompt compilation
-- `server/routes/agent.ts` - Route handler
+- `server/agent/cms-agent.ts` - ToolLoopAgent singleton
+- `server/agent/system-prompt.ts` - Modular prompt compilation
+- `server/routes/agent.ts` - Route handler with stream/generate
 
 ---
 
@@ -48,22 +52,29 @@ Agent:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      AI SDK 6 Agent Loop                        │
+│                   ToolLoopAgent (Module Singleton)              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌──────────────────────────────────────────────────────────┐  │
-│   │                    generateText()                        │  │
-│   │                   (AI SDK v6 Native)                     │  │
+│   │                 cmsAgent.stream() / .generate()          │  │
 │   │                                                          │  │
-│   │    maxSteps: 15                                          │  │
-│   │    maxRetries: 2 (native exponential backoff)            │  │
-│   │    maxTokens: 4096                                       │  │
+│   │    model: openrouter/gpt-4o-mini                         │  │
+│   │    maxOutputTokens: 4096                                 │  │
+│   │    callOptionsSchema: Zod schema for type-safe options   │  │
+│   └──────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│                              ▼                                  │
+│   ┌──────────────────────────────────────────────────────────┐  │
+│   │                     prepareCall()                        │  │
+│   │                                                          │  │
+│   │    • Dynamic system prompt via getSystemPrompt()         │  │
+│   │    • Working memory injection                            │  │
+│   │    • experimental_context setup for tools                │  │
 │   └──────────────────────────────────────────────────────────┘  │
 │                              │                                  │
 │                              ▼                                  │
 │   ┌──────────────────────────────────────────────────────────┐  │
 │   │                    EXECUTION LOOP                        │  │
-│   │                  (SDK-managed internally)                │  │
 │   │                                                          │  │
 │   │    ┌─────────┐    ┌─────────┐    ┌─────────┐             │  │
 │   │    │  THINK  │───▶│   ACT   │───▶│ OBSERVE │──┐          │  │
@@ -75,19 +86,19 @@ Agent:
 │   │         ▲                                     │          │  │
 │   │         └─────────────────────────────────────┘          │  │
 │   │                                                          │  │
-│   │    Stop Conditions (Native):                             │  │
-│   │    • No more tool calls                                  │  │
-│   │    • Max steps reached (15)                              │  │
-│   │    • maxRetries exceeded                                 │  │
+│   │    stopWhen Conditions (OR logic):                       │  │
+│   │    • stepCountIs(15) - max steps reached                 │  │
+│   │    • hasFinalAnswer() - FINAL_ANSWER: detected           │  │
 │   └──────────────────────────────────────────────────────────┘  │
 │                              │                                  │
 │         ┌────────────────────┼────────────────────┐             │
 │         ▼                    ▼                    ▼             │
 │   ┌─────────────┐     ┌────────────┐        ┌───────────┐       │
-│   │ Callbacks   │     │   Native   │        │  Token    │       │
-│   │             │     │   Retry    │        │  Tracking │       │
-│   │ onStepFinish│     │            │        │           │       │
-│   │ onFinish    │     │ maxRetries │        │ usage     │       │
+│   │ prepareStep │     │ Streaming  │        │  Token    │       │
+│   │             │     │  Events    │        │  Tracking │       │
+│   │ Message     │     │            │        │           │       │
+│   │ trimming    │     │ fullStream │        │ usage     │       │
+│   │ (>20 msgs)  │     │ chunks     │        │           │       │
 │   └─────────────┘     └────────────┘        └───────────┘       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -96,83 +107,102 @@ Agent:
 
 ## Core Implementation
 
-### CMS Agent Module
+### CMS Agent Module (ToolLoopAgent Singleton)
 
 ```typescript
 // server/agent/cms-agent.ts
-import { generateText, type CoreMessage } from 'ai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { ALL_TOOLS } from '../tools/all-tools';
-import { getSystemPrompt } from './system-prompt';
-import type { AgentContext } from '../tools/types';
+import { ToolLoopAgent, stepCountIs } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { z } from "zod";
+import { ALL_TOOLS } from "../tools/all-tools";
+import { getSystemPrompt } from "./system-prompt";
+import type { AgentContext } from "../tools/types";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const AGENT_CONFIG = {
+export const AGENT_CONFIG = {
   maxSteps: 15,
-  modelId: 'openai/gpt-4o-mini',
-  maxRetries: 2,
-  maxTokens: 4096,
+  modelId: "openai/gpt-4o-mini",
+  maxOutputTokens: 4096,
+} as const;
+
+// Type-safe call options via Zod schema
+export const AgentCallOptionsSchema = z.object({
+  sessionId: z.string(),
+  traceId: z.string(),
+  workingMemory: z.string().optional(),
+  cmsTarget: z.object({
+    siteId: z.string(),
+    environmentId: z.string(),
+  }),
+  db: z.custom<any>(),
+  services: z.custom<any>(),
+  sessionService: z.custom<any>(),
+  vectorIndex: z.custom<any>(),
+  logger: z.custom<any>(),
+  stream: z.custom<any>().optional(),
+});
+
+// Custom stop condition
+const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
+  const lastStep = steps[steps.length - 1];
+  return lastStep?.text?.includes("FINAL_ANSWER:") || false;
 };
 
-export interface AgentOptions {
-  sessionId: string;
-  traceId: string;
-  workingMemory: string;
-  cmsTarget: { siteId: string; environmentId: string };
-  db: any;
-  services: any;
-  sessionService: any;
-  vectorIndex: any;
-  logger: any;
-}
+// Module-level singleton
+export const cmsAgent = new ToolLoopAgent({
+  model: openrouter.languageModel(AGENT_CONFIG.modelId),
+  instructions: "CMS Agent", // Replaced in prepareCall
+  tools: ALL_TOOLS,
+  callOptionsSchema: AgentCallOptionsSchema,
 
-export async function runAgent(
-  messages: CoreMessage[],
-  options: AgentOptions
-) {
-  const systemPrompt = getSystemPrompt({
-    toolsList: Object.keys(ALL_TOOLS),
-    toolCount: Object.keys(ALL_TOOLS).length,
-    sessionId: options.sessionId,
-    currentDate: new Date().toISOString().split('T')[0],
-    workingMemory: options.workingMemory,
-  });
+  prepareCall: ({ options, ...settings }) => {
+    const dynamicInstructions = getSystemPrompt({
+      currentDate: new Date().toISOString().split("T")[0],
+      workingMemory: options.workingMemory || "",
+    });
 
-  const agentContext: AgentContext = {
-    db: options.db,
-    services: options.services,
-    sessionService: options.sessionService,
-    vectorIndex: options.vectorIndex,
-    logger: options.logger,
-    traceId: options.traceId,
-    sessionId: options.sessionId,
-    cmsTarget: options.cmsTarget,
-  };
+    return {
+      ...settings,
+      instructions: dynamicInstructions,
+      maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
+      experimental_context: {
+        db: options.db,
+        services: options.services,
+        sessionService: options.sessionService,
+        vectorIndex: options.vectorIndex,
+        logger: options.logger,
+        stream: options.stream,
+        traceId: options.traceId,
+        sessionId: options.sessionId,
+        cmsTarget: options.cmsTarget,
+      } as AgentContext,
+    };
+  },
 
-  return generateText({
-    model: openrouter(AGENT_CONFIG.modelId),
-    system: systemPrompt,
-    messages,
-    tools: ALL_TOOLS,
-    maxSteps: AGENT_CONFIG.maxSteps,
-    maxRetries: AGENT_CONFIG.maxRetries,
-    maxTokens: AGENT_CONFIG.maxTokens,
-    experimental_context: agentContext,
-  });
-}
+  stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
+
+  prepareStep: async ({ messages }: { messages: any[] }) => {
+    if (messages.length > 20) {
+      return {
+        messages: [messages[0], ...messages.slice(-10)],
+      };
+    }
+    return {};
+  },
+});
 ```
 
 ### Key Configuration Values
 
-| Parameter    | Value         | Rationale                                                 |
-| ------------ | ------------- | --------------------------------------------------------- |
-| `maxSteps`   | 15            | Higher than typical (10) for complex multi-step CMS tasks |
-| `maxTokens`  | 4096          | Allows detailed reasoning and explanations                |
-| `maxRetries` | 2             | Native SDK default, exponential backoff for 429/5xx       |
-| `model`      | gpt-4o-mini   | Good balance of capability, speed, and cost               |
+| Parameter         | Value         | Rationale                                                 |
+| ----------------- | ------------- | --------------------------------------------------------- |
+| `maxSteps`        | 15            | Higher than typical (10) for complex multi-step CMS tasks |
+| `maxOutputTokens` | 4096          | Allows detailed reasoning and explanations                |
+| `model`           | gpt-4o-mini   | Good balance of capability, speed, and cost               |
+| `stopWhen`        | OR conditions | Step limit OR FINAL_ANSWER detection                      |
 
 ---
 
@@ -181,131 +211,184 @@ export async function runAgent(
 ### Before (Custom Orchestrator)
 
 ```typescript
-// OLD: server/agent/orchestrator.ts
-const agent = new ToolLoopAgent({
-  model: openrouter('gpt-4o-mini'),
-  tools: ALL_TOOLS,
-  maxSteps: 15,
-  experimental_context: context,
-  system: compiledSystemPrompt,
-  stopWhen: ({ steps, text }) => {
-    if (steps.length >= 15) return true;
-    if (text?.includes('FINAL_ANSWER:')) return true;
-    return false;
-  },
-});
+// OLD: server/agent/orchestrator.ts - DELETED
+class CustomOrchestrator {
+  async execute(messages, context) {
+    // Custom while loop
+    while (steps < maxSteps) {
+      const result = await this.llmCall(messages);
+      if (result.toolCalls) {
+        for (const call of result.toolCalls) {
+          const output = await this.executeTool(call);
+          messages.push(toolResultMessage(output));
+        }
+      }
+      // Custom checkpoint every 3 steps
+      if (steps % 3 === 0) {
+        await this.checkpoint(messages);
+      }
+    }
+  }
+}
 
-// Custom retry loop
-for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-  try {
-    const result = await agent.run(messages);
-    return result;
-  } catch (error) {
-    if (!isRetryable(error) || attempt === MAX_RETRIES) throw error;
-    await sleep(calculateBackoff(attempt));
+// Custom retry wrapper
+async function executeWithRetry(fn, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isRetryable(error) || attempt === maxRetries) throw error;
+      await sleep(calculateBackoff(attempt));
+    }
   }
 }
 ```
 
-### After (AI SDK 6 Native)
+### After (ToolLoopAgent Singleton)
 
 ```typescript
 // NEW: server/agent/cms-agent.ts
-return generateText({
-  model: openrouter(AGENT_CONFIG.modelId),
-  system: systemPrompt,
-  messages,
+export const cmsAgent = new ToolLoopAgent({
+  model: openrouter.languageModel(AGENT_CONFIG.modelId),
   tools: ALL_TOOLS,
-  maxSteps: AGENT_CONFIG.maxSteps,
-  maxRetries: AGENT_CONFIG.maxRetries,  // Native retry!
-  maxTokens: AGENT_CONFIG.maxTokens,
-  experimental_context: agentContext,
+  callOptionsSchema: AgentCallOptionsSchema,
+  prepareCall: ({ options, ...settings }) => ({
+    ...settings,
+    instructions: getSystemPrompt({ workingMemory: options.workingMemory }),
+    experimental_context: buildContext(options),
+  }),
+  stopWhen: [stepCountIs(15), hasFinalAnswer],
+  prepareStep: async ({ messages }) => trimMessages(messages),
 });
+
+// Usage in routes
+const streamResult = await cmsAgent.stream({ messages, options });
+const result = await cmsAgent.generate({ messages, options });
 ```
 
 ### Migration Summary
 
 | Feature | Before | After |
 |---------|--------|-------|
-| Loop control | Custom `ToolLoopAgent` | Native `generateText` with `maxSteps` |
-| Retry logic | Custom `executeWithRetry` | Native `maxRetries: 2` |
-| Stop conditions | Custom `stopWhen` callback | SDK stops when no more tool calls |
+| Loop control | Custom while loop | `ToolLoopAgent` class |
+| Retry logic | Custom `executeWithRetry` | SDK handles internally |
+| Stop conditions | Custom logic | `stopWhen` array with conditions |
 | Checkpointing | Every 3 steps | End of execution only |
-| HITL | Custom `ApprovalQueue` | Native `needsApproval` on tools |
-| Entry points | `executeAgentWithRetry`, `streamAgentWithApproval` | Single `runAgent` function |
+| HITL | Custom `ApprovalQueue` | Confirmed flag pattern |
+| Entry points | Multiple functions | `.stream()` / `.generate()` |
+| Options typing | Untyped | `callOptionsSchema` with Zod |
+| Instructions | Static at construction | Dynamic via `prepareCall` |
 
 ---
 
 ## Stop Conditions
 
-The SDK stops the loop when:
+The `stopWhen` array defines conditions (OR logic):
 
-1. **No more tool calls** - LLM responds without calling tools
-2. **Max steps reached** - `maxSteps: 15` limit hit
-3. **Max retries exceeded** - After `maxRetries: 2` failed attempts
+```typescript
+stopWhen: [
+  stepCountIs(AGENT_CONFIG.maxSteps),  // Step limit
+  hasFinalAnswer,                       // FINAL_ANSWER: detection
+],
+```
+
+### Custom Stop Condition
+
+```typescript
+const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
+  const lastStep = steps[steps.length - 1];
+  return lastStep?.text?.includes("FINAL_ANSWER:") || false;
+};
+```
 
 ### Prompt-Guided Completion
 
-The agent is instructed to signal completion clearly:
+The agent is instructed to signal completion:
 
 ```xml
-<instruction>
-When the task is complete, provide a clear summary to the user.
-If you need to perform multiple actions, execute them one by one.
-Always verify each action succeeded before proceeding.
-</instruction>
+<!-- core/base-rules.xml -->
+<react-pattern>
+**COMPLETION:**
+When the task is fully complete, prefix your final response with FINAL_ANSWER:
+
+Do NOT use FINAL_ANSWER until ALL requested actions are completed and verified.
+</react-pattern>
 ```
 
-**Note**: The `FINAL_ANSWER:` pattern is no longer required - the SDK naturally stops when the LLM stops calling tools.
+The loop stops when:
+1. **FINAL_ANSWER detected** - LLM explicitly signals completion
+2. **Max steps reached** - `stepCountIs(15)` limit hit
+3. **No more tool calls** - LLM responds without calling tools (implicit)
 
 ---
 
-## Callbacks
+## Streaming Events
 
-### onStepFinish (If Needed)
-
-For telemetry or entity extraction, use the result's steps:
+When using `.stream()`, process chunks via `fullStream`:
 
 ```typescript
-const result = await runAgent(messages, options);
+// server/routes/agent.ts
+const streamResult = await cmsAgent.stream({ messages, options });
 
-// Process steps after completion
-for (const step of result.steps) {
-  if (step.toolResults) {
-    for (const toolResult of step.toolResults) {
-      const entities = entityExtractor.extract(
-        toolResult.toolName,
-        toolResult.result
-      );
+for await (const chunk of streamResult.fullStream) {
+  switch (chunk.type) {
+    case "text-delta":
+      writeSSE("text-delta", { delta: chunk.text });
+      break;
+
+    case "tool-call":
+      writeSSE("tool-call", {
+        toolName: chunk.toolName,
+        toolCallId: chunk.toolCallId,
+        args: chunk.input,
+      });
+      break;
+
+    case "tool-result":
+      // Extract entities to working memory
+      const entities = extractor.extract(chunk.toolName, chunk.output);
       workingContext.addMany(entities);
-    }
+
+      writeSSE("tool-result", {
+        toolCallId: chunk.toolCallId,
+        toolName: chunk.toolName,
+        result: chunk.output,
+      });
+      break;
+
+    case "start-step":
+      writeSSE("step-start", { stepNumber: ++currentStep });
+      break;
+
+    case "finish-step":
+      writeSSE("step-finish", {
+        stepNumber: currentStep,
+        duration: Date.now() - stepStartTime,
+        usage: chunk.usage,
+      });
+      break;
+
+    case "finish":
+      writeSSE("finish", {
+        finishReason: chunk.finishReason,
+        usage: chunk.totalUsage,
+      });
+      break;
   }
 }
 ```
 
-### onFinish (Streaming)
-
-When streaming, use `onFinish` in `streamText`:
+### After Stream Completion
 
 ```typescript
-const result = streamText({
-  // ...config
-  onFinish: async ({ usage, text, finishReason }) => {
-    // Save messages
-    await sessionService.saveMessages(sessionId, [
-      ...previousMessages,
-      { role: 'user', content: prompt },
-      { role: 'assistant', content: text },
-    ]);
+// Get response messages for persistence
+const responseData = await streamResult.response;
 
-    // Track usage
-    logger.info('Agent completed', {
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens,
-      finishReason,
-    });
-  },
-});
+await sessionService.saveMessages(sessionId, [
+  ...previousMessages,
+  { role: "user", content: prompt },
+  ...responseData.messages,
+]);
 ```
 
 ---
@@ -319,11 +402,14 @@ const result = streamText({
 │                      Message Assembly                           │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. System Prompt (compiled from react.xml)                     │
-│     ├── Role definition                                         │
-│     ├── Available tools list                                    │
-│     ├── Working memory state                                    │
-│     └── Instructions & examples                                 │
+│  1. System Prompt (compiled from modular XML)                   │
+│     ├── core/base-rules.xml (identity, ReAct pattern)           │
+│     ├── workflows/cms-pages.xml                                 │
+│     ├── workflows/cms-images.xml                                │
+│     ├── workflows/cms-posts.xml                                 │
+│     ├── workflows/cms-navigation.xml                            │
+│     ├── workflows/web-research.xml                              │
+│     └── Working memory state ({{{workingMemory}}})              │
 │                                                                 │
 │  2. Conversation History                                        │
 │     ├── Previous user messages                                  │
@@ -336,7 +422,7 @@ const result = streamText({
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
-                      generateText({...})
+                      cmsAgent.stream({...})
 ```
 
 ### Per-Step Flow (SDK Internal)
@@ -426,27 +512,26 @@ No custom retry code needed!
 
 ## Integration Points
 
-| Connects To                                         | How                                 |
-| --------------------------------------------------- | ----------------------------------- |
-| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | SDK executes tools from `ALL_TOOLS` |
-| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Extract entities from result.steps  |
-| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)               | System prompt passed to generateText |
-| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Native `needsApproval` on tools     |
-| [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | Native `maxRetries` handles errors  |
-| [3.7 Streaming](./LAYER_3.7_STREAMING.md)           | Use `streamText` for real-time      |
+| Connects To                                         | How                                   |
+| --------------------------------------------------- | ------------------------------------- |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | SDK executes tools from `ALL_TOOLS`   |
+| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Extract entities from tool-result     |
+| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)               | `prepareCall` injects dynamic prompt  |
+| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Confirmed flag pattern on tools       |
+| [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | SDK handles retry internally          |
+| [3.7 Streaming](./LAYER_3.7_STREAMING.md)           | `.stream()` method for real-time SSE  |
 
 ---
 
 ## Key Design Decisions
 
-### Why generateText over ToolLoopAgent?
+### Why ToolLoopAgent Class?
 
-AI SDK 6 made `generateText` with `maxSteps` the preferred pattern:
-
-1. **Simpler** - No custom agent class needed
-2. **Native retry** - Built-in exponential backoff
-3. **Better typing** - Full TypeScript inference
-4. **SDK-maintained** - Bug fixes and improvements from Vercel
+1. **Module-level singleton** - Single agent instance across all requests
+2. **Type-safe options** - `callOptionsSchema` validates runtime options
+3. **Dynamic injection** - `prepareCall` injects context at runtime
+4. **Custom stop conditions** - `stopWhen` array with composable conditions
+5. **Memory management** - `prepareStep` trims long conversations
 
 ### Why All Tools Always Available?
 
@@ -467,6 +552,13 @@ AI SDK 6 made `generateText` with `maxSteps` the preferred pattern:
 - Messages saved at end is sufficient
 - Reduces I/O overhead
 - Original checkpoint code was never used (dead code)
+
+### Why prepareCall for Instructions?
+
+The `instructions` field in the constructor is a placeholder because:
+1. **Working memory changes per call** - Different entities in context
+2. **Date changes** - Current date injected dynamically
+3. **Module-level singleton** - Can't have per-call constructor args
 
 ---
 
