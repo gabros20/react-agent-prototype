@@ -183,7 +183,7 @@ export function ModelSelector({ disabled = false }: ModelSelectorProps) {
           <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
           {groupedModels.map((group) => (
             <ModelSelectorGroup key={group.provider} heading={group.displayName}>
-              {group.models.slice(0, 10).map((model) => {
+              {group.models.map((model) => {
                 const shortName = getModelShortName(model);
                 const isSelected = model.id === currentModelId;
                 // Include searchable text in value for cmdk filtering

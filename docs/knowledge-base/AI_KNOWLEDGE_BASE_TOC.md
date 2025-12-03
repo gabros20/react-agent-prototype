@@ -75,14 +75,14 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 51/73 topics (70%)
+**Completion**: 57/73 topics (78%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
 | Layer 0: Foundations                 | 3      | ✅ Complete    | 13/13 (100%) |
 | Layer 1: Prompt Engineering          | 3      | ✅ Complete    | 14/14 (100%) |
 | Layer 2: Context Engineering         | 3      | ✅ Complete    | 12/12 (100%) |
-| Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 2/20 (10%)   |
+| Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 8/20 (40%)   |
 | Layer 4: Memory & State              | 5      | ✅ Complete    | 21/21 (100%) |
 | Layer 5: Retrieval & RAG             | 4      | ⏳ Pending     | 0/20         |
 | Layer 6: Planning & Orchestration    | 4      | ⏳ Pending     | 0/20         |
@@ -93,7 +93,33 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
-**Latest Updates** (2025-12-02):
+**Latest Updates** (2025-12-03):
+
+**Layer 3: Agent Architecture** (8/20 topics - 🚧 40% COMPLETE - Restructured Dec 2025):
+
+_What is an AI Agent?_ (3/3 - ✅ COMPLETE):
+
+-   ✅ 3.1.1 Agent Definition - **RESTRUCTURED!** Core components (Perception→Reasoning→Acting→Memory), AI SDK v6 ToolLoopAgent
+-   ✅ 3.1.2 Agent Types - **RESTRUCTURED!** Reflexive, Goal-Based, Utility-Based, Learning, hybrid architectures
+-   ✅ 3.1.3 When to Use Agents - **RESTRUCTURED!** Decision framework (Single LLM → Workflow → Agent), anti-patterns
+
+_ReAct Pattern_ (5/5 - ✅ COMPLETE):
+
+-   ✅ 3.2.1 ReAct Loop - **RESTRUCTURED!** Think→Act→Observe cycle, AI SDK v6 ToolLoopAgent, stopWhen, 15-25% accuracy
+-   ✅ 3.2.2 Reasoning Phase - **RESTRUCTURED!** Context assessment, gap identification, tool selection strategies
+-   ✅ 3.2.3 Acting Phase - **RESTRUCTURED!** Tool execution, validation, single vs parallel, HITL confirmation
+-   ✅ 3.2.4 Observation Phase - **RESTRUCTURED!** Result interpretation, memory updates, loop control, error recovery
+-   ✅ 3.2.5 AI SDK v6 Implementation - **RESTRUCTURED!** ToolLoopAgent API, streaming, context injection, production patterns
+
+**Layer 1: Prompt Engineering** (14/14 topics - ✅ 100% COMPLETE):
+
+_Basic Techniques (5/5 - ✅ COMPLETE - Restructured Dec 2025)_:
+
+-   ✅ 1.1.1 Instruction Design - **RESTRUCTURED!** CLEAR Framework, 6 Core Principles, 4 Implementation Patterns
+-   ✅ 1.1.2 Few-Shot Learning - **RESTRUCTURED!** Example Selection, Dynamic RAG, Token Optimization
+-   ✅ 1.1.3 Chain-of-Thought - **RESTRUCTURED!** 50-400% gains, Self-Ask, Structured Templates
+-   ✅ 1.1.4 Zero-Shot CoT - **RESTRUCTURED!** Magic Phrases, Plan-and-Solve, Chain of Draft
+-   ✅ 1.1.5 Self-Consistency - **RESTRUCTURED!** Voting, USC, Multi-Model Ensemble, +7-18% accuracy
 
 **Layer 4: Memory & State** (21/21 topics - ✅ 100% COMPLETE):
 
@@ -131,45 +157,54 @@ _Long-Term Memory (5/5 - ✅ COMPLETE)_:
 -   ✅ 4.3.4 Cross-Session Retrieval - Persistent memory across conversations (24KB, 9+ sources)
 -   ✅ 4.3.5 When to Use vs Working Memory - Decision framework, cost-benefit analysis, ROI calculations (22KB)
 
-**Layer 3: Agent Architecture** (2/20 topics - 🚧 10% COMPLETE):
+**Layer 3: Agent Architecture** (8/20 topics - 🚧 40% COMPLETE):
 
-_Core Patterns_ (2/5):
+_What is an AI Agent?_ (3/3 - ✅ COMPLETE - Restructured Dec 2025):
 
--   ✅ 3.1.1 ReAct Pattern - Analysis of your `server/prompts/react.xml`, Think→Act→Observe loop, 2024-2025 research (ReSpAct, A3T, Plan-and-Execute), 5 enhancement recommendations
--   ✅ 3.1.2 Tool Design Patterns - **NEW!** Deep analysis of your `server/tools/all-tools.ts` (20+ CMS tools), schema design, parameter validation, error handling, HITL confirmations, granular fetching (40-96% savings), 4-phase enhancement roadmap
+-   ✅ 3.1.1 Agent Definition - **RESTRUCTURED!** Core components (Perception→Reasoning→Acting→Memory), AI SDK v6 ToolLoopAgent, research grounding
+-   ✅ 3.1.2 Agent Types - **RESTRUCTURED!** Reflexive, Goal-Based, Utility-Based, Learning agents, hybrid architectures
+-   ✅ 3.1.3 When to Use Agents - **RESTRUCTURED!** Decision framework (Single LLM → Workflow → Agent), cost-benefit analysis, anti-patterns
+
+_ReAct Pattern_ (5/5 - ✅ COMPLETE - Restructured Dec 2025):
+
+-   ✅ 3.2.1 ReAct Loop - **RESTRUCTURED!** Think→Act→Observe cycle, AI SDK v6 ToolLoopAgent, stopWhen conditions, 15-25% accuracy improvement
+-   ✅ 3.2.2 Reasoning Phase - **RESTRUCTURED!** Context assessment, gap identification, tool selection, reasoning patterns
+-   ✅ 3.2.3 Acting Phase - **RESTRUCTURED!** Tool execution, validation, single vs parallel actions, HITL confirmation
+-   ✅ 3.2.4 Observation Phase - **RESTRUCTURED!** Result interpretation, memory updates, loop control, error recovery
+-   ✅ 3.2.5 AI SDK v6 Implementation - **RESTRUCTURED!** ToolLoopAgent API, tool definition, streaming, context injection, production patterns
 
 **Layer 2: Context Engineering** (12/12 topics - ✅ 100% COMPLETE):
 
-_Token Optimization_ (4/4 - ✅ COMPLETE):
+_Token Optimization_ (4/4 - ✅ COMPLETE - Restructured Dec 2025):
 
--   ✅ 2.1.1 Compression Techniques - LongLLMLingua, LLMLingua-2, 60-90% reduction maintaining 95%+ accuracy
--   ✅ 2.1.2 Importance Scoring - RankRAG (+18% accuracy), 5 scoring strategies, production integration
--   ✅ 2.1.3 Lazy Loading - Your `cms_getPage(fetchMode)` validated, 90%+ token reduction
--   ✅ 2.1.4 Hybrid Content Fetching - Deep analysis of your CMS pattern, three-tier enhancement
+-   ✅ 2.1.1 Compression Techniques - **RESTRUCTURED!** LLMLingua-2 (3-6× faster), LongLLMLingua (21.4% RAG), 60-90% token reduction
+-   ✅ 2.1.2 Importance Scoring - **RESTRUCTURED!** RankRAG, Cross-Encoder Reranking (15-30% accuracy), Two-Stage Retrieval
+-   ✅ 2.1.3 Lazy Loading - **RESTRUCTURED!** Two-Tier/Three-Tier Fetching, Hierarchical Loading, 90%+ token reduction
+-   ✅ 2.1.4 Hybrid Content Fetching - **RESTRUCTURED!** Query-Adaptive Fetching, Progressive Enhancement, 75-95% savings
 
-_Context Management Patterns_ (4/4 - ✅ COMPLETE):
+_Context Management Patterns_ (4/4 - ✅ COMPLETE - Restructured Dec 2025):
 
--   ✅ 2.2.1 Sliding Window - StreamingLLM (22.2× speedup), attention sinks, 4M token capability
--   ✅ 2.2.2 Hierarchical Memory - HiAgent (2× success rate), 10:1 compression, ACL 2025
--   ✅ 2.2.3 Context Pruning - LazyLLM, TokenSelect (23.84× speedup), AgentDiet (39.9-59.7% reduction)
--   ✅ 2.2.4 KV-Cache Optimization - RocketKV (400× compression), FastKV, EpiCache, production frameworks
+-   ✅ 2.2.1 Sliding Window - **RESTRUCTURED!** StreamingLLM (22.2× speedup), attention sinks, 4M token capability
+-   ✅ 2.2.2 Hierarchical Memory - **RESTRUCTURED!** HiAgent (2× success rate), 10:1 compression, ACL 2025
+-   ✅ 2.2.3 Context Pruning - **RESTRUCTURED!** LazyLLM, TokenSelect (23.84× speedup), AgentDiet (39.9-59.7% reduction)
+-   ✅ 2.2.4 KV-Cache Optimization - **RESTRUCTURED!** RocketKV (400× compression), FastKV, EpiCache, production frameworks
 
-_Injection Strategies_ (3/4 - 🚧 IN PROGRESS):
+_Injection Strategies_ (4/4 - ✅ COMPLETE - Restructured Dec 2025):
 
--   ✅ 2.3.1 Injection Location - ACE framework (+10.6%), RAT (+13-43%), system/user/assistant placement
--   ✅ 2.3.2 Injection Timing - "When to Retrieve" (95%+ accuracy), DeepRAG (+26.4%), 30-50% cost reduction
--   ✅ 2.3.3 Injection Format - **NEW!** XML/JSON/Markdown comparison, 15-40% performance impact, RAG formatting strategies
--   ✅ 2.3.4 Working Memory Pattern - **NEW!** Analysis of your `server/services/working-memory/` implementation, enhancement recommendations
+-   ✅ 2.3.1 Injection Location - **RESTRUCTURED!** ACE framework (+10.6%), RAT (+13-43%), system/user/assistant placement
+-   ✅ 2.3.2 Injection Timing - **RESTRUCTURED!** "When to Retrieve" (95%+ accuracy), DeepRAG (+26.4%), 30-50% cost reduction
+-   ✅ 2.3.3 Injection Format - **RESTRUCTURED!** XML/JSON/Markdown comparison, 15-40% performance impact, RAG formatting strategies
+-   ✅ 2.3.4 Working Memory Pattern - **RESTRUCTURED!** Entity extraction, importance scoring, episodic memory, 10-25% accuracy improvement
 
-**Layer 1: Prompt Engineering** (14/14 topics - ✅ COMPLETE):
+**Layer 1: Prompt Engineering** (14/14 topics - ✅ COMPLETE - Restructured Dec 2025):
 
-_Basic Techniques_ (5/5):
+_Basic Techniques_ (5/5 - ✅ RESTRUCTURED):
 
--   ✅ 1.1.1 Instruction Design - CLEAR framework, principles, templates
--   ✅ 1.1.2 Few-Shot Learning - Example selection, ordering, RAG integration
--   ✅ 1.1.3 Chain-of-Thought - CoT variants, ReAct connection, self-consistency
--   ✅ 1.1.4 Zero-Shot CoT - Magic phrases, Plan-and-Solve, Chain of Draft
--   ✅ 1.1.5 Self-Consistency - Voting mechanisms, weighted voting, USC
+-   ✅ 1.1.1 Instruction Design - CLEAR Framework, 6 Core Principles, 4 Implementation Patterns
+-   ✅ 1.1.2 Few-Shot Learning - Example Selection Criteria, Dynamic RAG, Token Optimization
+-   ✅ 1.1.3 Chain-of-Thought - 50-400% improvement, Self-Ask, Structured Templates
+-   ✅ 1.1.4 Zero-Shot CoT - Magic Phrases, Plan-and-Solve, Chain of Draft (90% token reduction)
+-   ✅ 1.1.5 Self-Consistency - Voting, USC, Multi-Model Ensemble, +7-18% accuracy
 
 _System Prompts_ (5/5):
 
@@ -288,27 +323,65 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 1.1 Basic Prompting Techniques
 
--   [1.1.1 Single-Shot Prompting](./kb/1-prompts/1.1.1-single-shot.md) ⏳
--   [1.1.2 Few-Shot Learning](./kb/1-prompts/1.1.2-few-shot.md) ⏳
--   [1.1.3 Chain-of-Thought (CoT)](./kb/1-prompts/1.1.3-chain-of-thought.md) ⏳
--   [1.1.4 Zero-Shot CoT](./kb/1-prompts/1.1.4-zero-shot-cot.md) ⏳
--   [1.1.5 Self-Consistency](./kb/1-prompts/1.1.5-self-consistency.md) ⏳
+-   [1.1.1 Instruction Design](./1-prompts/1.1.1-instruction-design.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 415+ lines with TL;DR, CLEAR Framework, 4 Implementation Patterns
+    -   **Includes**: 6 Core Principles, Task Decomposition, Conditional Instructions, Production Best Practices
+-   [1.1.2 Few-Shot Learning](./1-prompts/1.1.2-few-shot.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 415+ lines with TL;DR, 4 Implementation Patterns, Dynamic RAG
+    -   **Includes**: Example Selection Criteria, Token Optimization, Ordering Strategies
+-   [1.1.3 Chain-of-Thought (CoT)](./1-prompts/1.1.3-chain-of-thought.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 375+ lines with TL;DR, 4 Implementation Patterns, Self-Ask
+    -   **Includes**: 50-400% improvement benchmarks, Structured Reasoning Template, Verification Steps
+-   [1.1.4 Zero-Shot CoT](./1-prompts/1.1.4-zero-shot-cot.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 380+ lines with TL;DR, 4 Implementation Patterns, Plan-and-Solve
+    -   **Includes**: Magic Phrases, Two-Stage Process, Chain of Draft (90% token reduction)
+-   [1.1.5 Self-Consistency](./1-prompts/1.1.5-self-consistency.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 415+ lines with TL;DR, 4 Implementation Patterns, Multi-Model Ensemble
+    -   **Includes**: +7-18% accuracy, Weighted Voting, Universal Self-Consistency (USC)
 
 #### 1.2 System Prompts & Instructions
 
--   [1.2.1 Role Definition (Identity)](./kb/1-prompts/1.2.1-role-definition.md) ⏳
--   [1.2.2 Capabilities Declaration](./kb/1-prompts/1.2.2-capabilities.md) ⏳
--   [1.2.3 Rules & Constraints](./kb/1-prompts/1.2.3-rules-constraints.md) ⏳
--   [1.2.4 Output Format Specification](./kb/1-prompts/1.2.4-output-format.md) ⏳
--   [1.2.5 Modular Prompt Architecture](./kb/1-prompts/1.2.5-modular-architecture.md) ⏳
+-   [1.2.1 Role Definition (Identity)](./1-prompts/1.2.1-role-definition.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 500+ lines with TL;DR, 4 Implementation Patterns
+    -   **Includes**: Expert, Specialist, Consultant, Multi-Role patterns, 20-40% accuracy improvement
+-   [1.2.2 Capabilities Declaration](./1-prompts/1.2.2-capabilities.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 460+ lines with TL;DR, 4 Implementation Patterns
+    -   **Includes**: Tool Inventory, Knowledge Domains, Capability Matrix, Auto-Generated, 15-30% hallucination reduction
+-   [1.2.3 Rules & Constraints](./1-prompts/1.2.3-rules-constraints.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 515+ lines with TL;DR, 4 Implementation Patterns
+    -   **Includes**: Layered Guardrails, Priority-Based, Context-Conditional, Escalation patterns
+-   [1.2.4 Output Format Specification](./1-prompts/1.2.4-output-format.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 440+ lines with TL;DR, 4 Implementation Patterns
+    -   **Includes**: Zod Schema with AI SDK v6, Prefix Markers (ReAct), Section Templates, Enum Constraints
+-   [1.2.5 Modular Prompt Architecture](./1-prompts/1.2.5-modular-architecture.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 500+ lines with TL;DR, 4 Implementation Patterns
+    -   **Includes**: Function-Based Modules, Tag-Based Structure, Registry Pattern, File-Based Modules
     -   **Codebase Example**: `server/prompts/react.xml`
 
 #### 1.3 Prompt Templates & Variables
 
--   [1.3.1 Template Engines (Handlebars, Mustache)](./kb/1-prompts/1.3.1-template-engines.md) ⏳
--   [1.3.2 Variable Injection](./kb/1-prompts/1.3.2-variable-injection.md) ⏳
--   [1.3.3 Conditional Sections](./kb/1-prompts/1.3.3-conditional-sections.md) ⏳
--   [1.3.4 Prompt Versioning & Caching](./kb/1-prompts/1.3.4-versioning-caching.md) ⏳
+-   [1.3.1 Template Engines (Jinja2, Handlebars, Mustache)](./1-prompts/1.3.1-template-engines.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 490+ lines with TL;DR, 4 Implementation Patterns
+    -   **Includes**: Jinja2 (Python), Handlebars (TypeScript), Mustache, TypeScript Template Engine Class
+-   [1.3.2 Conditional Sections & Control Flow](./1-prompts/1.3.2-conditional-sections.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 520+ lines with TL;DR, 6 Implementation Patterns
+    -   **Includes**: Environment-Based, Permission-Based, Model-Specific, Task Complexity, Context-Aware Examples, Graceful Degradation
+-   [1.3.3 Versioning & Caching](./1-prompts/1.3.3-versioning-caching.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 540+ lines with TL;DR, 5 Implementation Patterns
+    -   **Includes**: Langfuse Versioning, File-Based, Anthropic Native Caching, Redis Caching, Combined Strategy (60-90% cost reduction)
 
 ---
 
@@ -318,28 +391,52 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 2.1 Token Optimization
 
--   [2.1.1 Compression Techniques (Summarization)](./kb/2-context/2.1.1-compression.md) ⏳
--   [2.1.2 Importance Scoring](./kb/2-context/2.1.2-importance-scoring.md) ⏳
--   [2.1.3 Lazy Loading (Fetch on Demand)](./kb/2-context/2.1.3-lazy-loading.md) ⏳
--   [2.1.4 Hybrid Content Fetching](./kb/2-context/2.1.4-hybrid-fetching.md) ⏳
-    -   **Codebase Example**: `server/tools/all-tools.ts` (cms_getPage with includeContent flag)
+-   [2.1.1 Compression Techniques](./2-context/2.1.1-compression.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 440+ lines with TL;DR, 4 Implementation Patterns, Research & Benchmarks
+    -   **Includes**: LLMLingua-2 (3-6× faster), LongLLMLingua (21.4% RAG improvement), 60-90% token reduction
+-   [2.1.2 Importance Scoring](./2-context/2.1.2-importance-scoring.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 515+ lines with TL;DR, 5 Implementation Patterns, Research & Benchmarks
+    -   **Includes**: RankRAG, Cross-Encoder Reranking (15-30% accuracy improvement), Two-Stage Retrieval
+-   [2.1.3 Lazy Loading (Fetch on Demand)](./2-context/2.1.3-lazy-loading.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 540+ lines with TL;DR, 5 Implementation Patterns, Research & Benchmarks
+    -   **Includes**: Two-Tier/Three-Tier Fetching, Hierarchical Loading, 90%+ token reduction
+-   [2.1.4 Hybrid Content Fetching](./2-context/2.1.4-hybrid-fetching.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 510+ lines with TL;DR, 5 Implementation Patterns, Research & Benchmarks
+    -   **Includes**: Query-Adaptive Fetching, Progressive Enhancement, 75-95% token savings
 
 #### 2.2 Context Management Patterns
 
--   [2.2.1 Sliding Window (Fixed Size)](./kb/2-context/2.2.1-sliding-window.md) ⏳
--   [2.2.2 Hierarchical Memory (Subgoal-Based)](./kb/2-context/2.2.2-hierarchical-memory.md) ⏳
-    -   **Research**: HiAgent (2024)
--   [2.2.3 Context Pruning (Remove Low-Value)](./kb/2-context/2.2.3-context-pruning.md) ⏳
--   [2.2.4 KV-Cache Optimization](./kb/2-context/2.2.4-kv-cache.md) ⏳
-    -   **Research**: Manus.im (2024)
+-   [2.2.1 Sliding Window (Fixed Size)](./2-context/2.2.1-sliding-window.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: StreamingLLM (22.2× speedup), attention sinks, 4M token capability
+-   [2.2.2 Hierarchical Memory (Subgoal-Based)](./2-context/2.2.2-hierarchical-memory.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: HiAgent (2× success rate), 10:1 compression, ACL 2025
+-   [2.2.3 Context Pruning (Remove Low-Value)](./2-context/2.2.3-context-pruning.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: LazyLLM, TokenSelect (23.84× speedup), AgentDiet (39.9-59.7% reduction)
+-   [2.2.4 KV-Cache Optimization](./2-context/2.2.4-kv-cache.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: RocketKV (400× compression), FastKV, EpiCache, production frameworks
 
 #### 2.3 Context Injection Strategies
 
--   [2.3.1 Where to Inject (System, User, Assistant)](./kb/2-context/2.3.1-injection-location.md) ⏳
--   [2.3.2 Timing (Always vs Conditional)](./kb/2-context/2.3.2-injection-timing.md) ⏳
--   [2.3.3 Format (Structured vs Narrative)](./kb/2-context/2.3.3-injection-format.md) ⏳
--   [2.3.4 Working Memory Pattern](./kb/2-context/2.3.4-working-memory.md) ⏳
-    -   **Codebase Example**: `server/services/working-memory/`
+-   [2.3.1 Where to Inject (System, User, Assistant)](./2-context/2.3.1-injection-location.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: ACE framework (+10.6%), RAT (+13-43%), system/user/assistant placement
+-   [2.3.2 Timing (Always vs Conditional)](./2-context/2.3.2-injection-timing.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: "When to Retrieve" (95%+ accuracy), DeepRAG (+26.4%), 30-50% cost reduction
+-   [2.3.3 Format (Structured vs Narrative)](./2-context/2.3.3-injection-format.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: XML/JSON/Markdown comparison, 15-40% performance impact
+-   [2.3.4 Working Memory Pattern](./2-context/2.3.4-working-memory.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Entity extraction, importance scoring, episodic memory, 10-25% accuracy improvement
 
 ---
 
@@ -349,19 +446,33 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 3.1 What is an AI Agent?
 
--   [3.1.1 Definition & Components](./kb/3-agents/3.1.1-agent-definition.md) ⏳
--   [3.1.2 Agent Types (Reflexive, Goal-Based, Utility-Based)](./kb/3-agents/3.1.2-agent-types.md) ⏳
--   [3.1.3 When to Use Agents vs Single LLM Calls](./kb/3-agents/3.1.3-when-agents.md) ⏳
+-   [3.1.1 Definition & Components](./3-agents/3.1.1-agent-definition.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Core agent components (Perception→Reasoning→Acting→Memory), AI SDK v6 ToolLoopAgent patterns
+-   [3.1.2 Agent Types (Reflexive, Goal-Based, Utility-Based, Learning)](./3-agents/3.1.2-agent-types.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Agent complexity spectrum, hybrid architectures, layered approach
+-   [3.1.3 When to Use Agents vs Single LLM Calls](./3-agents/3.1.3-when-agents.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Decision framework, cost-benefit analysis, anti-patterns to avoid
 
 #### 3.2 ReAct Pattern (Reasoning + Acting)
 
--   [3.2.1 Core Loop: Think → Act → Observe → Repeat](./kb/3-agents/3.2.1-react-loop.md) ⏳
-    -   **Codebase Example**: `server/prompts/react.xml`
--   [3.2.2 Reasoning Phase (Plan Next Step)](./kb/3-agents/3.2.2-reasoning-phase.md) ⏳
--   [3.2.3 Acting Phase (Execute Tool)](./kb/3-agents/3.2.3-acting-phase.md) ⏳
--   [3.2.4 Observation Phase (Interpret Result)](./kb/3-agents/3.2.4-observation-phase.md) ⏳
--   [3.2.5 Implementation with AI SDK v6](./kb/3-agents/3.2.5-ai-sdk-implementation.md) ⏳
-    -   **Codebase Example**: `server/agent/orchestrator.ts`
+-   [3.2.1 Core Loop: Think → Act → Observe → Repeat](./3-agents/3.2.1-react-loop.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: ReAct cycle, AI SDK v6 ToolLoopAgent, stopWhen conditions, 15-25% accuracy improvement
+-   [3.2.2 Reasoning Phase (Plan Next Step)](./3-agents/3.2.2-reasoning-phase.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Context assessment, gap identification, tool evaluation, reasoning patterns
+-   [3.2.3 Acting Phase (Execute Tool)](./3-agents/3.2.3-acting-phase.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Tool execution flow, validation, single vs parallel actions, HITL confirmation
+-   [3.2.4 Observation Phase (Interpret Result)](./3-agents/3.2.4-observation-phase.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Result interpretation, memory updates, loop control, error recovery patterns
+-   [3.2.5 Implementation with AI SDK v6](./3-agents/3.2.5-ai-sdk-implementation.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: ToolLoopAgent API, tool definition with Zod, streaming integration, context injection
 
 #### 3.3 Tool Calling & Execution
 
@@ -714,8 +825,8 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 11.3 Debugging Techniques
 
--   [11.3.1 Debug Pane (Real-Time Logs)](./kb/11-production/11.3.1-debug-pane.md) ⏳
-    -   **Codebase Example**: `app/assistant/_components/debug-pane.tsx`
+-   [11.3.1 Debug Panel (Real-Time Logs)](./kb/11-production/11.3.1-debug-pane.md) ⏳
+    -   **Codebase Example**: `app/assistant/_components/enhanced-debug/`
 -   [11.3.2 Replay from Checkpoint](./kb/11-production/11.3.2-replay.md) ⏳
 -   [11.3.3 Step-by-Step Execution](./kb/11-production/11.3.3-step-by-step.md) ⏳
 -   [11.3.4 LLM Call Inspection (Prompts, Responses)](./kb/11-production/11.3.4-llm-inspection.md) ⏳

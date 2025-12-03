@@ -52,18 +52,18 @@ The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v
 │  │  │  Page  │Section │ Entry  │ Image  │  Post  │Navigation│  │  │
 │  │  │  Tools │ Tools  │ Tools  │ Tools  │ Tools  │  Tools   │  │  │
 │  │  └────────┴────────┴────────┴────────┴────────┴──────────┘  │  │
-│  │                    21 Total Tools                           │  │
+│  │                    45 Total Tools                           │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
 │         ┌────────────────────┼────────────────────┐               │
 │         ▼                    ▼                    ▼               │
 │  ┌─────────────┐     ┌─────────────┐      ┌─────────────┐         │
 │  │   Working   │     │    HITL     │      │  Tokenizer  │         │
-│  │   Memory    │     │needsApproval│      │  & Pricing  │         │
+│  │   Memory    │     │ Conversational │   │  & Pricing  │         │
 │  │             │     │             │      │             │         │
-│  │ Entity track│     │ Native SDK  │      │ Token count │         │
-│  │ Reference   │     │ approval    │      │ Cost calc   │         │
-│  │ resolution  │     │ flow        │      │             │         │
+│  │ Entity track│     │ confirmed   │      │ Token count │         │
+│  │ Reference   │     │ flag pattern│      │ Cost calc   │         │
+│  │ resolution  │     │             │      │             │         │
 │  └─────────────┘     └─────────────┘      └─────────────┘         │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -213,9 +213,11 @@ const result = await cmsAgent.generate({
 | Custom while loop + retry | SDK handles internally |
 | Custom step tracking | `stopWhen` conditions |
 | Checkpoint every 3 steps | Messages saved at end only |
-| `ApprovalQueue` service | Confirmed flag pattern |
+| `ApprovalQueue` service | Conversational confirmed flag pattern |
 | Untyped options | `callOptionsSchema` with Zod |
 | Static system prompt | `prepareCall` dynamic injection |
+| Routes 600+ lines | Routes ~100 lines (thin controllers) |
+| Business logic in routes | AgentOrchestrator service |
 
 ---
 
@@ -236,56 +238,70 @@ const result = await cmsAgent.generate({
 
 ## Tool Registry
 
-All 21 tools are defined with Zod schemas and `needsApproval` for destructive ops:
+All 45 tools are defined with Zod schemas. Destructive operations use the `confirmed` flag pattern:
 
 ```typescript
 // server/tools/all-tools.ts
 export const ALL_TOOLS = {
-  // Page tools
-  cms_getPages: tool({
-    description: 'List all pages in the site',
-    parameters: z.object({
-      status: z.enum(['draft', 'published', 'all']).optional(),
+  // Page tools (read)
+  cms_getPage: tool({
+    description: 'Get a page by slug or ID',
+    inputSchema: z.object({
+      slug: z.string().optional(),
+      id: z.string().optional(),
+      includeContent: z.boolean().optional().default(false),
     }),
-    execute: async ({ status }, { experimental_context }) => {
+    execute: async (input, { experimental_context }) => {
       const ctx = experimental_context as AgentContext;
-      const pages = await ctx.services.pageService.getPages(
-        ctx.cmsTarget.siteId,
-        ctx.cmsTarget.environmentId,
-        status
-      );
-      return { pages };
+      const page = await ctx.services.pageService.getPageBySlug(input.slug!);
+      return { page };
     },
   }),
 
+  // Page tools (destructive) - uses confirmed flag pattern
   cms_deletePage: tool({
-    description: 'Delete a page permanently',
-    parameters: z.object({
-      pageId: z.string(),
+    description: 'Delete a page permanently. Requires confirmed: true.',
+    inputSchema: z.object({
+      slug: z.string().optional(),
+      id: z.string().optional(),
+      confirmed: z.boolean().optional().describe('Must be true to delete'),
     }),
-    needsApproval: true,  // Native AI SDK 6 HITL
-    execute: async ({ pageId }, { experimental_context }) => {
+    execute: async (input, { experimental_context }) => {
       const ctx = experimental_context as AgentContext;
-      await ctx.services.pageService.deletePage(pageId);
+
+      // First call: return confirmation request
+      if (!input.confirmed) {
+        return {
+          requiresConfirmation: true,
+          message: `Are you sure you want to delete this page?`,
+        };
+      }
+
+      // Second call with confirmed: true
+      await ctx.services.pageService.deletePage(input.id!);
       return { success: true };
     },
   }),
 
-  // ... 19 more tools
+  // ... 43 more tools
 };
 ```
 
 ### Tool Categories
 
-| Category   | Tools                                                                             | Purpose            |
-| ---------- | --------------------------------------------------------------------------------- | ------------------ |
-| Page       | getPages, getPage, createPage, updatePage, deletePage                             | Page CRUD          |
-| Section    | getSectionDefinitions, getSectionEntries, updateSection                           | Section management |
-| Entry      | createEntry, updateEntry, deleteEntry                                             | Content entries    |
-| Image      | findImage, searchImages, listImages, addImageToSection, replaceImage, deleteImage | Media management   |
-| Post       | getPosts, createPost, updatePost, publishPost, archivePost, deletePost            | Blog content       |
-| Navigation | getNavigation, updateNavigation                                                   | Menu structure     |
-| Site       | getSiteSettings, updateSiteSettings                                               | Global config      |
+| Category       | Count | Tools                                                                                           | Purpose                |
+| -------------- | ----- | ----------------------------------------------------------------------------------------------- | ---------------------- |
+| Page           | 6     | getPage, createPage, createPageWithContent, updatePage, deletePage, listPages                   | Page CRUD              |
+| Section        | 8     | listSectionTemplates, getSectionFields, addSectionToPage, updateSectionContent, deletePageSection, deletePageSections, getPageSections, getSectionContent | Section management |
+| Entry          | 2     | getCollectionEntries, getEntryContent                                                           | Collection entries     |
+| Search         | 2     | searchVector, findResource                                                                      | Semantic search        |
+| Image          | 7     | findImage, searchImages, listAllImages, addImageToSection, updateSectionImage, replaceImage, deleteImage | Media management |
+| Navigation     | 5     | getNavigation, addNavigationItem, updateNavigationItem, removeNavigationItem, toggleNavigationItem | Menu structure |
+| Post           | 7     | createPost, updatePost, publishPost, archivePost, deletePost, listPosts, getPost                | Blog content           |
+| HTTP           | 2     | httpGet, httpPost                                                                               | External APIs          |
+| Planning       | 1     | planAnalyzeTask                                                                                 | Task analysis          |
+| Web Research   | 3     | webQuickSearch, webDeepResearch, webFetchContent                                                | Exa AI research        |
+| Stock Photos   | 2     | pexelsSearchPhotos, pexelsDownloadPhoto                                                         | Pexels integration     |
 
 ---
 
@@ -372,38 +388,45 @@ When user says "delete that page", the system resolves "that page" → page ID.
 
 ## Human-in-the-Loop (HITL)
 
-**AI SDK 6 Native Pattern**: Uses `needsApproval: true` on tools:
+**Conversational Confirmed Flag Pattern**: Destructive tools require explicit confirmation via the `confirmed` parameter:
 
 ```typescript
 // server/tools/all-tools.ts
 cms_deletePage: tool({
-  description: 'Delete a page permanently',
-  parameters: z.object({
-    pageId: z.string(),
+  description: 'Delete a page permanently. Requires confirmed: true.',
+  inputSchema: z.object({
+    slug: z.string().optional(),
+    id: z.string().optional(),
+    confirmed: z.boolean().optional().describe('Must be true to delete'),
   }),
-  needsApproval: true,  // SDK pauses execution
-  execute: async ({ pageId }, { experimental_context }) => {
-    // Only runs after user approves
+  execute: async (input, { experimental_context }) => {
     const ctx = experimental_context as AgentContext;
-    await ctx.services.pageService.deletePage(pageId);
-    return { success: true };
+
+    // First call without confirmed: return confirmation request
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to delete page "${page.name}"?`,
+        page: { id: page.id, slug: page.slug, name: page.name },
+      };
+    }
+
+    // Second call with confirmed: true - execute deletion
+    await ctx.services.pageService.deletePage(input.id!);
+    return { success: true, message: 'Page deleted successfully.' };
   },
 }),
 ```
 
-**Approval Flow:**
-1. Tool with `needsApproval: true` is called
-2. AI SDK emits `tool-call` event with approval state
-3. Frontend shows inline approval card
-4. User approves/rejects
-5. If approved, tool executes
+**Confirmation Flow:**
+1. User requests deletion (e.g., "delete the about page")
+2. Tool called without `confirmed` flag
+3. Tool returns `{ requiresConfirmation: true, message: "..." }`
+4. Agent presents confirmation message to user in chat
+5. User confirms ("yes") or cancels ("no")
+6. If confirmed, tool called again with `confirmed: true`
 
-**Approval Endpoint:**
-```typescript
-// app/api/agent/approve/route.ts
-POST /api/agent/approve
-{ approvalId: string, approved: boolean, reason?: string }
-```
+**No Modal/Endpoint Needed**: The confirmation happens conversationally in the chat, not via a separate approval endpoint. See [3.5 HITL](./LAYER_3.5_HITL.md) for full details.
 
 ---
 

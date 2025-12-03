@@ -9,12 +9,16 @@
  * - Working memory via system prompt injection
  */
 
-import { ToolLoopAgent, stepCountIs } from "ai";
+import { ToolLoopAgent, stepCountIs, NoSuchToolError, InvalidToolInputError } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { ALL_TOOLS } from "../tools/all-tools";
 import { getSystemPrompt } from "./system-prompt";
-import type { AgentContext } from "../tools/types";
+import type { AgentContext, AgentLogger, StreamWriter } from "../tools/types";
+import type { DrizzleDB } from "../db/client";
+import type { ServiceContainer } from "../services/service-container";
+import type { SessionService } from "../services/session-service";
+import type { VectorIndexService } from "../services/vector-index";
 
 // ============================================================================
 // Provider Setup
@@ -56,12 +60,13 @@ export const AgentCallOptionsSchema = z.object({
 	}),
 
 	// Runtime-injected services (passed through to tools via experimental_context)
-	db: z.custom<any>(),
-	services: z.custom<any>(),
-	sessionService: z.custom<any>(),
-	vectorIndex: z.custom<any>(),
-	logger: z.custom<any>(),
-	stream: z.custom<any>().optional(),
+	// Using z.custom with proper types - validation happens at runtime via TypeScript
+	db: z.custom<DrizzleDB>((val) => val != null),
+	services: z.custom<ServiceContainer>((val) => val != null),
+	sessionService: z.custom<SessionService>((val) => val != null),
+	vectorIndex: z.custom<VectorIndexService>((val) => val != null),
+	logger: z.custom<AgentLogger>((val) => val != null),
+	stream: z.custom<StreamWriter>((val) => val != null).optional(),
 });
 
 export type AgentCallOptions = z.infer<typeof AgentCallOptionsSchema>;
@@ -148,5 +153,25 @@ export const cmsAgent = new ToolLoopAgent({
 	// Message saving happens at the end via onFinish in the route
 	onStepFinish: async () => {
 		// No-op - handled by route handler
+	},
+
+	// Handle malformed tool calls - let model retry naturally
+	experimental_repairToolCall: async ({ toolCall, tools, error }) => {
+		// Don't attempt to fix unknown tool names
+		if (NoSuchToolError.isInstance(error)) {
+			console.warn(`[repairToolCall] Unknown tool: ${toolCall.toolName}`);
+			return null;
+		}
+
+		// For invalid input, log and let prompt-based recovery handle it
+		if (InvalidToolInputError.isInstance(error)) {
+			console.warn(`[repairToolCall] Invalid input for ${toolCall.toolName}:`, error.message);
+			// Could implement schema-based repair here in future
+			// For now, return null to let the model retry naturally
+			return null;
+		}
+
+		console.warn(`[repairToolCall] Unhandled error for ${toolCall.toolName}:`, error);
+		return null;
 	},
 });

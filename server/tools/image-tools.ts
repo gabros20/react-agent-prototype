@@ -1,15 +1,21 @@
+/**
+ * Image Tools - Semantic image search and management
+ *
+ * Uses experimental_context for all service access (AI SDK v6 pattern).
+ * No ServiceContainer.get() or module-level service instantiation.
+ */
+
 import { tool } from "ai";
 import { z } from "zod";
-import { db } from "../db/client";
-import { images, conversationImages, pageSectionContents } from "../db/schema";
+import { images, pageSectionContents } from "../db/schema";
 import { eq, and } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import imageProcessingService from "../services/storage/image-processing.service";
+import type { AgentContext } from "./types";
 
 /**
  * Find image by natural language description
  */
-export const findImageTool: any = tool({
+export const findImageTool = tool({
 	description:
 		"Find an image by natural language description. Use when user mentions an image or asks to find/delete/modify a specific image.",
 	inputSchema: z.object({
@@ -19,15 +25,14 @@ export const findImageTool: any = tool({
 				'Natural language description (e.g., "the puppy image", "sunset photo")'
 			),
 	}),
-	execute: async (input: { description: string }): Promise<any> => {
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
 		const { description } = input;
 		try {
-			const { ServiceContainer } = await import("../services/service-container");
-			const vectorIndex = ServiceContainer.get().vectorIndex;
-			const result = await vectorIndex.findImageByDescription(description);
+			const result = await ctx.vectorIndex.findImageByDescription(description);
 
 			// Get full image details
-			const image = await db.query.images.findFirst({
+			const image = await ctx.db.query.images.findFirst({
 				where: eq(images.id, result.id),
 				with: {
 					metadata: true,
@@ -63,29 +68,28 @@ export const findImageTool: any = tool({
  * Search for multiple images using semantic similarity
  * Score interpretation: closer to 0 = better match, -0.3 or better is strong, -0.5 is moderate, -0.7+ is weak
  */
-export const searchImagesTool: any = tool({
+export const searchImagesTool = tool({
 	description: "Search for images using semantic similarity. IMPORTANT: Expand short queries with descriptive keywords (e.g., 'AI' → 'artificial intelligence robot technology futuristic', 'money plant' → 'indoor plant greenery botanical houseplant'). Returns ranked results with relevance: 'strong' (score >= -0.3), 'moderate' (-0.3 to -0.6), 'weak' (< -0.6). Default filter includes moderate matches.",
 	inputSchema: z.object({
 		query: z.string().describe("Search query - use multiple descriptive keywords for better results"),
 		limit: z.number().optional().describe("Max results (default: 5)"),
 		minScore: z.number().optional().describe("Minimum score threshold (default: -0.7)"),
 	}),
-	execute: async (input: { query: string; limit?: number; minScore?: number }): Promise<any> => {
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
 		// Default minScore -0.7 to include moderate matches
 		const { query, limit = 5, minScore = -0.7 } = input;
 		try {
-			const { ServiceContainer } = await import("../services/service-container");
-			const vectorIndex = ServiceContainer.get().vectorIndex;
 			// Fetch more results initially to allow filtering
-			const { results } = await vectorIndex.searchImages(query, { limit: limit * 3 });
+			const { results } = await ctx.vectorIndex.searchImages(query, { limit: limit * 3 });
 
 			// Filter by minimum score threshold
-			const filteredResults = results.filter((r: any) => r.score >= minScore);
+			const filteredResults = results.filter((r: { score: number }) => r.score >= minScore);
 
 			// Get full image data including URLs from database
-			const imageIds = filteredResults.map((r: any) => r.id);
+			const imageIds = filteredResults.map((r: { id: string }) => r.id);
 			const fullImages = imageIds.length > 0
-				? await db.query.images.findMany({
+				? await ctx.db.query.images.findMany({
 						where: (images, { inArray }) => inArray(images.id, imageIds),
 						with: { metadata: true },
 					})
@@ -94,7 +98,7 @@ export const searchImagesTool: any = tool({
 			// Create lookup map for quick access
 			const imageMap = new Map(fullImages.map(img => [img.id, img]));
 
-			const finalResults = filteredResults.slice(0, limit).map((r: any) => {
+			const finalResults = filteredResults.slice(0, limit).map((r: { id: string; filename: string; description: string; score: number }) => {
 				const img = imageMap.get(r.id);
 				return {
 					id: r.id,
@@ -131,68 +135,15 @@ export const searchImagesTool: any = tool({
 });
 
 /**
- * List images in current conversation
- */
-export const listConversationImagesTool: any = tool({
-	description: "List all images uploaded in the current conversation. No parameters needed - uses current session automatically.",
-	inputSchema: z.object({}),
-	execute: async (_input: {}, { experimental_context }): Promise<any> => {
-		const ctx = experimental_context as any;
-		const sessionId = ctx?.sessionId;
-
-		if (!sessionId) {
-			return {
-				success: false,
-				images: [],
-				error: "Session ID not available in context",
-			};
-		}
-
-		try {
-			const conversationImgs = await db.query.conversationImages.findMany({
-				where: eq(conversationImages.sessionId, sessionId),
-				with: {
-					image: {
-						with: {
-							metadata: true,
-						},
-					},
-				},
-			});
-
-			return {
-				success: true,
-				images: conversationImgs.map((ci) => ({
-					id: ci.image.id,
-					filename: ci.image.filename,
-					originalFilename: ci.image.originalFilename,
-					url: ci.image.cdnUrl ?? (ci.image.filePath ? `/uploads/${ci.image.filePath}` : undefined),
-					status: ci.image.status,
-					uploadedAt: ci.uploadedAt,
-					description: ci.image.metadata?.description,
-					tags: ci.image.metadata?.tags ? JSON.parse(ci.image.metadata.tags as string) : [],
-				})),
-			};
-		} catch (error) {
-			return {
-				success: false,
-				images: [],
-				error: error instanceof Error ? error.message : "Failed to list images",
-			};
-		}
-	},
-});
-
-/**
  * Add image to page section (using inline JSON content pattern)
  */
-export const addImageToSectionTool: any = tool({
+export const addImageToSectionTool = tool({
 	description: "Add an uploaded image to a page section field (hero image, background, etc.). Updates section content with image URL and alt text. IMPORTANT: Check section fields first using cms_getSectionFields to get the correct field name.",
 	inputSchema: z.object({
 		imageId: z
 			.string()
 			.describe(
-				'Image ID (from findImage or listConversationImages)'
+				'Image ID (from findImage or searchImages)'
 			),
 		pageSectionId: z.string().describe("Page section ID"),
 		fieldName: z
@@ -200,11 +151,12 @@ export const addImageToSectionTool: any = tool({
 			.describe('Field name from section template (get exact name using cms_getSectionFields first)'),
 		localeCode: z.string().optional().default("en").describe("Locale code (default: 'en')"),
 	}),
-	execute: async (input: { imageId: string; pageSectionId: string; fieldName: string; localeCode?: string }): Promise<any> => {
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
 		const { imageId, pageSectionId, fieldName, localeCode = "en" } = input;
 		try {
 			// Get image details
-			const image = await db.query.images.findFirst({
+			const image = await ctx.db.query.images.findFirst({
 				where: eq(images.id, imageId),
 				with: { metadata: true },
 			});
@@ -218,7 +170,7 @@ export const addImageToSectionTool: any = tool({
 			}
 
 			// Get current section content
-			const currentContent = await db.query.pageSectionContents.findFirst({
+			const currentContent = await ctx.db.query.pageSectionContents.findFirst({
 				where: and(
 					eq(pageSectionContents.pageSectionId, pageSectionId),
 					eq(pageSectionContents.localeCode, localeCode)
@@ -226,14 +178,14 @@ export const addImageToSectionTool: any = tool({
 			});
 
 			// Parse existing content or start fresh
-			let content: Record<string, any> = {};
+			let content: Record<string, unknown> = {};
 			if (currentContent) {
 				try {
 					content = typeof currentContent.content === 'string'
 						? JSON.parse(currentContent.content)
-						: currentContent.content as Record<string, any>;
+						: currentContent.content as Record<string, unknown>;
 				} catch (error) {
-					console.error('Failed to parse existing content:', error);
+					ctx.logger.error({ message: 'Failed to parse existing content', error });
 				}
 			}
 
@@ -247,9 +199,7 @@ export const addImageToSectionTool: any = tool({
 			};
 
 			// Sync updated content
-			const { ServiceContainer } = await import("../services/service-container");
-			const service = ServiceContainer.get().sectionService;
-			await service.syncPageContents({
+			await ctx.services.sectionService.syncPageContents({
 				pageSectionId,
 				localeCode,
 				content,
@@ -273,7 +223,7 @@ export const addImageToSectionTool: any = tool({
 /**
  * Replace image in all sections (using inline JSON content pattern)
  */
-export const replaceImageTool: any = tool({
+export const replaceImageTool = tool({
 	description: "Replace one image with another across all page sections. Searches section content and replaces image URLs.",
 	inputSchema: z.object({
 		oldImageDescription: z
@@ -281,18 +231,17 @@ export const replaceImageTool: any = tool({
 			.describe("Description of image to replace"),
 		newImageId: z.string().describe("ID of new image"),
 	}),
-	execute: async (input: { oldImageDescription: string; newImageId: string }): Promise<any> => {
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
 		const { oldImageDescription, newImageId } = input;
 		try {
 			// Find old image
-			const { ServiceContainer } = await import("../services/service-container");
-			const vectorIndex = ServiceContainer.get().vectorIndex;
-			const searchResult = await vectorIndex.findImageByDescription(
+			const searchResult = await ctx.vectorIndex.findImageByDescription(
 				oldImageDescription
 			);
 
 			// Get full old image details from database
-			const oldImage = await db.query.images.findFirst({
+			const oldImage = await ctx.db.query.images.findFirst({
 				where: eq(images.id, searchResult.id),
 				with: { metadata: true },
 			});
@@ -302,7 +251,7 @@ export const replaceImageTool: any = tool({
 			}
 
 			// Get new image details
-			const newImage = await db.query.images.findFirst({
+			const newImage = await ctx.db.query.images.findFirst({
 				where: eq(images.id, newImageId),
 				with: { metadata: true },
 			});
@@ -312,7 +261,7 @@ export const replaceImageTool: any = tool({
 			}
 
 			// Get all section contents
-			const allContents = await db.query.pageSectionContents.findMany();
+			const allContents = await ctx.db.query.pageSectionContents.findMany();
 
 			const oldImageUrl = `/uploads/${oldImage.filePath}`;
 			const newImageUrl = `/uploads/${newImage.filePath}`;
@@ -325,19 +274,19 @@ export const replaceImageTool: any = tool({
 				try {
 					let content = typeof contentRecord.content === 'string'
 						? JSON.parse(contentRecord.content)
-						: contentRecord.content as Record<string, any>;
+						: contentRecord.content as Record<string, unknown>;
 
 					let modified = false;
 
 					// Recursively search for image fields and replace
-					const replaceInObject = (obj: any): void => {
+					const replaceInObject = (obj: Record<string, unknown>): void => {
 						for (const key in obj) {
 							const value = obj[key];
 							// Check if this is an image object with the old URL
 							if (
 								value &&
 								typeof value === 'object' &&
-								value.url === oldImageUrl
+								(value as Record<string, unknown>).url === oldImageUrl
 							) {
 								obj[key] = {
 									url: newImageUrl,
@@ -347,7 +296,7 @@ export const replaceImageTool: any = tool({
 								replacementCount++;
 							} else if (value && typeof value === 'object') {
 								// Recurse into nested objects
-								replaceInObject(value);
+								replaceInObject(value as Record<string, unknown>);
 							}
 						}
 					};
@@ -356,7 +305,7 @@ export const replaceImageTool: any = tool({
 
 					// Update if modified
 					if (modified) {
-						await db
+						await ctx.db
 							.update(pageSectionContents)
 							.set({
 								content: JSON.stringify(content),
@@ -365,7 +314,7 @@ export const replaceImageTool: any = tool({
 							.where(eq(pageSectionContents.id, contentRecord.id));
 					}
 				} catch (error) {
-					console.error(`Failed to process content ${contentRecord.id}:`, error);
+					ctx.logger.error({ message: `Failed to process content ${contentRecord.id}`, error });
 				}
 			}
 
@@ -388,7 +337,7 @@ export const replaceImageTool: any = tool({
 /**
  * Update section content with uploaded image
  */
-export const updateSectionImageTool: any = tool({
+export const updateSectionImageTool = tool({
 	description: "Update a section's image field with an uploaded image. Use this to change hero images, feature images, etc. to uploaded images from the system. IMPORTANT: Always check section fields first using cms_getSectionFields to get the correct field name before calling this tool.",
 	inputSchema: z.object({
 		pageSectionId: z.string().describe("Page section ID to update"),
@@ -396,12 +345,13 @@ export const updateSectionImageTool: any = tool({
 		imageId: z.string().describe("ID of uploaded image to use"),
 		localeCode: z.string().optional().default("en").describe("Locale code (default: 'en')"),
 	}),
-	execute: async (input: { pageSectionId: string; imageField: string; imageId: string; localeCode?: string }): Promise<any> => {
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
 		const { pageSectionId, imageField, imageId, localeCode = "en" } = input;
 		try {
 			// Get section to validate field name
 			const { pageSections, sectionDefinitions } = await import("../db/schema");
-			const section = await db.query.pageSections.findFirst({
+			const section = await ctx.db.query.pageSections.findFirst({
 				where: eq(pageSections.id, pageSectionId),
 			});
 
@@ -410,7 +360,7 @@ export const updateSectionImageTool: any = tool({
 			}
 
 			// Get section definition to validate field
-			const sectionDef = await db.query.sectionDefinitions.findFirst({
+			const sectionDef = await ctx.db.query.sectionDefinitions.findFirst({
 				where: eq(sectionDefinitions.id, section.sectionDefId),
 			});
 
@@ -452,7 +402,7 @@ export const updateSectionImageTool: any = tool({
 			}
 
 			// Get image details
-			const image = await db.query.images.findFirst({
+			const image = await ctx.db.query.images.findFirst({
 				where: eq(images.id, imageId),
 				with: { metadata: true },
 			});
@@ -466,7 +416,7 @@ export const updateSectionImageTool: any = tool({
 			}
 
 			// Get current section content
-			const currentContent = await db.query.pageSectionContents.findFirst({
+			const currentContent = await ctx.db.query.pageSectionContents.findFirst({
 				where: and(
 					eq(pageSectionContents.pageSectionId, pageSectionId),
 					eq(pageSectionContents.localeCode, localeCode)
@@ -474,14 +424,14 @@ export const updateSectionImageTool: any = tool({
 			});
 
 			// Parse existing content or start fresh
-			let content: Record<string, any> = {};
+			let content: Record<string, unknown> = {};
 			if (currentContent) {
 				try {
 					content = typeof currentContent.content === 'string'
 						? JSON.parse(currentContent.content)
-						: currentContent.content as Record<string, any>;
+						: currentContent.content as Record<string, unknown>;
 				} catch (error) {
-					console.error('Failed to parse existing content:', error);
+					ctx.logger.error({ message: 'Failed to parse existing content', error });
 				}
 			}
 
@@ -495,9 +445,7 @@ export const updateSectionImageTool: any = tool({
 			};
 
 			// Sync updated content
-			const { ServiceContainer } = await import("../services/service-container");
-			const service = ServiceContainer.get().sectionService;
-			await service.syncPageContents({
+			await ctx.services.sectionService.syncPageContents({
 				pageSectionId,
 				localeCode,
 				content,
@@ -521,19 +469,18 @@ export const updateSectionImageTool: any = tool({
 /**
  * Delete image
  */
-export const deleteImageTool: any = tool({
+export const deleteImageTool = tool({
 	description: "Delete an image permanently. This cannot be undone. Requires confirmed: true.",
 	inputSchema: z.object({
 		description: z.string().describe("Description of image to delete"),
 		confirmed: z.boolean().optional().describe("Must be true to delete"),
 	}),
-	execute: async (input: { description: string; confirmed?: boolean }): Promise<any> => {
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
 		const { description, confirmed } = input;
 		try {
 			// Find image first
-			const { ServiceContainer } = await import("../services/service-container");
-			const vectorIndex = ServiceContainer.get().vectorIndex;
-			const image = await vectorIndex.findImageByDescription(description);
+			const image = await ctx.vectorIndex.findImageByDescription(description);
 
 			// Require confirmation
 			if (!confirmed) {
@@ -563,17 +510,18 @@ export const deleteImageTool: any = tool({
 /**
  * List all images in the system
  */
-export const listAllImagesTool: any = tool({
+export const listAllImagesTool = tool({
 	description: "List all images in the entire system (not just current conversation). Use when user asks 'show me all images', 'what images do we have', etc.",
 	inputSchema: z.object({
 		limit: z.number().optional().describe("Max results (default: 50)"),
 		status: z.enum(["completed", "processing", "failed"]).optional().describe("Filter by status (optional)"),
 	}),
-	execute: async (input: { limit?: number; status?: "completed" | "processing" | "failed" }): Promise<any> => {
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
 		const { limit = 50, status } = input;
 		try {
-			const allImages = await db.query.images.findMany({
-				where: status ? eq(images.status, status as "completed" | "processing" | "failed") : undefined,
+			const allImages = await ctx.db.query.images.findMany({
+				where: status ? eq(images.status, status) : undefined,
 				with: {
 					metadata: true,
 				},

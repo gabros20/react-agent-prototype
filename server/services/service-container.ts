@@ -5,6 +5,7 @@ import { SectionService } from "./cms/section-service";
 import { SessionService } from "./session-service";
 import { ConversationLogService } from "./conversation-log-service";
 import { VectorIndexService } from "./vector-index";
+import { AgentOrchestrator } from "./agent";
 
 export class ServiceContainer {
   private static instance: ServiceContainer;
@@ -16,6 +17,9 @@ export class ServiceContainer {
   readonly entryService: EntryService;
   readonly sessionService: SessionService;
   readonly conversationLogService: ConversationLogService;
+
+  // Lazy-initialized to avoid circular dependency (orchestrator needs ServiceContainer)
+  private _agentOrchestrator?: AgentOrchestrator;
 
   private constructor(db: DrizzleDB) {
     this.db = db; // Store DB reference
@@ -52,5 +56,20 @@ export class ServiceContainer {
 
   async dispose(): Promise<void> {
     await this.vectorIndex.close();
+  }
+
+  /**
+   * Get the agent orchestrator (lazy-initialized)
+   */
+  get agentOrchestrator(): AgentOrchestrator {
+    if (!this._agentOrchestrator) {
+      this._agentOrchestrator = new AgentOrchestrator({
+        db: this.db,
+        services: this,
+        sessionService: this.sessionService,
+        vectorIndex: this.vectorIndex,
+      });
+    }
+    return this._agentOrchestrator;
   }
 }

@@ -296,19 +296,6 @@ export const imageVariants = sqliteTable("image_variants", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
-export const conversationImages = sqliteTable("conversation_images", {
-  id: text("id").primaryKey(),
-  sessionId: text("session_id")
-    .notNull()
-    .references(() => sessions.id, { onDelete: "cascade" }),
-  imageId: text("image_id")
-    .notNull()
-    .references(() => images.id, { onDelete: "cascade" }),
-  messageId: text("message_id"), // Optional: link to specific message
-  uploadedAt: integer("uploaded_at", { mode: "timestamp" }).notNull(),
-  orderIndex: integer("order_index"), // For maintaining order
-});
-
 /**
  * DEPRECATED for single image fields - use inline JSON in page_section_contents instead.
  * Reserved for future use: image galleries/collections where multiple images need ordering.
@@ -533,7 +520,6 @@ export const imagesRelations = relations(images, ({ one, many }) => ({
     references: [imageMetadata.imageId],
   }),
   variants: many(imageVariants),
-  conversationImages: many(conversationImages),
   pageSectionImages: many(pageSectionImages),
 }));
 
@@ -547,17 +533,6 @@ export const imageMetadataRelations = relations(imageMetadata, ({ one }) => ({
 export const imageVariantsRelations = relations(imageVariants, ({ one }) => ({
   image: one(images, {
     fields: [imageVariants.imageId],
-    references: [images.id],
-  }),
-}));
-
-export const conversationImagesRelations = relations(conversationImages, ({ one }) => ({
-  session: one(sessions, {
-    fields: [conversationImages.sessionId],
-    references: [sessions.id],
-  }),
-  image: one(images, {
-    fields: [conversationImages.imageId],
     references: [images.id],
   }),
 }));
@@ -635,9 +610,6 @@ export const selectImageMetadataSchema = createSelectSchema(imageMetadata);
 
 export const insertImageVariantSchema = createInsertSchema(imageVariants);
 export const selectImageVariantSchema = createSelectSchema(imageVariants);
-
-export const insertConversationImageSchema = createInsertSchema(conversationImages);
-export const selectConversationImageSchema = createSelectSchema(conversationImages);
 
 export const insertPageSectionImageSchema = createInsertSchema(pageSectionImages);
 export const selectPageSectionImageSchema = createSelectSchema(pageSectionImages);

@@ -1,6 +1,8 @@
 # Layer 6.6: Trace Observability
 
 > LangSmith-inspired debug panel with comprehensive execution tracing, working memory visualization, and system prompt inspection
+>
+> **Updated**: 2025-12-03
 
 ## Overview
 
@@ -15,7 +17,7 @@ The Trace Observability layer provides deep visibility into agent execution thro
 -   Enable system prompt inspection for debugging
 -   Provide filtering, search, and export capabilities
 -   Support multiple trace sessions with selector
--   Aggregate metrics across all conversations in session (NEW)
+-   Aggregate metrics across all conversations in session
 
 ---
 
@@ -110,10 +112,11 @@ tool1.call(); tool2.call();  // Which took longer? Why did retry happen?
 | File                                                   | Purpose                           |
 | ------------------------------------------------------ | --------------------------------- |
 | `app/assistant/_stores/trace-store.ts`                 | Zustand store for trace entries + conversation logs |
-| `app/assistant/_components/debug-pane.tsx`             | Main debug panel container        |
+| `app/assistant/_components/enhanced-debug/`            | Enhanced debug panel components   |
 | `app/assistant/_hooks/use-agent.ts`                    | SSE parsing, pattern detection, trace entry creation |
-| `server/routes/agent.ts`                               | SSE emission (system-prompt, model-info, etc.) |
-| `server/services/conversation-log-service.ts`          | Conversation log persistence (NEW) |
+| `lib/debug-logger/`                                    | Debug logger abstraction (trace-logger, hooks) |
+| `server/services/agent/orchestrator.ts`                | Agent orchestrator, SSE emission |
+| `server/services/conversation-log-service.ts`          | Conversation log persistence |
 | `server/services/worker-events.service.ts`             | Redis pub/sub for worker events   |
 
 ---
@@ -127,27 +130,26 @@ tool1.call(); tool2.call();  // Which took longer? Why did retry happen?
 export type TraceEntryType =
   // Trace lifecycle
   | "trace-start"           // Trace initialization
-  | "trace-complete"        // Trace finished
 
   // LLM interaction
   | "system-prompt"         // Compiled system prompt (for inspection)
-  | "user-prompt"           // User prompt with token count (NEW)
-  | "prompt-sent"           // User prompt to LLM (legacy)
+  | "user-prompt"           // User prompt with token count
+  | "prompt-sent"           // User prompt to LLM
   | "llm-response"          // LLM response received
-  | "text-streaming"        // LLM generating text - updated in place (NEW)
-  | "tools-available"       // List of tools passed to agent (NEW)
-  | "model-info"            // Model ID and pricing info (NEW)
+  | "text-streaming"        // LLM generating text - updated in place
+  | "tools-available"       // List of tools passed to agent
+  | "model-info"            // Model ID and pricing info
 
   // Tool execution (tool-call is updated in-place with output/error)
   | "tool-call"             // Tool invocation - updated with output when complete
 
   // Agent steps
-  | "step-start"            // Step starting (NEW)
+  | "step-start"            // Step starting
   | "step-complete"         // Agent step completed
 
   // HITL (conversational pattern)
-  | "approval-request"      // HITL approval needed (legacy)
-  | "approval-response"     // HITL decision made (legacy)
+  | "approval-request"      // HITL approval needed
+  | "approval-response"     // HITL decision made
   | "confirmation-required" // Tool returned requiresConfirmation flag
 
   // Background jobs
@@ -160,14 +162,13 @@ export type TraceEntryType =
   | "working-memory-update" // Entity extraction happened
   | "memory-trimmed"        // Message history was trimmed
   | "session-loaded"        // Previous messages loaded
-  | "checkpoint-saved"      // Session checkpoint saved (legacy)
+  | "checkpoint-saved"      // Session checkpoint saved
 
   // System
   | "system-log"            // General log from backend
   | "retry-attempt"         // Retry with backoff
   | "error";                // General error
 
-// NOTE: tool-result and tool-error are NOT separate types.
 // Tool results/errors update the existing tool-call entry via completeEntry()
 ```
 
@@ -200,7 +201,7 @@ export interface TraceEntry {
 }
 ```
 
-### Conversation Log (NEW)
+### Conversation Log
 
 Persisted exchange history with metrics for session-level aggregation:
 
@@ -238,6 +239,8 @@ export interface ModelPricing {
 - `getTotalMetrics()` aggregates metrics across all conversation logs
 - `getTotalEventCount()` counts total events in session
 - Logs can be expanded/collapsed in UI via `expandedConversationIds`
+- Completion detected via `completedAt !== null` on ConversationLog
+- UI shows a completion footer with duration and cost
 
 ### Trace Store
 
@@ -420,10 +423,10 @@ if (context.stream) {
 ```typescript
 const TYPE_GROUPS = {
   'LLM': ['system-prompt', 'user-prompt', 'prompt-sent', 'llm-response', 'text-streaming', 'model-info', 'tools-available'],
-  'Tools': ['tool-call', 'confirmation-required'],  // tool-call updated in-place with result/error
-  'Flow': ['trace-start', 'step-start', 'step-complete', 'trace-complete'],
+  'Tools': ['tool-call', 'confirmation-required'],
+  'Flow': ['trace-start', 'step-start', 'step-complete'],
   'Memory': ['working-memory-update', 'memory-trimmed', 'session-loaded', 'checkpoint-saved'],
-  'Approval': ['approval-request', 'approval-response'],  // Legacy - mostly unused
+  'Approval': ['approval-request', 'approval-response'],
   'Jobs': ['job-queued', 'job-progress', 'job-complete', 'job-failed'],
   'System': ['system-log', 'retry-attempt', 'error'],
 };
@@ -448,22 +451,21 @@ const TYPE_GROUPS = {
 const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
   // Trace lifecycle
   "trace-start": "bg-slate-500",
-  "trace-complete": "bg-slate-600",
 
   // LLM interaction
   "system-prompt": "bg-pink-500",
-  "user-prompt": "bg-blue-600",       // NEW
+  "user-prompt": "bg-blue-600",
   "prompt-sent": "bg-blue-500",
   "llm-response": "bg-indigo-500",
-  "text-streaming": "bg-violet-500",  // NEW
-  "tools-available": "bg-amber-600",  // NEW
-  "model-info": "bg-cyan-600",        // NEW
+  "text-streaming": "bg-violet-500",
+  "tools-available": "bg-amber-600",
+  "model-info": "bg-cyan-600",
 
   // Tool execution
   "tool-call": "bg-amber-500",        // Updated in-place with output/error
 
   // Agent steps
-  "step-start": "bg-emerald-500",     // NEW
+  "step-start": "bg-emerald-500",
   "step-complete": "bg-emerald-500",
 
   // HITL
@@ -547,11 +549,9 @@ Layer 6.5 handles HITL approval and basic execution logs. This layer (6.6) provi
 5. **Multi-trace session support**
 6. **Advanced filtering and search**
 7. **Export capabilities**
-8. **Conversation log persistence** to backend (NEW)
-9. **Cost tracking** via model pricing (NEW)
-10. **Session-level metrics aggregation** (NEW)
-
----
+8. **Conversation log persistence** to backend
+9. **Cost tracking** via model pricing
+10. **Session-level metrics aggregation**
 
 ## Component Hierarchy
 
@@ -568,14 +568,20 @@ EnhancedDebugPanel
 ├── WorkingMemoryPanel (collapsible)
 │   ├── Entity count summary
 │   └── Grouped entity badges by type
-├── TraceTimeline
-│   └── TimelineEntry (for each entry)
-│       ├── Timestamp
-│       ├── Type badge with icon
-│       ├── Duration badge
-│       ├── Tool name
-│       ├── Summary
-│       └── Collapsible input/output JSON
+├── ConversationAccordion
+│   └── ConversationSection (for each conversation)
+│       ├── Header (prompt, stats badges)
+│       ├── TimelineEntry (for each entry)
+│       │   ├── Timestamp
+│       │   ├── Type badge with icon
+│       │   ├── Duration badge
+│       │   ├── Tool name
+│       │   ├── Summary
+│       │   └── Collapsible input/output JSON
+│       └── CompletionFooter (when completedAt is set)
+│           ├── CheckCircle2 icon
+│           ├── "Completed in Xms"
+│           └── Cost display (optional)
 └── TraceDetailModal
     ├── Full entry details
     └── JsonViewer with syntax highlighting
@@ -639,11 +645,11 @@ return JSON.stringify(exportData, null, 2);
 2. Observe timeline:
    - `trace-start` - Trace begins
    - `system-prompt` - Click to view compiled prompt
-   - `prompt-sent` - User message sent
+   - `user-prompt` - User message with token count
    - `tool-call` - `cms_listPages` called (amber badge)
-   - `tool-result` - Results returned (green badge, click to expand)
-   - `llm-response` - Agent response
-   - `trace-complete` - Trace finished
+   - Tool result updates the tool-call entry (green checkmark when complete)
+   - `llm-response` - Agent response with token counts
+   - ✓ Completion footer - "Completed in 1.2s • $0.0012" (shown when `completedAt` is set)
 
 ### Debugging Memory Issues
 

@@ -3508,15 +3508,14 @@ Update status: completed
 
 #### Database Schema (Final)
 
-**Tables (5 total)**:
+**Tables (4 total)**:
 
 1. `images` - Core storage (17 columns)
 2. `image_metadata` - AI metadata (16 columns)
 3. `image_variants` - Responsive formats (10 columns)
-4. `conversation_images` - Link to sessions (6 columns)
-5. `page_section_images` - Link to CMS sections (7 columns)
+4. `page_section_images` - Link to CMS sections (7 columns)
 
-**Removed**: `imageProcessingQueue` (redundant)
+**Removed**: `imageProcessingQueue` (redundant), `conversation_images` (redundant - image usage tracked in message history)
 
 #### API Response Format (Standardized)
 

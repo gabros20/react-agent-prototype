@@ -142,7 +142,7 @@ When a confirmation is required, the trace panel shows:
 |------|---------|
 | `app/assistant/_stores/trace-store.ts` | Trace entries including confirmation-required type |
 | `app/assistant/_hooks/use-agent.ts` | SSE parsing and confirmation detection |
-| `app/assistant/_components/debug-pane.tsx` | Trace visualization |
+| `app/assistant/_components/enhanced-debug/` | Trace visualization components |
 
 ### Removed Files
 

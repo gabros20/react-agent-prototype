@@ -65,9 +65,7 @@ const metadata = await analyzeWithAI(buffer); // Blocks request for 5+ seconds
 │  │  │      ├─ Exists: Link to conversation, return early   │    │
 │  │  │      └─ New: Continue processing                     │    │
 │  │  ├─ 3. Save to storage (ImageStorageService)            │    │
-│  │  ├─ 4. Create DB records (transaction)                  │    │
-│  │  │      ├─ images table                                 │    │
-│  │  │      └─ conversation_images table                    │    │
+│  │  ├─ 4. Create DB record in images table                 │    │
 │  │  ├─ 5. Dispatch BullMQ jobs                             │    │
 │  │  │      ├─ generate-metadata job                        │    │
 │  │  │      └─ generate-variants job                        │    │
@@ -135,14 +133,7 @@ export class ImageProcessingService {
     });
 
     if (duplicate) {
-      // Link existing image to conversation
-      await db.insert(conversationImages).values({
-        id: randomUUID(),
-        sessionId,
-        imageId: duplicate.id,
-        uploadedAt: new Date(),
-      });
-
+      // Return existing image (deduplication)
       return {
         imageId: duplicate.id,
         isNew: false,
@@ -160,32 +151,23 @@ export class ImageProcessingService {
     const imageId = stored.id;
     const ext = path.extname(filename);
 
-    // 4. Database transaction
+    // 4. Insert into database
     try {
-      await db.transaction((tx) => {
-        tx.insert(images).values({
-          id: imageId,
-          filename: imageId + ext,
-          originalFilename: filename,
-          mediaType: params.mediaType || "image/jpeg",
-          storageType: "filesystem",
-          filePath: stored.originalPath,
-          cdnUrl: stored.cdnUrl,
-          thumbnailData: stored.thumbnailBuffer,
-          fileSize: buffer.length,
-          width: stored.width,
-          height: stored.height,
-          sha256Hash: sha256,
-          status: "processing",
-          uploadedAt: new Date(),
-        }).run();
-
-        tx.insert(conversationImages).values({
-          id: randomUUID(),
-          sessionId,
-          imageId,
-          uploadedAt: new Date(),
-        }).run();
+      await db.insert(images).values({
+        id: imageId,
+        filename: imageId + ext,
+        originalFilename: filename,
+        mediaType: params.mediaType || "image/jpeg",
+        storageType: "filesystem",
+        filePath: stored.originalPath,
+        cdnUrl: stored.cdnUrl,
+        thumbnailData: stored.thumbnailBuffer,
+        fileSize: buffer.length,
+        width: stored.width,
+        height: stored.height,
+        sha256Hash: sha256,
+        status: "processing",
+        uploadedAt: new Date(),
       });
     } catch (error) {
       // Cleanup file if DB insert fails
@@ -356,7 +338,7 @@ async deleteImage(imageId: string): Promise<void> {
     console.warn("Failed to delete from vector index:", error);
   }
 
-  // Database delete cascades to metadata, variants, conversation_images
+  // Database delete cascades to metadata, variants, page_section_images
   await db.delete(images).where(eq(images.id, imageId));
 }
 ```

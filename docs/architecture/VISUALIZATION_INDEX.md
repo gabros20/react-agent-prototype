@@ -82,8 +82,8 @@ How patterns interconnect and why they exist.
 
 **"I want to see how tools work"**
 → Start: `MODULE_INTEGRATION_PATTERNS.md` Section 2
-→ Code: `server/tools/all-tools.ts` (all 21 tools)
-→ Example: `cmsGetPage` tool (lines 15-65)
+→ Code: `server/tools/all-tools.ts` (all 45 tools)
+→ Example: `cmsGetPage` tool
 
 **"I want to understand memory management"**
 → Start: `ARCHITECTURE_VISUALIZATIONS.md` Section 5
@@ -91,11 +91,11 @@ How patterns interconnect and why they exist.
 → Code: `server/services/working-memory/` directory
 → Key Classes: `EntityExtractor`, `WorkingContext`
 
-**"I want to see how HITL approval works"**
+**"I want to see how HITL confirmation works"**
 → Start: `ARCHITECTURE_VISUALIZATIONS.md` Section 6
 → Deep Dive: `MODULE_INTEGRATION_PATTERNS.md` Section 5
-→ Code: `server/services/approval-queue.ts`
-→ Integration: `server/agent/orchestrator.ts` lines 280-320
+→ Pattern: Conversational confirmed flag (see `LAYER_3.5_HITL.md`)
+→ Example: `cmsDeletePage` tool with `confirmed` parameter
 
 **"I want to understand session management"**
 → Start: `MODULE_INTEGRATION_PATTERNS.md` Section 4
@@ -147,11 +147,11 @@ session-service.ts:
 - SessionService.saveMessages() - line 110
 ```
 
-**Approval:**
+**HITL (Conversational Confirmation):**
 ```
-approval-queue.ts:
-- approvalQueue.addRequest() - line 45
-- approvalQueue.resolveRequest() - line 75
+all-tools.ts:
+- cmsDeletePage({ confirmed: true }) - confirmed flag pattern
+- See LAYER_3.5_HITL.md for flow details
 ```
 
 ### By Pattern
@@ -174,11 +174,11 @@ approval-queue.ts:
 - Code: `server/services/working-memory/` directory
 - Key: Entity extraction + sliding window
 
-**HITL Pattern:**
+**HITL Pattern (Conversational):**
 - Sequence: `ARCHITECTURE_VISUALIZATIONS.md` Section 6
 - Technical: `MODULE_INTEGRATION_PATTERNS.md` Section 5
-- Code: `server/services/approval-queue.ts`
-- Key: Promise-based coordination
+- Code: Tools with `confirmed` parameter (e.g., `cmsDeletePage`)
+- Key: Conversational confirmation via chat
 
 ---
 
@@ -190,7 +190,7 @@ server/agent/
 └── orchestrator.ts ..................... Agent orchestration, retry logic
 
 server/tools/
-├── all-tools.ts ........................ All 21 tool definitions
+├── all-tools.ts ........................ All 45 tool definitions
 └── types.ts ............................ AgentContext interface
 
 server/prompts/
@@ -204,8 +204,11 @@ server/services/
 │   ├── entity-extractor.ts ............. Entity extraction logic
 │   ├── working-context.ts .............. Sliding window storage
 │   └── types.ts ........................ Entity interfaces
-├── approval-queue.ts ................... HITL promise coordination
+├── agent/
+│   ├── orchestrator.ts ................. AgentOrchestrator service
+│   └── types.ts ........................ Orchestrator types
 ├── session-service.ts .................. Message persistence
+├── conversation-log-service.ts ......... Debug log persistence
 ├── service-container.ts ................ DI container (singleton)
 ├── vector-index.ts ..................... LanceDB operations
 └── cms/
@@ -240,15 +243,16 @@ data/
 app/assistant/
 ├── page.tsx ............................ Main assistant layout
 ├── _hooks/
-│   └── use-agent.ts .................... SSE streaming hook
+│   ├── use-agent.ts .................... SSE streaming hook
+│   └── use-worker-events.ts ............ Worker SSE events
 ├── _stores/
 │   ├── chat-store.ts ................... Message state (Zustand)
-│   ├── log-store.ts .................... Debug log entries
-│   └── approval-store.ts ............... HITL modal state
+│   ├── trace-store.ts .................. Trace entries + metrics
+│   ├── session-store.ts ................ Session list + logs
+│   └── models-store.ts ................. OpenRouter models
 └── _components/
     ├── chat-pane.tsx ................... Chat UI
-    ├── debug-pane.tsx .................. Execution log
-    └── hitl-modal.tsx .................. Approval dialog
+    └── enhanced-debug/ ................. Debug panel components
 
 app/api/
 ├── agent/route.ts ...................... API proxy for agent

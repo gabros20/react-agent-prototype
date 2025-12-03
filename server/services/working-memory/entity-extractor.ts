@@ -4,48 +4,92 @@
 
 import type { Entity } from './types';
 
+// ============================================================================
+// Type Guards for Safe Property Access
+// ============================================================================
+
+/** Check if value is a non-null object */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** Check if object has an id property that's a string */
+function hasId(obj: Record<string, unknown>): obj is Record<string, unknown> & { id: string } {
+  return typeof obj.id === 'string';
+}
+
+/** Check if object has a name, slug, or title property */
+function hasIdentifier(obj: Record<string, unknown>): boolean {
+  return typeof obj.name === 'string' ||
+         typeof obj.slug === 'string' ||
+         typeof obj.title === 'string' ||
+         typeof obj.sectionKey === 'string';
+}
+
+/** Get string property safely */
+function getString(obj: Record<string, unknown>, key: string): string | undefined {
+  const val = obj[key];
+  return typeof val === 'string' ? val : undefined;
+}
+
+/** Get array property safely */
+function getArray(obj: Record<string, unknown>, key: string): unknown[] | undefined {
+  const val = obj[key];
+  return Array.isArray(val) ? val : undefined;
+}
+
+// ============================================================================
+// Entity Extractor
+// ============================================================================
+
 /** Stateless extractor - kept as class for consistent API with WorkingContext */
 export class EntityExtractor {
-  extract(toolName: string, result: any): Entity[] {
-    if (!result) return [];
+  extract(toolName: string, result: unknown): Entity[] {
+    if (!isObject(result)) return [];
 
     const entities: Entity[] = [];
     const type = inferType(toolName, result);
 
     // Single resource: {id, name/title/slug}
-    if (result.id && (result.name || result.slug || result.title)) {
+    if (hasId(result) && hasIdentifier(result)) {
       entities.push(createEntity(type, result));
     }
 
     // Search results: {matches: [...]}
-    if (Array.isArray(result.matches)) {
-      for (const m of result.matches.slice(0, 3)) {
-        entities.push(createEntity(m.type || type, m));
+    const matches = getArray(result, 'matches');
+    if (matches) {
+      for (const m of matches.slice(0, 3)) {
+        if (isObject(m) && hasId(m)) {
+          const matchType = getString(m, 'type') || type;
+          entities.push(createEntity(matchType, m));
+        }
       }
     }
 
-    // Array results
+    // Array results (when result itself is array - handled by checking if result has numeric keys)
+    // Note: Arrays don't pass isObject check with our implementation, so we check separately
     if (Array.isArray(result)) {
       for (const item of result.slice(0, 5)) {
-        if (item?.id && (item.name || item.slug || item.title || item.sectionKey)) {
+        if (isObject(item) && hasId(item) && hasIdentifier(item)) {
           entities.push(createEntity(type, item));
         }
       }
     }
 
     // Paginated: {data: [...]}
-    if (Array.isArray(result.data)) {
-      for (const item of result.data.slice(0, 5)) {
-        if (item?.id && (item.name || item.slug || item.title)) {
+    const data = getArray(result, 'data');
+    if (data) {
+      for (const item of data.slice(0, 5)) {
+        if (isObject(item) && hasId(item) && hasIdentifier(item)) {
           entities.push(createEntity(type, item));
         }
       }
     }
 
     // Nested: {success: true, post/page/entry/section/image: {...}}
-    if (result.success) {
+    if (result.success === true) {
       const nested = result.post || result.page || result.entry || result.section || result.image;
-      if (nested?.id) {
+      if (isObject(nested) && hasId(nested)) {
         const nestedType = result.post ? 'post' : result.page ? 'page' :
                           result.entry ? 'entry' : result.section ? 'section' :
                           result.image ? 'image' : type;
@@ -54,9 +98,12 @@ export class EntityExtractor {
     }
 
     // Posts list: {posts: [...]}
-    if (Array.isArray(result.posts)) {
-      for (const p of result.posts.slice(0, 5)) {
-        if (p?.id) entities.push(createEntity('post', p));
+    const posts = getArray(result, 'posts');
+    if (posts) {
+      for (const p of posts.slice(0, 5)) {
+        if (isObject(p) && hasId(p)) {
+          entities.push(createEntity('post', p));
+        }
       }
     }
 
@@ -64,8 +111,9 @@ export class EntityExtractor {
   }
 }
 
-function inferType(toolName: string, result: any): string {
-  if (result?.type) return result.type.toLowerCase();
+function inferType(toolName: string, result: Record<string, unknown>): string {
+  const resultType = getString(result, 'type');
+  if (resultType) return resultType.toLowerCase();
 
   const match = toolName.match(/cms_(get|find|list|create|update|delete|publish|archive)([A-Z]\w+)/);
   if (match) {
@@ -82,21 +130,29 @@ function inferType(toolName: string, result: any): string {
   return 'resource';
 }
 
-function createEntity(type: string, data: any): Entity {
-  let name = data.name || data.title || data.slug;
+function createEntity(type: string, data: Record<string, unknown> & { id: string }): Entity {
+  let name = getString(data, 'name') || getString(data, 'title') || getString(data, 'slug');
+  let entityType = type;
 
   if (type === 'section' || type === 'pagesection') {
-    name = data.sectionName || data.sectionKey || data.name || data.key || 'Unnamed Section';
-    type = 'section';
+    name = getString(data, 'sectionName') ||
+           getString(data, 'sectionKey') ||
+           getString(data, 'name') ||
+           getString(data, 'key') ||
+           'Unnamed Section';
+    entityType = 'section';
   } else if (type === 'post') {
-    name = data.title || data.name || data.slug || 'Unnamed Post';
+    name = getString(data, 'title') ||
+           getString(data, 'name') ||
+           getString(data, 'slug') ||
+           'Unnamed Post';
   }
 
   return {
-    type,
+    type: entityType,
     id: data.id,
-    name: name || `Unnamed ${type}`,
-    slug: data.slug,
+    name: name || `Unnamed ${entityType}`,
+    slug: getString(data, 'slug'),
     timestamp: new Date()
   };
 }

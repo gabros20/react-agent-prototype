@@ -124,10 +124,10 @@ server/          # Backend Express API
 app/             # Next.js frontend
 ├── assistant/   # Main assistant UI
 │   ├── page.tsx # Layout (chat + debug panel)
-│   ├── _components/ # Chat pane, enhanced debug panel, HITL modal
+│   ├── _components/ # Chat pane, enhanced debug panel
 │   │   └── enhanced-debug/ # LangSmith-inspired trace observability
 │   ├── _hooks/  # use-agent (SSE streaming + pattern detection)
-│   └── _stores/ # chat-store, trace-store, approval-store
+│   └── _stores/ # chat-store, trace-store, session-store, models-store
 ├── api/         # Next.js API routes (proxies)
 └── globals.css  # OKLCH theme with blue bubbles
 

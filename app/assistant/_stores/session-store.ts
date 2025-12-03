@@ -1,30 +1,11 @@
 'use client';
 
 import { create } from 'zustand';
+import { sessionsApi } from '@/lib/api';
+import type { SessionMetadata, Session } from '@/lib/api';
 
-export interface SessionMetadata {
-  id: string;
-  title: string;
-  modelId: string | null;
-  messageCount: number;
-  lastActivity: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface Session {
-  id: string;
-  title: string;
-  modelId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  messages: Array<{
-    id: string;
-    role: 'user' | 'assistant' | 'system' | 'tool';
-    content: any;
-    createdAt: Date;
-  }>;
-}
+// Re-export types for backward compatibility
+export type { SessionMetadata, Session } from '@/lib/api';
 
 interface SessionState {
   sessions: SessionMetadata[];
@@ -55,25 +36,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   loadSessions: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch('/api/sessions');
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to load sessions');
-      }
-
-      // Convert date strings to Date objects
-      const sessions = result.data.map((session: any) => ({
-        ...session,
-        modelId: session.modelId || null,
-        lastActivity: new Date(session.lastActivity),
-        createdAt: new Date(session.createdAt),
-        updatedAt: new Date(session.updatedAt),
-      }));
-
+      const sessions = await sessionsApi.list();
       set({ sessions, isLoading: false });
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load sessions';
+      set({ error: message, isLoading: false });
       console.error('Failed to load sessions:', error);
     }
   },
@@ -82,29 +49,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   loadSession: async (sessionId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`);
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to load session');
-      }
-
-      // Convert date strings to Date objects
-      const session = {
-        ...result.data,
-        modelId: result.data.modelId || null,
-        createdAt: new Date(result.data.createdAt),
-        updatedAt: new Date(result.data.updatedAt),
-        messages: result.data.messages.map((msg: any) => ({
-          ...msg,
-          createdAt: new Date(msg.createdAt),
-        })),
-      };
-
+      const session = await sessionsApi.get(sessionId);
       set({ isLoading: false, currentSessionId: sessionId });
       return session;
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load session';
+      set({ error: message, isLoading: false });
       console.error('Failed to load session:', error);
       return null;
     }
@@ -114,27 +64,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   createSession: async (title?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to create session');
-      }
-
-      const newSession: SessionMetadata = {
-        id: result.data.id,
-        title: result.data.title,
-        modelId: result.data.modelId || null,
-        messageCount: 0,
-        lastActivity: new Date(result.data.updatedAt),
-        createdAt: new Date(result.data.createdAt),
-        updatedAt: new Date(result.data.updatedAt),
-      };
+      const newSession = await sessionsApi.create({ title });
 
       set((state) => ({
         sessions: [newSession, ...state.sessions],
@@ -143,8 +73,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }));
 
       return newSession.id;
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create session';
+      set({ error: message, isLoading: false });
       console.error('Failed to create session:', error);
       throw error;
     }
@@ -154,17 +85,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   updateSession: async (sessionId: string, title: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to update session');
-      }
+      await sessionsApi.update(sessionId, { title });
 
       set((state) => ({
         sessions: state.sessions.map((session) =>
@@ -172,8 +93,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ),
         isLoading: false,
       }));
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update session';
+      set({ error: message, isLoading: false });
       console.error('Failed to update session:', error);
       throw error;
     }
@@ -182,24 +104,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // Update session model
   updateSessionModel: async (sessionId: string, modelId: string) => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to update session model');
-      }
+      await sessionsApi.update(sessionId, { modelId });
 
       set((state) => ({
         sessions: state.sessions.map((session) =>
           session.id === sessionId ? { ...session, modelId, updatedAt: new Date() } : session
         ),
       }));
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to update session model:', error);
       throw error;
     }
@@ -218,15 +130,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   deleteSession: async (sessionId: string): Promise<string | null> => {
     set({ isLoading: true, error: null });
     try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: 'DELETE',
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to delete session');
-      }
+      await sessionsApi.remove(sessionId);
 
       const state = get();
       const remainingSessions = state.sessions.filter((s) => s.id !== sessionId);
@@ -241,27 +145,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           newCurrentSessionId = remainingSessions[0].id;
         } else {
           // No sessions left - create a new one
-          const createResponse = await fetch('/api/sessions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: 'New Session' }),
-          });
-
-          const createResult = await createResponse.json();
-
-          if (!createResponse.ok) {
-            throw new Error(createResult.error?.message || 'Failed to create new session');
-          }
-
-          const newSession: SessionMetadata = {
-            id: createResult.data.id,
-            title: createResult.data.title,
-            modelId: createResult.data.modelId || null,
-            messageCount: 0,
-            lastActivity: new Date(createResult.data.updatedAt),
-            createdAt: new Date(createResult.data.createdAt),
-            updatedAt: new Date(createResult.data.updatedAt),
-          };
+          const newSession = await sessionsApi.create({ title: 'New Session' });
 
           set({
             sessions: [newSession],
@@ -280,8 +164,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       });
 
       return wasCurrentSession ? newCurrentSessionId : null;
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete session';
+      set({ error: message, isLoading: false });
       console.error('Failed to delete session:', error);
       throw error;
     }
@@ -291,15 +176,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   clearHistory: async (sessionId: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Clear messages
-      const messagesResponse = await fetch(`/api/sessions/${sessionId}/messages`, {
-        method: 'DELETE',
-      });
-
-      if (!messagesResponse.ok) {
-        const result = await messagesResponse.json();
-        throw new Error(result.error?.message || 'Failed to clear messages');
-      }
+      await sessionsApi.clearMessages(sessionId);
 
       // Update session metadata (messageCount = 0, lastActivity = now)
       set((state) => ({
@@ -310,8 +187,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ),
         isLoading: false,
       }));
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to clear history';
+      set({ error: message, isLoading: false });
       console.error('Failed to clear history:', error);
       throw error;
     }

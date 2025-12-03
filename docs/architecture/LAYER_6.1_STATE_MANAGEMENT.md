@@ -1,6 +1,8 @@
 # Layer 6.1: State Management
 
 > Zustand stores, persistence middleware, state shape, cross-store coordination
+>
+> **Updated**: 2025-12-03
 
 ## Overview
 
@@ -57,7 +59,7 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 │  │  ├─ messages: ChatMessage[]                               │  │
 │  │  ├─ currentTraceId: string | null                         │  │
 │  │  ├─ isStreaming: boolean                                  │  │
-│  │  └─ agentStatus: { state, toolName? } | null  (NEW)       │  │
+│  │  └─ agentStatus: { state, toolName? } | null              │  │
 │  │                                                           │  │
 │  │  Actions:                                                 │  │
 │  │  ├─ setSessionId() / setAgentStatus()                     │  │
@@ -78,35 +80,29 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 │  │                                                           │  │
 │  │  Actions:                                                 │  │
 │  │  ├─ loadSessions() / loadSession()                        │  │
-│  │  ├─ loadConversationLogs()  (NEW)                         │  │
+│  │  ├─ loadConversationLogs()                                │  │
 │  │  └─ deleteSession() / clearHistory()                      │  │
 │  │                                                           │  │
 │  │  Persistence: None (fetched from backend)                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   trace-store (ENHANCED)                  │  │
+│  │                   trace-store                             │  │
 │  │                                                           │  │
 │  │  State:                                                   │  │
 │  │  ├─ entriesByTrace: Map<string, TraceEntry[]>             │  │
-│  │  ├─ conversationLogs: ConversationLog[]   (NEW)           │  │
+│  │  ├─ conversationLogs: ConversationLog[]                   │  │
 │  │  ├─ modelInfoByTrace: Map<string, {modelId, pricing}>     │  │
 │  │  ├─ filters: TraceFilters                                 │  │
-│  │  └─ expandedConversationIds: Set<string>  (NEW)           │  │
+│  │  └─ expandedConversationIds: Set<string>                  │  │
 │  │                                                           │  │
 │  │  Actions:                                                 │  │
 │  │  ├─ addEntry() / updateEntry() / completeEntry()          │  │
-│  │  ├─ addConversationLog() / loadConversationLogs()  (NEW)  │  │
-│  │  ├─ getMetrics() / getTotalMetrics()  (NEW)               │  │
+│  │  ├─ addConversationLog() / loadConversationLogs()         │  │
+│  │  ├─ getMetrics() / getTotalMetrics()                      │  │
 │  │  └─ copyAllLogs() / exportTrace()                         │  │
 │  │                                                           │  │
 │  │  Persistence: None (real-time only)                       │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   log-store (LEGACY)                      │  │
-│  │                                                           │  │
-│  │  NOTE: Being phased out - use trace-store instead         │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -120,7 +116,7 @@ setSession(prev => ({ ...prev, messageCount: prev.messageCount + 1 }));
 | `app/assistant/_stores/chat-store.ts` | Chat messages, sessionId, streaming state, agentStatus |
 | `app/assistant/_stores/session-store.ts` | Session list, conversation logs, CRUD operations |
 | `app/assistant/_stores/trace-store.ts` | Trace entries, conversation logs, metrics, cost tracking |
-| `app/assistant/_stores/log-store.ts` | Legacy execution logs (being phased out) |
+| `app/assistant/_stores/models-store.ts` | OpenRouter models list, caching |
 
 ---
 
@@ -238,7 +234,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 }));
 ```
 
-### Trace Store (Enhanced - NEW)
+### Trace Store
 
 The trace store has been significantly expanded to support conversation logs and cost tracking:
 
@@ -273,9 +269,9 @@ export interface ModelPricing {
   completion: number; // $ per million tokens
 }
 
-// Many new entry types for comprehensive debugging
+// Entry types for comprehensive debugging
 export type TraceEntryType =
-  | "trace-start" | "trace-complete"
+  | "trace-start"
   | "system-prompt" | "user-prompt" | "llm-response" | "text-streaming"
   | "tools-available" | "model-info"
   | "tool-call" | "tool-error" | "confirmation-required"
@@ -283,6 +279,8 @@ export type TraceEntryType =
   | "job-queued" | "job-progress" | "job-complete" | "job-failed"
   | "working-memory-update" | "memory-trimmed" | "session-loaded"
   | "retry-attempt" | "checkpoint-saved" | "system-log" | "error";
+
+// Completion is detected via completedAt !== null on ConversationLog
 ```
 
 **Key Additions:**
@@ -306,26 +304,6 @@ getTotalEventCount: () => number;
 
 // Export
 copyAllLogs: () => Promise<void>;    // Copy all to clipboard
-```
-
-### Log Store (Legacy)
-
-```typescript
-// app/assistant/_stores/log-store.ts
-// NOTE: Being phased out in favor of trace-store's ConversationLog
-
-export interface LogEntry {
-  id: string;
-  traceId: string;
-  stepId: string;
-  timestamp: Date;
-  type: 'tool-call' | 'tool-result' | 'step-complete' | 'error' | 'info' | 'system';
-  toolName?: string;
-  input?: unknown;
-  output?: unknown;
-  success?: boolean;
-  message?: string;
-}
 ```
 
 ---
@@ -385,10 +363,10 @@ messages: state.messages.slice(-50)
 ### Why Separate Stores Per Domain?
 
 ```typescript
-useChatStore    // Chat messages
-useSessionStore // Session list
-useTraceStore   // Debug trace entries
-useLogStore     // Legacy debug logs
+useChatStore    // Chat messages, streaming state
+useSessionStore // Session list, CRUD operations
+useTraceStore   // Debug trace entries, conversation logs
+useModelsStore  // Available AI models
 ```
 
 **Reasons:**

@@ -7,12 +7,13 @@
 The services layer encapsulates all business logic. Services are stateless classes that coordinate between the database, vector store, and other infrastructure. They're accessed via the ServiceContainer singleton.
 
 **Key Changes (AI SDK 6 Migration):**
-- ApprovalQueue removed (native `needsApproval` on tools)
+- ApprovalQueue removed (conversational `confirmed` flag pattern on tools)
 - SessionService checkpoint methods removed
 - Added tokenizer and pricing services
 - Messages saved at end of agent execution only
 - NEW: ConversationLogService for debug log persistence
 - NEW: WorkerEventsService for real-time job status via Redis pub/sub
+- NEW: AgentOrchestrator service (extracted from routes)
 
 **Location:** `server/services/`
 
@@ -658,17 +659,21 @@ class WorkingContext {
 
 ## Removed: Approval Queue
 
-**Replaced by native `needsApproval` on tools.**
+**Replaced by conversational `confirmed` flag pattern on tools.**
 
 The old ApprovalQueue class is no longer needed:
 
 ```typescript
 // REMOVED: server/services/approval-queue.ts
-// Native AI SDK 6 pattern:
-// - Tools have `needsApproval: true`
-// - SDK pauses execution
-// - Frontend handles approval via /api/agent/approve endpoint
+// Conversational HITL pattern:
+// - Destructive tools have `confirmed: z.boolean().optional()` parameter
+// - First call without confirmed returns { requiresConfirmation: true, message: "..." }
+// - Agent asks user in chat, user responds "yes"/"no"
+// - Second call with `confirmed: true` executes the action
+// - No separate approval endpoint needed
 ```
+
+See [Layer 3.5 HITL](./LAYER_3.5_HITL.md) for the full pattern.
 
 ---
 

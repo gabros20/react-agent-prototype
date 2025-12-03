@@ -281,14 +281,15 @@ server/
 
 app/
 ├── assistant/
-│   ├── page.tsx                # Main layout (chat + execution log)
+│   ├── page.tsx                # Main layout (chat + debug panel)
 │   ├── _hooks/use-agent.ts     # Streaming integration
 │   ├── _components/
 │   │   ├── chat-pane.tsx       # Blue bubble chat UI
-│   │   └── debug-pane.tsx      # Execution log with colors
+│   │   └── enhanced-debug/     # Debug panel components
 │   └── _stores/
-│       ├── chat-store.ts       # Messages + sessions
-│       └── log-store.ts        # Execution log entries
+│       ├── chat-store.ts       # Messages + streaming state
+│       ├── trace-store.ts      # Trace entries + metrics
+│       └── session-store.ts    # Sessions + conversation logs
 └── globals.css                 # OKLCH theme (blue bubbles)
 
 data/
@@ -307,84 +308,90 @@ uploads/
 
 ## 🐛 Common Issues
 
-| Problem                        | Solution                                                  |
-| ------------------------------ | --------------------------------------------------------- |
-| "Cannot GET /" on preview      | Expected - root redirects to `/pages/home`                |
-| "API key not found"            | Check `.env` file has `OPENROUTER_API_KEY=...`            |
-| "Port in use"                  | Kill process: `lsof -i :8787` then `kill -9 PID`          |
-| "Database locked"              | Run `pnpm reset:data` (proper cleanup)                    |
-| "No results in search"         | Run `pnpm reindex`                                        |
-| Agent not responding           | Check API logs, verify API key, try simple prompt         |
-| Blue bubbles not showing       | Hard refresh (Cmd+Shift+R), check `app/globals.css`      |
-| Execution log empty            | Check browser console (F12), verify SSE connection        |
-| TypeScript errors              | Run `pnpm typecheck`, restart TS server (VS Code)         |
-| Tool execution fails           | Check execution log for error details, agent auto-retries |
-| "Redis connection refused"     | `brew services start redis`, verify with `redis-cli ping` |
-| Worker not processing images   | Included in `pnpm dev`, or run `pnpm dev:worker`, check Redis |
-| Image upload fails             | Check `UPLOADS_DIR` exists, check file size limits        |
-| Image search no results        | Wait for processing, check status endpoint shows "completed" |
-| Navigation links 404           | Fixed - run `pnpm reset:data` to apply navigation URL fix |
-| Images broken after reset      | Automatic - reset scripts now update URLs and use fixed IDs |
+| Problem                      | Solution                                                      |
+| ---------------------------- | ------------------------------------------------------------- |
+| "Cannot GET /" on preview    | Expected - root redirects to `/pages/home`                    |
+| "API key not found"          | Check `.env` file has `OPENROUTER_API_KEY=...`                |
+| "Port in use"                | Kill process: `lsof -i :8787` then `kill -9 PID`              |
+| "Database locked"            | Run `pnpm reset:data` (proper cleanup)                        |
+| "No results in search"       | Run `pnpm reindex`                                            |
+| Agent not responding         | Check API logs, verify API key, try simple prompt             |
+| Blue bubbles not showing     | Hard refresh (Cmd+Shift+R), check `app/globals.css`           |
+| Execution log empty          | Check browser console (F12), verify SSE connection            |
+| TypeScript errors            | Run `pnpm typecheck`, restart TS server (VS Code)             |
+| Tool execution fails         | Check execution log for error details, agent auto-retries     |
+| "Redis connection refused"   | `brew services start redis`, verify with `redis-cli ping`     |
+| Worker not processing images | Included in `pnpm dev`, or run `pnpm dev:worker`, check Redis |
+| Image upload fails           | Check `UPLOADS_DIR` exists, check file size limits            |
+| Image search no results      | Wait for processing, check status endpoint shows "completed"  |
+| Navigation links 404         | Fixed - run `pnpm reset:data` to apply navigation URL fix     |
+| Images broken after reset    | Automatic - reset scripts now update URLs and use fixed IDs   |
 
 ### Architecture Pattern: Native AI SDK v6
 
 **Current Implementation** (Post-Refactor):
+
 ```typescript
 // Tools created ONCE with execute function
 export const cmsGetPage = tool({
-  description: 'Get page by slug or ID',
-  inputSchema: z.object({ slug: z.string().optional() }),
-  execute: async (input, { experimental_context }) => {
-    const ctx = experimental_context as AgentContext
-    return await ctx.services.pageService.getPageBySlug(input.slug)
-  }
-})
+	description: "Get page by slug or ID",
+	inputSchema: z.object({ slug: z.string().optional() }),
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
+		return await ctx.services.pageService.getPageBySlug(input.slug);
+	},
+});
 
 // All tools exported in ALL_TOOLS object
 export const ALL_TOOLS = {
-  cmsGetPage,
-  cmsCreatePage,
-  // ... 11 more tools
-}
+	cmsGetPage,
+	cmsCreatePage,
+	// ... 11 more tools
+};
 
 // Agent uses tools AS-IS (no wrappers!)
 const agent = new ToolLoopAgent({
-  model: openrouter.languageModel('openai/gpt-4o-mini'),
-  instructions: systemPrompt,
-  tools: ALL_TOOLS,  // Passed directly
-  stopWhen: stepCountIs(15)
-})
+	model: openrouter.languageModel("openai/gpt-4o-mini"),
+	instructions: systemPrompt,
+	tools: ALL_TOOLS, // Passed directly
+	stopWhen: stepCountIs(15),
+});
 ```
 
 **Key Files**:
-- `server/tools/all-tools.ts` - All 27 tools (CMS + images)
-- `server/tools/image-tools.ts` - 6 image operation tools
-- `server/agent/orchestrator.ts` - Unified agent
-- `server/prompts/react.xml` - Single prompt
+
+-   `server/tools/all-tools.ts` - All 27 tools (CMS + images)
+-   `server/tools/image-tools.ts` - 6 image operation tools
+-   `server/agent/orchestrator.ts` - Unified agent
+-   `server/prompts/react.xml` - Single prompt
 
 ---
 
 ## 📚 Documentation
 
 **Getting Started**:
-- [GETTING_STARTED.md](GETTING_STARTED.md) - Complete setup guide with test cases
-- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - This file (commands & patterns)
-- [README.md](README.md) - Architecture overview and features
+
+-   [GETTING_STARTED.md](GETTING_STARTED.md) - Complete setup guide with test cases
+-   [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - This file (commands & patterns)
+-   [README.md](README.md) - Architecture overview and features
 
 **Image Handling**:
-- [docs/IMAGE_HANDLING_README.md](docs/IMAGE_HANDLING_README.md) - Image system API reference
-- [docs/IMAGE_SETUP_CHECKLIST.md](docs/IMAGE_SETUP_CHECKLIST.md) - Complete setup steps
-- [docs/IMAGE_SYSTEM_COMPLETE.md](docs/IMAGE_SYSTEM_COMPLETE.md) - Implementation summary
+
+-   [docs/IMAGE_HANDLING_README.md](docs/IMAGE_HANDLING_README.md) - Image system API reference
+-   [docs/IMAGE_SETUP_CHECKLIST.md](docs/IMAGE_SETUP_CHECKLIST.md) - Complete setup steps
+-   [docs/IMAGE_SYSTEM_COMPLETE.md](docs/IMAGE_SYSTEM_COMPLETE.md) - Implementation summary
 
 **Implementation History**:
-- [docs/PROGRESS.md](docs/PROGRESS.md) - Sprint-by-sprint progress
-- [docs/IMPLEMENTATION_SPRINTS.md](docs/IMPLEMENTATION_SPRINTS.md) - Detailed sprint breakdown
-- [docs/PLAN.md](docs/PLAN.md) - Original technical specification
+
+-   [docs/PROGRESS.md](docs/PROGRESS.md) - Sprint-by-sprint progress
+-   [docs/IMPLEMENTATION_SPRINTS.md](docs/IMPLEMENTATION_SPRINTS.md) - Detailed sprint breakdown
+-   [docs/PLAN.md](docs/PLAN.md) - Original technical specification
 
 **Key Refactors**:
-- [docs/NATIVE_AI_SDK_REFACTOR_PLAN.md](docs/NATIVE_AI_SDK_REFACTOR_PLAN.md) - Sprint 12: Native AI SDK v6
-- [docs/UNIFIED_REACT_AGENT_REFACTOR.md](docs/UNIFIED_REACT_AGENT_REFACTOR.md) - Sprint 13: Unified agent
-- [docs/UI_OVERHAUL_SUMMARY.md](docs/UI_OVERHAUL_SUMMARY.md) - Sprint 14: Modern UI
+
+-   [docs/NATIVE_AI_SDK_REFACTOR_PLAN.md](docs/NATIVE_AI_SDK_REFACTOR_PLAN.md) - Sprint 12: Native AI SDK v6
+-   [docs/UNIFIED_REACT_AGENT_REFACTOR.md](docs/UNIFIED_REACT_AGENT_REFACTOR.md) - Sprint 13: Unified agent
+-   [docs/UI_OVERHAUL_SUMMARY.md](docs/UI_OVERHAUL_SUMMARY.md) - Sprint 14: Modern UI
 
 ---
 
@@ -394,9 +401,9 @@ const agent = new ToolLoopAgent({
 2. **Day 2**: Try all test prompts - Simple to complex tasks
 3. **Day 3**: Read [README.md](README.md) - Understand architecture
 4. **Day 4**: Explore code:
-   - `server/agent/orchestrator.ts` - Agent logic
-   - `server/tools/all-tools.ts` - All 27 tools
-   - `server/prompts/react.xml` - Unified prompt
+    - `server/agent/orchestrator.ts` - Agent logic
+    - `server/tools/all-tools.ts` - All 27 tools
+    - `server/prompts/react.xml` - Unified prompt
 5. **Day 5**: Test image handling - Upload, search, agent tools
 6. **Day 6**: Create your first tool - Add to `all-tools.ts`
 7. **Day 7**: Customize the prompt - Edit `react.xml`
@@ -408,19 +415,19 @@ const agent = new ToolLoopAgent({
 
 Before reporting issues, verify:
 
-- [ ] All 3 servers running (`pnpm dev`)
-- [ ] API health check passes (http://localhost:8787/health)
-- [ ] Preview renders pages (http://localhost:4000/pages/home?locale=en)
-- [ ] Assistant UI loads (http://localhost:3000/assistant)
-- [ ] `.env` file exists with valid `OPENROUTER_API_KEY`
-- [ ] Database has data (`pnpm db:studio` → check pages table)
-- [ ] Vector index populated (`ls data/lancedb/` shows files)
-- [ ] TypeScript compiles (`pnpm typecheck` shows 0 errors)
-- [ ] Browser console clean (F12 → Console → no red errors)
-- [ ] Execution log shows events (blue/green/purple entries)
-- [ ] Redis is running (`redis-cli ping` returns PONG)
-- [ ] Worker is running if using images (included in `pnpm dev`)
-- [ ] Image uploads work (test with `scripts/test-image-upload.sh`)
+-   [ ] All 3 servers running (`pnpm dev`)
+-   [ ] API health check passes (http://localhost:8787/health)
+-   [ ] Preview renders pages (http://localhost:4000/pages/home?locale=en)
+-   [ ] Assistant UI loads (http://localhost:3000/assistant)
+-   [ ] `.env` file exists with valid `OPENROUTER_API_KEY`
+-   [ ] Database has data (`pnpm db:studio` → check pages table)
+-   [ ] Vector index populated (`ls data/lancedb/` shows files)
+-   [ ] TypeScript compiles (`pnpm typecheck` shows 0 errors)
+-   [ ] Browser console clean (F12 → Console → no red errors)
+-   [ ] Execution log shows events (blue/green/purple entries)
+-   [ ] Redis is running (`redis-cli ping` returns PONG)
+-   [ ] Worker is running if using images (included in `pnpm dev`)
+-   [ ] Image uploads work (test with `scripts/test-image-upload.sh`)
 
 ---
 
@@ -463,28 +470,30 @@ lsof -i :6379  # Redis
 ## 📝 Code Snippets
 
 **Add a new tool**:
+
 ```typescript
 // In server/tools/all-tools.ts
 export const myNewTool = tool({
-  description: 'What this tool does',
-  inputSchema: z.object({
-    param: z.string().describe('Parameter description')
-  }),
-  execute: async (input, { experimental_context }) => {
-    const ctx = experimental_context as AgentContext
-    // Your logic here
-    return { success: true, result: '...' }
-  }
-})
+	description: "What this tool does",
+	inputSchema: z.object({
+		param: z.string().describe("Parameter description"),
+	}),
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
+		// Your logic here
+		return { success: true, result: "..." };
+	},
+});
 
 // Add to ALL_TOOLS export
 export const ALL_TOOLS = {
-  // ... existing tools
-  myNewTool,
-}
+	// ... existing tools
+	myNewTool,
+};
 ```
 
 **Test the agent**:
+
 ```bash
 curl -X POST http://localhost:8787/v1/agent/stream \
   -H "Content-Type: application/json" \

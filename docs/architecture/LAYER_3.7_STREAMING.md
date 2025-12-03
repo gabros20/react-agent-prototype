@@ -90,7 +90,6 @@ User: "Nice, I can see exactly what it's doing!"
 │  │  State Update  │                                             │
 │  │                │                                             │
 │  │  ChatStore     │                                             │
-│  │  LogStore      │                                             │
 │  │  TraceStore    │                                             │
 │  └────────────────┘                                             │
 │                                                                 │
@@ -594,12 +593,10 @@ export async function POST(request: NextRequest) {
 ```typescript
 // app/assistant/_hooks/use-agent.ts
 import { useChatStore } from '../_stores/chat-store';
-import { useLogStore } from '../_stores/log-store';
 import { useTraceStore } from '../_stores/trace-store';
 
 export function useAgent() {
   const { addMessage, updateLastMessage, setStreaming } = useChatStore();
-  const { addLog } = useLogStore();
   const { addEntry } = useTraceStore();
 
   const sendMessage = async (content: string) => {
@@ -641,7 +638,12 @@ export function useAgent() {
         }
       }
     } catch (error) {
-      addLog({ level: 'error', message: error.message });
+      addEntry({
+        traceId: currentTraceId,
+        type: 'error',
+        level: 'error',
+        summary: error.message,
+      });
     } finally {
       setStreaming(false);
     }
@@ -655,18 +657,14 @@ export function useAgent() {
         break;
 
       case 'tool-call':
-        addLog({
+        addEntry({
+          traceId: currentTraceId,
+          type: 'tool-call',
           level: 'info',
-          message: `Calling ${event.data.name}...`,
-          metadata: { args: event.data.args }
-        });
-        break;
-
-      case 'tool-result':
-        addLog({
-          level: 'info',
-          message: `${event.data.name} completed`,
-          metadata: { result: event.data.result }
+          toolName: event.data.name,
+          toolCallId: event.data.toolCallId,
+          summary: `Calling ${event.data.name}...`,
+          input: event.data.args,
         });
         break;
 
@@ -674,36 +672,44 @@ export function useAgent() {
         // Check for confirmation required
         if (event.data.result?.requiresConfirmation) {
           addEntry({
+            traceId: currentTraceId,
             type: 'confirmation-required',
             level: 'warn',
             toolName: event.data.name,
             summary: `${event.data.name}: Confirmation required`,
             output: event.data.result,
           });
+        } else {
+          completeEntry(event.data.toolCallId, event.data.result);
         }
-        addLog({
-          level: 'info',
-          message: `${event.data.name} completed`,
-          metadata: { result: event.data.result }
-        });
         break;
 
       case 'log':
-        addLog(event.data);
+        addEntry({
+          traceId: currentTraceId,
+          type: 'system-log',
+          level: event.data.level || 'info',
+          summary: event.data.message,
+          input: event.data.metadata,
+        });
         break;
 
       case 'finish':
-        addLog({
+        addEntry({
+          traceId: currentTraceId,
+          type: 'trace-complete',
           level: 'info',
-          message: 'Completed',
-          metadata: event.data
+          summary: 'Completed',
+          input: event.data,
         });
         break;
 
       case 'error':
-        addLog({
+        addEntry({
+          traceId: currentTraceId,
+          type: 'error',
           level: 'error',
-          message: event.data.error
+          summary: event.data.error,
         });
         break;
     }
@@ -780,21 +786,23 @@ updateLastMessage: (delta: string) => {
 }
 ```
 
-### LogStore
+### TraceStore
 
 ```typescript
-// Add log entry
-addLog: (entry: LogEntry) => {
-  set((state) => ({
-    logs: [
-      ...state.logs,
-      {
-        ...entry,
-        id: nanoid(),
-        timestamp: Date.now()
-      }
-    ]
-  }));
+// Add trace entry with automatic timing
+addEntry: (entry: Partial<TraceEntry>) => {
+  const fullEntry = {
+    ...entry,
+    id: entry.id || crypto.randomUUID(),
+    timestamp: entry.timestamp || Date.now(),
+  };
+
+  set((state) => {
+    const traceEntries = state.entriesByTrace.get(fullEntry.traceId) || [];
+    const newMap = new Map(state.entriesByTrace);
+    newMap.set(fullEntry.traceId, [...traceEntries, fullEntry]);
+    return { entriesByTrace: newMap };
+  });
 }
 ```
 

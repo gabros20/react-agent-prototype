@@ -113,12 +113,6 @@ DETAILS=$(curl -s "$API_URL/api/images/$IMAGE_ID/details")
 echo "Details: $DETAILS"
 echo ""
 
-# Test conversation images
-echo "🔟 Testing conversation images endpoint..."
-CONV_IMAGES=$(curl -s "$API_URL/api/images/conversation/$SESSION_ID")
-echo "Conversation images: $CONV_IMAGES"
-echo ""
-
 # Test search (if processing completed)
 if echo "$FINAL_STATUS" | grep -q '"status":"completed"'; then
     echo "1️⃣1️⃣ Testing semantic search..."

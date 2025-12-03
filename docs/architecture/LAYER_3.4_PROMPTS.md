@@ -405,8 +405,8 @@ Comprehensive image guide (~200 lines):
   **IMAGE WORKFLOW**
 
   1. UPLOAD
-     When user uploads images, they're automatically saved to the conversation.
-     List with: cms_listConversationImages()
+     When user uploads images, they're automatically saved and processed.
+     List all images: cms_listAllImages()
 
   2. FIND
      By description: cms_findImage({ description: "mountain landscape" })

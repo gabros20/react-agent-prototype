@@ -39,18 +39,18 @@ The client layer is a Next.js 16 application with React 19. It provides the chat
 │  │   Zustand   │     │    Hooks    │      │ Components  │         │
 │  │   Stores    │     │             │      │             │         │
 │  │             │     │  useAgent   │      │  ChatPane   │         │
-│  │  chatStore  │←───→│  useSession │      │  DebugPane  │         │
-│  │  logStore   │     │             │      │  HITLModal  │         │
-│  │  sessionStr │     │             │      │  Sidebar    │         │
-│  │  approvalStr│     │             │      │             │         │
+│  │  chatStore  │←───→│  useSession │      │  DebugPanel │         │
+│  │  traceStore │     │  useWorker  │      │  Sidebar    │         │
+│  │  sessionStr │     │             │      │             │         │
+│  │  modelsStr  │     │             │      │             │         │
 │  └─────────────┘     └─────────────┘      └─────────────┘         │
 │                              │                                    │
 │                              ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │                    SSE Stream                               │  │
 │  │                                                             │  │
-│  │   Events: text-delta, tool-call, tool-result,               │  │
-│  │           approval-required, log, finish                    │  │
+│  │   Events: text-delta, tool-call, tool-result, step-start,   │  │
+│  │           step-finish, result, error, log, done             │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -163,55 +163,46 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 }));
 ```
 
-### LogStore
+### TraceStore
 
-Tracks execution logs:
+Tracks execution traces and conversation logs:
 
 ```typescript
-// app/assistant/_stores/log-store.ts
-interface LogEntry {
+// app/assistant/_stores/trace-store.ts
+interface TraceEntry {
 	id: string;
-	level: "info" | "warn" | "error";
-	message: string;
+	traceId: string;
+	type: TraceEntryType;
 	timestamp: number;
-	traceId?: string;
-	data?: unknown;
+	level?: "info" | "warn" | "error";
+	summary?: string;
+	// ... additional fields per type
 }
 
-interface LogState {
-	logs: LogEntry[];
-	addLog: (entry: Omit<LogEntry, "id" | "timestamp">) => void;
-	clearLogs: () => void;
-	getByTraceId: (traceId: string) => LogEntry[];
+interface TraceState {
+	entriesByTrace: Map<string, TraceEntry[]>;
+	addEntry: (entry: TraceEntry) => void;
+	updateEntry: (id: string, updates: Partial<TraceEntry>) => void;
+	completeEntry: (id: string, result: unknown) => void;
+	getMetrics: () => TraceMetrics;
 }
 ```
 
-### ApprovalStore
+### Debug Logger (lib/debug-logger)
 
-Manages HITL approvals:
+Abstraction for trace logging:
 
 ```typescript
-// app/assistant/_stores/approval-store.ts
-interface ApprovalState {
-	pendingApproval: PendingApproval | null;
-	setPendingApproval: (approval: PendingApproval | null) => void;
-	submitApproval: (approvalId: string, approved: boolean) => Promise<void>;
-}
+import { debugLogger } from "@/lib/debug-logger";
 
-export const useApprovalStore = create<ApprovalState>((set) => ({
-	pendingApproval: null,
+// Scoped trace logging
+const trace = debugLogger.trace(traceId);
+trace.toolCall("cms_getPage", args, callId);
+trace.toolResult(callId, result);
+trace.complete({ metrics });
 
-	setPendingApproval: (approval) => set({ pendingApproval: approval }),
-
-	submitApproval: async (approvalId, approved) => {
-		await fetch("/api/agent/approve", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ approvalId, approved }),
-		});
-		set({ pendingApproval: null });
-	},
-}));
+// Quick logging
+debugLogger.info("Event occurred", { data });
 ```
 
 ---
@@ -226,8 +217,7 @@ Core hook for agent communication:
 // app/assistant/_hooks/use-agent.ts
 export function useAgent() {
 	const { sessionId, addMessage, updateLastMessage, setStreaming } = useChatStore();
-	const { addLog } = useLogStore();
-	const { setPendingApproval } = useApprovalStore();
+	const { addEntry, completeEntry } = useTraceStore();
 
 	const sendMessage = async (content: string) => {
 		// Add user message
@@ -271,35 +261,37 @@ export function useAgent() {
 				break;
 
 			case "tool-call":
-				addLog({
+				addEntry({
+					type: "tool-call",
 					level: "info",
-					message: `Calling ${event.toolName}`,
-					data: event.args,
+					toolName: event.toolName,
+					toolCallId: event.toolCallId,
+					summary: `Calling ${event.toolName}...`,
+					input: event.args,
 				});
 				break;
 
 			case "tool-result":
-				addLog({
-					level: "info",
-					message: `${event.toolName} result`,
-					data: event.result,
-				});
-				break;
-
-			case "approval-required":
-				setPendingApproval({
-					id: event.approvalId,
-					toolName: event.toolName,
-					message: event.message,
-					args: event.args,
-				});
+				// Check for confirmation required
+				if (event.result?.requiresConfirmation) {
+					addEntry({
+						type: "confirmation-required",
+						level: "warn",
+						toolName: event.toolName,
+						summary: `${event.toolName}: Confirmation required`,
+						output: event.result,
+					});
+				} else {
+					completeEntry(event.toolCallId, event.result);
+				}
 				break;
 
 			case "log":
-				addLog({
-					level: event.level,
-					message: event.message,
-					data: event.data,
+				addEntry({
+					type: "system-log",
+					level: event.level || "info",
+					summary: event.message,
+					input: event.data,
 				});
 				break;
 
@@ -365,64 +357,36 @@ export function ChatPane() {
 }
 ```
 
-### HITLModal
+### EnhancedDebugPanel
 
-Approval dialog:
-
-```tsx
-// app/assistant/_components/hitl-modal.tsx
-export function HITLModal() {
-	const { pendingApproval, submitApproval } = useApprovalStore();
-
-	if (!pendingApproval) return null;
-
-	return (
-		<Dialog open>
-			<DialogContent>
-				<DialogHeader>
-					<DialogTitle>Confirmation Required</DialogTitle>
-				</DialogHeader>
-
-				<p>{pendingApproval.message}</p>
-
-				<pre className='bg-gray-100 p-2 rounded text-sm'>{JSON.stringify(pendingApproval.args, null, 2)}</pre>
-
-				<DialogFooter>
-					<Button variant='outline' onClick={() => submitApproval(pendingApproval.id, false)}>
-						Cancel
-					</Button>
-					<Button variant='destructive' onClick={() => submitApproval(pendingApproval.id, true)}>
-						Confirm
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	);
-}
-```
-
-### DebugPane
-
-Execution logs viewer:
+LangSmith-inspired trace observability panel:
 
 ```tsx
-// app/assistant/_components/debug-pane.tsx
-export function DebugPane() {
-	const { logs } = useLogStore();
+// app/assistant/_components/enhanced-debug/index.tsx
+export function EnhancedDebugPanel() {
+	const { getFilteredEntries, getMetrics, conversationLogs } = useTraceStore();
+	const entries = getFilteredEntries();
+	const metrics = getMetrics();
 
 	return (
-		<div className='h-full overflow-y-auto p-4 font-mono text-sm'>
-			{logs.map((log) => (
-				<div key={log.id} className={cn("py-1", levelColors[log.level])}>
-					<span className='text-gray-500'>{new Date(log.timestamp).toISOString().slice(11, 23)}</span>{" "}
-					<span className='font-bold'>[{log.level}]</span> {log.message}
-					{log.data && <pre className='ml-4 text-xs'>{JSON.stringify(log.data, null, 2)}</pre>}
-				</div>
-			))}
+		<div className='h-full flex flex-col'>
+			{/* Header with metrics */}
+			<TraceHeader metrics={metrics} />
+
+			{/* Filters */}
+			<TraceFilters />
+
+			{/* Conversation logs (collapsible) */}
+			<ConversationAccordion logs={conversationLogs} />
+
+			{/* Current trace timeline */}
+			<TraceTimeline entries={entries} />
 		</div>
 	);
 }
 ```
+
+**HITL Confirmation:** Handled conversationally via chat - no modal. Tools with `confirmed` flag return `requiresConfirmation: true`, agent asks user in chat, user responds "yes", tool re-called with `confirmed: true`.
 
 ### SessionSidebar
 
@@ -499,12 +463,10 @@ export default function AssistantPage() {
 				<div className='flex-1'>
 					<ChatPane />
 				</div>
-				<div className='w-80 border-l'>
-					<DebugPane />
+				<div className='w-96 border-l'>
+					<EnhancedDebugPanel />
 				</div>
 			</main>
-
-			<HITLModal />
 		</div>
 	);
 }

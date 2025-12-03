@@ -160,7 +160,8 @@ export class SessionService {
   }
 
   /**
-   * Delete session permanently (cascade deletes messages and conversation logs)
+   * Delete session permanently with all child records
+   * Defense in depth: explicit child deletion + FK cascade
    */
   async deleteSession(sessionId: string) {
     const existing = await this.db.query.sessions.findFirst({
@@ -171,10 +172,11 @@ export class SessionService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // Delete conversation logs first (no FK cascade in SQLite)
+    // Delete all children explicitly (defense in depth - works regardless of FK pragma state)
     await this.db.delete(schema.conversationLogs).where(eq(schema.conversationLogs.sessionId, sessionId));
+    await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
 
-    // Delete session (messages are deleted via FK cascade)
+    // Delete session (FK cascade is now also enabled as backup)
     await this.db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
 
     return { success: true, deletedId: sessionId };

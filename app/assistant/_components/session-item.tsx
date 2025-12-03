@@ -24,7 +24,6 @@ import {
 import { useSessionStore, type SessionMetadata } from '../_stores/session-store';
 import { useChatStore } from '../_stores/chat-store';
 import { useTraceStore } from '../_stores/trace-store';
-import { useLogStore } from '../_stores/log-store';
 
 /**
  * Extract readable text content from AI SDK message format.
@@ -88,15 +87,13 @@ export function SessionItem({ session, isActive, onSessionLoad }: SessionItemPro
   const setMessages = useChatStore((state) => state.setMessages);
 
   const clearAllTraces = useTraceStore((state) => state.clearAllTraces);
-  const clearLogs = useLogStore((state) => state.clearLogs);
 
   const handleLoadSession = async () => {
     try {
       const loadedSession = await loadSession(session.id);
       if (loadedSession) {
-        // Clear live traces and logs when switching sessions
+        // Clear live traces when switching sessions
         clearAllTraces();
-        clearLogs();
 
         setSessionId(loadedSession.id);
         // Convert messages to ChatMessage format
@@ -124,9 +121,7 @@ export function SessionItem({ session, isActive, onSessionLoad }: SessionItemPro
       await clearHistory(session.id);
       if (isActive) {
         setMessages([]); // Clear messages in chat store if this is active session
-        // Also clear traces and logs for the active session
         clearAllTraces();
-        clearLogs();
       }
       setShowClearDialog(false);
     } catch (error) {
@@ -162,7 +157,6 @@ export function SessionItem({ session, isActive, onSessionLoad }: SessionItemPro
           setMessages([]);
         }
         clearAllTraces();
-        clearLogs();
       }
       setShowDeleteDialog(false);
     } catch (error) {

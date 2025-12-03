@@ -230,7 +230,6 @@ export const imagesRelations = relations(images, ({ one, many }) => ({
     references: [imageMetadata.imageId],
   }),
   variants: many(imageVariants),
-  conversationImages: many(conversationImages),
   pageSectionImages: many(pageSectionImages),
 }));
 ```

@@ -67,19 +67,15 @@ function groupEntriesIntoSteps(entries: TraceEntry[]): TimelineItem[] {
 }
 
 export function TraceTimeline({ className }: TraceTimelineProps) {
-  // Use selectors to avoid subscribing to entire store
-  const getFilteredEntries = useTraceStore((state) => state.getFilteredEntries);
+  // Subscribe to derived state directly - triggers re-render when entries change
+  const entries = useTraceStore((state) => state.filteredEntries);
   const selectedEntryId = useTraceStore((state) => state.selectedEntryId);
   const setSelectedEntry = useTraceStore((state) => state.setSelectedEntry);
   const openModal = useTraceStore((state) => state.openModal);
 
-  const entries = getFilteredEntries();
-
-  // Check if trace is complete (has a trace-complete entry)
-  const isTraceComplete = useMemo(
-    () => entries.some((e) => e.type === 'trace-complete'),
-    [entries]
-  );
+  // For live traces, isTraceComplete is always false (they're actively streaming)
+  // Completed traces are shown via ConversationAccordion which uses completedAt
+  const isTraceComplete = false;
 
   // Group entries into step blocks
   const timelineItems = useMemo(

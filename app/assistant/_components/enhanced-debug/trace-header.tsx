@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Terminal, Copy, Download, Trash2, Clock, Wrench, Layers, Coins, AlertCircle, Check } from "lucide-react";
 import { useTraceStore, formatDuration, type TraceMetrics, type ConversationLog, type TraceEntry } from "../../_stores/trace-store";
 import { useChatStore } from "../../_stores/chat-store";
+import { sessionsApi } from "@/lib/api";
 
 interface TraceHeaderProps {
 	className?: string;
@@ -50,29 +51,27 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 		const fetchLogs = async () => {
 			setIsLoading(true);
 			try {
-				const response = await fetch(`/api/sessions/${sessionId}/logs`);
-				if (response.ok) {
-					const data = await response.json();
-					if (data.data && Array.isArray(data.data)) {
-						const logs: ConversationLog[] = data.data.map((log: any) => ({
-							id: log.id,
-							sessionId: log.sessionId,
-							conversationIndex: log.conversationIndex,
-							userPrompt: log.userPrompt,
-							startedAt: new Date(log.startedAt),
-							completedAt: log.completedAt ? new Date(log.completedAt) : null,
-							metrics: log.metrics,
-							modelInfo: log.modelInfo,
-							entries: (log.entries || []) as TraceEntry[],
-							isLive: false,
-						}));
-						setPersistedLogs(logs);
-					} else {
-						setPersistedLogs([]);
-					}
+				const rawLogs = await sessionsApi.getLogs(sessionId) as Array<Record<string, unknown>>;
+				if (Array.isArray(rawLogs)) {
+					const logs: ConversationLog[] = rawLogs.map((log) => ({
+						id: log.id as string,
+						sessionId: log.sessionId as string,
+						conversationIndex: log.conversationIndex as number,
+						userPrompt: log.userPrompt as string,
+						startedAt: new Date(log.startedAt as string),
+						completedAt: log.completedAt ? new Date(log.completedAt as string) : null,
+						metrics: log.metrics as TraceMetrics | null,
+						modelInfo: log.modelInfo as { modelId: string; pricing: { prompt: number; completion: number } | null } | null,
+						entries: ((log.entries || []) as TraceEntry[]),
+						isLive: false,
+					}));
+					setPersistedLogs(logs);
+				} else {
+					setPersistedLogs([]);
 				}
 			} catch (error) {
 				console.error("Failed to fetch logs for header:", error);
+				setPersistedLogs([]);
 			} finally {
 				setIsLoading(false);
 			}
@@ -145,19 +144,12 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 
 		setIsDeleting(true);
 		try {
-			// Delete from database
-			const response = await fetch(`/api/sessions/${sessionId}/logs`, {
-				method: "DELETE",
-			});
-
-			if (response.ok) {
-				// Clear in-memory state
-				clearAllTraces();
-				// Clear local persisted logs
-				setPersistedLogs([]);
-			} else {
-				console.error("Failed to delete logs from server");
-			}
+			// Delete from database using API client
+			await sessionsApi.deleteLogs(sessionId);
+			// Clear in-memory state
+			clearAllTraces();
+			// Clear local persisted logs
+			setPersistedLogs([]);
 		} catch (error) {
 			console.error("Failed to delete logs:", error);
 		} finally {

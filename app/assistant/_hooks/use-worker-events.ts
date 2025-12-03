@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useTraceStore } from "../_stores/trace-store";
+import { debugLogger } from "@/lib/debug-logger";
 
 // EventSource readyState constants (avoid SSR issues with EventSource global)
 const SSE_OPEN = 1;
@@ -34,15 +35,12 @@ interface QueueStatus {
  * Connects on mount, reconnects on disconnect, adds events to trace store.
  */
 export function useWorkerEvents() {
-	const addEntry = useTraceStore((state) => state.addEntry);
-	const updateEntry = useTraceStore((state) => state.updateEntry);
-	const completeEntry = useTraceStore((state) => state.completeEntry);
 	const activeTraceId = useTraceStore((state) => state.activeTraceId);
 
 	const [isConnected, setIsConnected] = useState(false);
 
-	// Track job entry IDs so we can update them (jobId -> entryId)
-	const jobEntryMapRef = useRef<Map<string, string>>(new Map());
+	// Track seen jobs to prevent duplicate entries
+	const seenJobsRef = useRef<Set<string>>(new Set());
 	const eventSourceRef = useRef<EventSource | null>(null);
 	const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const reconnectAttempts = useRef(0);
@@ -79,18 +77,13 @@ export function useWorkerEvents() {
 				if (status && (status.waiting > 0 || status.active > 0)) {
 					console.log("[WorkerEvents] Queue status:", status);
 
-					// Add a summary entry if there are pending jobs
-					// This requires an active trace - we'll use a global trace ID for worker events
+					// Log queue status to active trace
 					const traceId = activeTraceId || "worker-events";
-
-					addEntry({
-						traceId,
-						timestamp: Date.now(),
-						type: "system-log",
-						level: "info",
-						summary: `Image queue: ${status.waiting} waiting, ${status.active} active`,
-						output: status,
-					});
+					const trace = debugLogger.trace(traceId);
+					trace.systemLog(
+						`Image queue: ${status.waiting} waiting, ${status.active} active`,
+						status
+					);
 				}
 			} catch (err) {
 				console.error("[WorkerEvents] Failed to parse connected event:", err);
@@ -124,83 +117,40 @@ export function useWorkerEvents() {
 		function handleWorkerEvent(event: WorkerEvent) {
 			// Use active trace or a dedicated worker-events trace
 			const traceId = activeTraceId || "worker-events";
-			const shortImageId = event.imageId.substring(0, 8);
-			const jobEntryMap = jobEntryMapRef.current;
-
-			// Short job name: "generate-metadata" -> "metadata"
-			const shortJobName = event.jobName.replace("generate-", "");
+			const trace = debugLogger.trace(traceId);
+			const seenJobs = seenJobsRef.current;
 
 			switch (event.type) {
 				case "job-queued": {
-					const entryId = `job-${event.jobId}`;
-
 					// Skip if already tracked (duplicate event)
-					if (jobEntryMap.has(event.jobId)) {
+					if (seenJobs.has(event.jobId)) {
 						break;
 					}
-					jobEntryMap.set(event.jobId, entryId);
-
-					addEntry({
-						id: entryId,
-						traceId,
-						timestamp: event.timestamp,
-						type: "job-queued",
-						level: "info",
-						jobId: event.jobId,
-						jobProgress: 0,
-						summary: `${shortJobName} for ${shortImageId}`,
-						input: { imageId: event.imageId },
-					});
+					seenJobs.add(event.jobId);
+					trace.jobQueued(event.jobId, event.jobName, event.imageId);
 					break;
 				}
 
 				case "job-active": {
-					const entryId = jobEntryMap.get(event.jobId);
-					if (entryId) {
-						updateEntry(entryId, {
-							type: "job-progress",
-							jobProgress: 0,
-							summary: `${shortJobName} for ${shortImageId}`,
-						});
-					}
+					// Job started processing - update to progress state
+					trace.jobProgress(event.jobId, 0);
 					break;
 				}
 
 				case "job-progress": {
-					const entryId = jobEntryMap.get(event.jobId);
-					if (entryId) {
-						updateEntry(entryId, {
-							jobProgress: event.progress,
-						});
-					}
+					trace.jobProgress(event.jobId, event.progress || 0);
 					break;
 				}
 
 				case "job-completed": {
-					const entryId = jobEntryMap.get(event.jobId);
-					if (entryId) {
-						updateEntry(entryId, {
-							type: "job-complete",
-							jobProgress: 100,
-							duration: event.duration,
-							summary: `${shortJobName} for ${shortImageId}`,
-						});
-						jobEntryMap.delete(event.jobId);
-					}
+					trace.jobComplete(event.jobId, event.duration);
+					seenJobs.delete(event.jobId);
 					break;
 				}
 
 				case "job-failed": {
-					const entryId = jobEntryMap.get(event.jobId);
-					if (entryId) {
-						updateEntry(entryId, {
-							type: "job-failed",
-							level: "error",
-							summary: `${shortJobName} for ${shortImageId}`,
-							error: { message: event.error || "Unknown error" },
-						});
-						jobEntryMap.delete(event.jobId);
-					}
+					trace.jobFailed(event.jobId, event.error || "Unknown error");
+					seenJobs.delete(event.jobId);
 					break;
 				}
 			}
@@ -227,7 +177,7 @@ export function useWorkerEvents() {
 				connect();
 			}, delay);
 		}
-	}, [addEntry, updateEntry, activeTraceId]);
+	}, [activeTraceId]);
 
 	const disconnect = useCallback(() => {
 		if (reconnectTimeoutRef.current) {

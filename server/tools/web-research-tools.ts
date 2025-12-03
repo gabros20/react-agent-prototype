@@ -5,6 +5,12 @@
  * - web_quickSearch: Fast lookups for fresh information
  * - web_deepResearch: Comprehensive multi-source research
  * - web_fetchContent: Fetch full content from URLs
+ *
+ * DESIGN NOTE: The Exa service is intentionally kept as a singleton via
+ * getExaService(). It's a stateless API client that only needs an API key
+ * (from env vars) and doesn't require session context or database access.
+ * This is acceptable per the architectural decision to avoid bloating
+ * AgentContext with stateless external API wrappers.
  */
 
 import { tool } from "ai";
@@ -16,7 +22,7 @@ import type { ExaCategory, ExaLivecrawl, ExaResearchModel } from "../types/exa";
 // Tool 1: Quick Search
 // ============================================================================
 
-export const webQuickSearchTool: any = tool({
+export const webQuickSearchTool = tool({
 	description: `Perform a quick web search for fresh, up-to-date information. Use this for:
 - Quick fact lookups (weather, prices, current events)
 - Finding specific resources or links
@@ -38,15 +44,8 @@ Returns snippets and URLs from top results. For comprehensive research, use web_
 			.optional()
 			.describe("Freshness: 'always' for real-time, 'fallback' for balanced (default)"),
 	}),
-	execute: async (input: {
-		query: string;
-		numResults?: number;
-		category?: string;
-		includeDomains?: string[];
-		excludeDomains?: string[];
-		recentOnly?: boolean;
-		livecrawl?: string;
-	}): Promise<any> => {
+	execute: async (input) => {
+		// Exa service is stateless - uses singleton pattern (see file header)
 		const exaService = getExaService();
 
 		if (!exaService.isConfigured()) {
@@ -60,12 +59,12 @@ Returns snippets and URLs from top results. For comprehensive research, use web_
 
 		try {
 			// Calculate date filter for recent results
-			const startPublishedDate = input.recentOnly ? ExaResearchService.getDateFilter(7) : undefined;
+			const startPublishedDate = input.recentOnly === true ? ExaResearchService.getDateFilter(7) : undefined;
 
 			const response = await exaService.quickSearch(input.query, {
-				numResults: input.numResults || 5,
+				numResults: input.numResults ?? 5,
 				category: input.category as ExaCategory | undefined,
-				livecrawl: (input.livecrawl as ExaLivecrawl) || "fallback",
+				livecrawl: (input.livecrawl as ExaLivecrawl) ?? "fallback",
 				includeDomains: input.includeDomains,
 				excludeDomains: input.excludeDomains,
 				startPublishedDate,
@@ -93,7 +92,7 @@ Returns snippets and URLs from top results. For comprehensive research, use web_
 // Tool 2: Deep Research
 // ============================================================================
 
-export const webDeepResearchTool: any = tool({
+export const webDeepResearchTool = tool({
 	description: `Perform comprehensive web research on a topic using multiple sources. Use this for:
 - Creating blog posts or articles that need well-researched content
 - Building informational pages that should cite sources
@@ -115,13 +114,8 @@ For quick lookups, use web_quickSearch instead.`,
 			.describe("Research model: 'exa-research' (faster/cheaper, default) or 'exa-research-pro' (higher quality)"),
 		maxWaitTime: z.number().min(30).max(300).optional().describe("Max wait time in seconds (30-300, default: 120)"),
 	}),
-	execute: async (input: {
-		topic: string;
-		sections?: string[];
-		includeStatistics?: boolean;
-		model?: string;
-		maxWaitTime?: number;
-	}): Promise<any> => {
+	execute: async (input) => {
+		// Exa service is stateless - uses singleton pattern (see file header)
 		const exaService = getExaService();
 
 		if (!exaService.isConfigured()) {
@@ -146,7 +140,7 @@ For quick lookups, use web_quickSearch instead.`,
 			const response = await exaService.deepResearch(input.topic, {
 				outputSchema,
 				model: input.model as ExaResearchModel | undefined,
-				maxWaitTime: input.maxWaitTime || 120,
+				maxWaitTime: input.maxWaitTime ?? 120,
 			});
 
 			return {
@@ -175,7 +169,7 @@ For quick lookups, use web_quickSearch instead.`,
 // Tool 3: Fetch Content
 // ============================================================================
 
-export const webFetchContentTool: any = tool({
+export const webFetchContentTool = tool({
 	description: `Fetch the full content from specific URLs. Use this for:
 - Getting full text from a URL found in search results
 - Reading content from a URL the user provided
@@ -190,13 +184,8 @@ Supports up to 10 URLs per request.`,
 		includeSummary: z.boolean().optional().describe("Include AI-generated summary of each page"),
 		summaryQuery: z.string().optional().describe("Custom focus for summaries (e.g., 'focus on pricing information')"),
 	}),
-	execute: async (input: {
-		urls: string[];
-		includeText?: boolean;
-		textMaxCharacters?: number;
-		includeSummary?: boolean;
-		summaryQuery?: string;
-	}): Promise<any> => {
+	execute: async (input) => {
+		// Exa service is stateless - uses singleton pattern (see file header)
 		const exaService = getExaService();
 
 		if (!exaService.isConfigured()) {
@@ -209,7 +198,7 @@ Supports up to 10 URLs per request.`,
 
 		try {
 			const response = await exaService.fetchUrlContent(input.urls, {
-				maxCharacters: input.textMaxCharacters || 10000,
+				maxCharacters: input.textMaxCharacters ?? 10000,
 				includeSummary: input.includeSummary,
 				summaryQuery: input.summaryQuery,
 			});

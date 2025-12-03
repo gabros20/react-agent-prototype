@@ -57,6 +57,13 @@
       "when": 1764599987776,
       "tag": "0007_overconfident_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1764760719161,
+      "tag": "0008_big_whizzer",
+      "breakpoints": true
     }
   ]
 }

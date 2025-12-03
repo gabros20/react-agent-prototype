@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { db } from "../../db/client";
-import {
-	images,
-	conversationImages,
-	imageMetadata,
-} from "../../db/schema";
+import { images, imageMetadata } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import imageStorageService from "./image-storage.service";
 import { generateSHA256 } from "../../utils/hash";
@@ -44,17 +40,16 @@ export class ImageProcessingService {
 	 * 2. Check for duplicates
 	 * 3. Save to storage
 	 * 4. Create DB record
-	 * 5. Link to conversation
-	 * 6. Queue async jobs
+	 * 5. Queue async jobs
 	 */
 	async processImage(params: {
 		buffer: Buffer;
 		filename: string;
-		sessionId: string;
+		sessionId?: string; // Optional - kept for backwards compatibility but no longer used
 		mediaType?: string;
 		fixedId?: string; // Optional fixed ID for seeding
 	}): Promise<ImageProcessingResult> {
-		const { buffer, filename, sessionId } = params;
+		const { buffer, filename } = params;
 
 		// 1. Generate SHA256 hash
 		const sha256 = generateSHA256(buffer);
@@ -65,14 +60,7 @@ export class ImageProcessingService {
 		});
 
 		if (duplicate) {
-			// Link existing image to conversation
-			await db.insert(conversationImages).values({
-				id: randomUUID(),
-				sessionId,
-				imageId: duplicate.id,
-				uploadedAt: new Date(),
-			});
-
+			// Return existing image (no longer tracking per-conversation)
 			return {
 				imageId: duplicate.id,
 				isNew: false,
@@ -90,34 +78,23 @@ export class ImageProcessingService {
 		const imageId = stored.id;
 		const ext = path.extname(filename);
 
-		// 4. Use transaction for database inserts only
+		// 4. Insert image record into database
 		try {
-			await db.transaction((tx) => {
-				// Insert image record
-				tx.insert(images).values({
-					id: imageId,
-					filename: imageId + ext,
-					originalFilename: filename,
-					mediaType: params.mediaType || "image/jpeg",
-					storageType: "filesystem",
-					filePath: stored.originalPath,
-					cdnUrl: stored.cdnUrl,
-					thumbnailData: stored.thumbnailBuffer,
-					fileSize: buffer.length,
-					width: stored.width,
-					height: stored.height,
-					sha256Hash: sha256,
-					status: "processing",
-					uploadedAt: new Date(),
-				}).run();
-
-				// Link to conversation
-				tx.insert(conversationImages).values({
-					id: randomUUID(),
-					sessionId,
-					imageId,
-					uploadedAt: new Date(),
-				}).run();
+			await db.insert(images).values({
+				id: imageId,
+				filename: imageId + ext,
+				originalFilename: filename,
+				mediaType: params.mediaType || "image/jpeg",
+				storageType: "filesystem",
+				filePath: stored.originalPath,
+				cdnUrl: stored.cdnUrl,
+				thumbnailData: stored.thumbnailBuffer,
+				fileSize: buffer.length,
+				width: stored.width,
+				height: stored.height,
+				sha256Hash: sha256,
+				status: "processing",
+				uploadedAt: new Date(),
 			});
 		} catch (error: any) {
 			// If database insert fails, clean up the file
@@ -285,42 +262,8 @@ export class ImageProcessingService {
 			console.warn("Failed to delete from vector index:", error);
 		}
 
-		// Database delete cascades to metadata, variants, and conversation_images
+		// Database delete cascades to metadata and variants
 		await db.delete(images).where(eq(images.id, imageId));
-	}
-
-	/**
-	 * Get all images from a conversation
-	 */
-	async getConversationImages(sessionId: string): Promise<ImageDetails[]> {
-		const conversationImgs = await db.query.conversationImages.findMany({
-			where: eq(conversationImages.sessionId, sessionId),
-			with: {
-				image: {
-					with: {
-						metadata: true,
-					},
-				},
-			},
-		});
-
-		return conversationImgs.map((ci) => {
-			const img = ci.image;
-			return {
-				id: img.id,
-				filename: img.filename,
-				originalFilename: img.originalFilename,
-				status: img.status as "processing" | "completed" | "failed",
-				fileSize: img.fileSize,
-				width: img.width ?? undefined,
-				height: img.height ?? undefined,
-				url: img.cdnUrl ?? (img.filePath ? `/uploads${img.filePath}` : undefined),
-				cdnUrl: img.cdnUrl ?? undefined,
-				uploadedAt: img.uploadedAt,
-				processedAt: img.processedAt ?? undefined,
-				thumbnailUrl: img.id ? `/api/images/${img.id}/thumbnail` : undefined,
-			};
-		});
 	}
 }
 

@@ -1,5 +1,7 @@
 import type { DrizzleDB } from "../db/client";
 import type { VectorIndexService } from "../services/vector-index";
+import type { ServiceContainer } from "../services/service-container";
+import type { SessionService } from "../services/session-service";
 
 // Tool metadata
 export interface ToolMetadata {
@@ -8,6 +10,18 @@ export interface ToolMetadata {
 	riskLevel: "safe" | "moderate" | "high";
 	requiresApproval: boolean; // HITL flag
 	tags: string[]; // ['write', 'page', 'cms']
+}
+
+// Logger interface for agent context
+export interface AgentLogger {
+	info: (msg: string | object, meta?: Record<string, unknown>) => void;
+	warn: (msg: string | object, meta?: Record<string, unknown>) => void;
+	error: (msg: string | object, meta?: Record<string, unknown>) => void;
+}
+
+// Stream writer interface for real-time updates
+export interface StreamWriter {
+	write: (event: StreamEvent) => void;
 }
 
 // Agent context passed to all tool executions
@@ -19,26 +33,20 @@ export interface AgentContext {
 	vectorIndex: VectorIndexService;
 
 	// Logging
-	logger: {
-		info: (msg: string | object, meta?: any) => void;
-		warn: (msg: string | object, meta?: any) => void;
-		error: (msg: string | object, meta?: any) => void;
-	};
+	logger: AgentLogger;
 
 	// Streaming (for real-time updates)
-	stream?: {
-		write: (event: any) => void;
-	};
+	stream?: StreamWriter;
 
 	// Tracing
 	traceId: string;
 	sessionId: string;
 
 	// Services
-	services: any; // ServiceContainer (avoid circular dependency)
+	services: ServiceContainer;
 
 	// Session service for message persistence
-	sessionService: any;
+	sessionService: SessionService;
 
 	// CMS Target (for multi-tenant operations)
 	cmsTarget?: {
@@ -55,7 +63,7 @@ export interface LogEntry {
 	timestamp: Date;
 	level: "info" | "warn" | "error";
 	message: string;
-	metadata?: Record<string, any>;
+	metadata?: Record<string, unknown>;
 }
 
 // Stream event types
@@ -66,11 +74,11 @@ export interface StepCompleteEvent {
 	stepNumber: number;
 	toolCalls?: Array<{
 		toolName: string;
-		input: any;
+		input: unknown;
 	}>;
 	toolResults?: Array<{
 		success: boolean;
-		output: any;
+		output: unknown;
 	}>;
 }
 
@@ -78,7 +86,7 @@ export interface ErrorEvent {
 	type: "error";
 	traceId: string;
 	error: string;
-	details?: any;
+	details?: unknown;
 }
 
 export interface LogEvent {
@@ -86,7 +94,7 @@ export interface LogEvent {
 	traceId: string;
 	level: "info" | "warn" | "error";
 	message: string;
-	metadata?: Record<string, any>;
+	metadata?: Record<string, unknown>;
 }
 
 export type StreamEvent = StepCompleteEvent | ErrorEvent | LogEvent;

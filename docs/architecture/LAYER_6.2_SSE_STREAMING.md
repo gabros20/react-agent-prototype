@@ -143,8 +143,7 @@ setSessionId(data.traceId);  // Wrong! traceId ≠ sessionId
 export function useAgent() {
   const { addMessage, setIsStreaming, sessionId, setSessionId, setCurrentTraceId } =
     useChatStore();
-  const { addLog, updateToolState } = useLogStore();
-  const { setUsage } = useUsageStore();
+  const { addEntry, completeEntry, updateEntry } = useTraceStore();
   const [error, setError] = useState<Error | null>(null);
 
   const sendMessage = useCallback(async (prompt: string) => {
@@ -225,56 +224,51 @@ const processSSEEvent = (line: string) => {
       assistantText += data.delta || data.text || '';
       break;
 
-    // Tool execution (consolidated states)
+    // Tool execution
     case 'tool-call':
-      addLog({
+      addEntry({
         id: data.toolCallId || crypto.randomUUID(),
         traceId: currentTraceId,
-        timestamp: new Date(),
+        timestamp: Date.now(),
         type: 'tool-call',
+        level: 'info',
         toolName: data.toolName,
+        toolCallId: data.toolCallId,
+        summary: `Calling ${data.toolName}...`,
         input: data.args,
-        state: data.state || 'pending',  // NEW: consolidated state
       });
       break;
 
     case 'tool-result':
-      updateToolState(data.toolCallId, {
-        state: 'completed',
-        output: data.result,
-      });
+      completeEntry(data.toolCallId, data.result);
       break;
 
-    // Step boundaries (NEW in AI SDK 6)
+    // Step boundaries (AI SDK 6)
     case 'step-start':
-      addLog({
+      addEntry({
         id: crypto.randomUUID(),
         traceId: currentTraceId,
-        timestamp: new Date(),
+        timestamp: Date.now(),
         type: 'step-start',
-        message: `Step ${data.stepNumber} started`,
+        level: 'info',
+        stepNumber: data.stepNumber,
+        summary: `Step ${data.stepNumber} started`,
       });
       break;
 
     case 'step-finish':
-      addLog({
+      addEntry({
         id: crypto.randomUUID(),
         traceId: currentTraceId,
-        timestamp: new Date(),
-        type: 'step-finish',
-        message: `Step ${data.stepNumber} finished`,
-        usage: data.usage,
-      });
-      break;
-
-    // Usage tracking (NEW)
-    case 'usage':
-      setUsage({
-        promptTokens: data.promptTokens,
-        completionTokens: data.completionTokens,
-        totalTokens: data.totalTokens,
-        estimatedCost: data.estimatedCost,
-        formattedCost: data.formattedCost,
+        timestamp: Date.now(),
+        type: 'step-complete',
+        level: 'info',
+        stepNumber: data.stepNumber,
+        summary: `Step ${data.stepNumber} finished`,
+        tokens: data.usage ? {
+          input: data.usage.promptTokens,
+          output: data.usage.completionTokens,
+        } : undefined,
       });
       break;
 
@@ -298,25 +292,27 @@ const processSSEEvent = (line: string) => {
 
     // Errors
     case 'error':
-      addLog({
+      addEntry({
         id: crypto.randomUUID(),
         traceId: data.traceId || currentTraceId,
-        timestamp: new Date(),
+        timestamp: Date.now(),
         type: 'error',
-        message: data.error || 'Unknown error'
+        level: 'error',
+        summary: data.error || 'Unknown error',
       });
       setError(new Error(data.error || 'Unknown error'));
       break;
 
     // Debug logs
     case 'log':
-      addLog({
+      addEntry({
         id: crypto.randomUUID(),
         traceId: data.traceId || currentTraceId,
-        timestamp: new Date(data.timestamp),
-        type: 'info',
-        message: data.message,
-        metadata: data.metadata
+        timestamp: Date.now(),
+        type: 'system-log',
+        level: data.level || 'info',
+        summary: data.message,
+        input: data.metadata,
       });
       currentTraceId = data.traceId || currentTraceId;
       break;
@@ -327,42 +323,6 @@ const processSSEEvent = (line: string) => {
       break;
   }
 };
-```
-
----
-
-## Consolidated Tool States
-
-AI SDK 6 uses consolidated states for tool calls:
-
-```typescript
-type ToolCallState =
-  | 'pending'      // Tool called, waiting for execution
-  | 'streaming'    // Tool executing with streaming output
-  | 'completed'    // Tool finished successfully
-  | 'failed';      // Tool execution failed
-
-// In logStore
-interface ToolLogEntry {
-  id: string;
-  traceId: string;
-  toolName: string;
-  input: unknown;
-  output?: unknown;
-  state: ToolCallState;
-  timestamp: Date;
-}
-```
-
-### State Transitions
-
-```
-tool-call event → state: 'pending'
-                      ↓
-             tool executes...
-                      ↓
-tool-result event → state: 'completed'
-                    (or 'failed' on error)
 ```
 
 ---
@@ -404,77 +364,7 @@ getTotalMetrics: () => TraceMetrics;
 
 ---
 
-## Debug Panel Integration
-
-The debug panel shows consolidated tool states:
-
-```typescript
-// app/assistant/_components/debug-panel.tsx
-function ToolCallEntry({ entry }: { entry: ToolLogEntry }) {
-  const stateColors = {
-    pending: 'text-yellow-500',
-    streaming: 'text-blue-500',
-    completed: 'text-green-500',
-    failed: 'text-red-500',
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <span className={stateColors[entry.state]}>
-        {entry.state === 'pending' && <Loader className="animate-spin" />}
-        {entry.state === 'completed' && <Check />}
-        {entry.state === 'failed' && <X />}
-      </span>
-      <span>{entry.toolName}</span>
-      {entry.output && (
-        <span className="text-muted-foreground">
-          → {JSON.stringify(entry.output).slice(0, 50)}...
-        </span>
-      )}
-    </div>
-  );
-}
-```
-
----
-
 ## Design Decisions
-
-### Why Consolidated Tool States?
-
-```typescript
-// Before: Multiple event types
-'tool-call-streaming-start'
-'tool-call'
-'tool-result'
-
-// After: Single state field
-{ state: 'pending' | 'streaming' | 'completed' | 'failed' }
-```
-
-**Benefits:**
-1. Simpler state management in stores
-2. Easier UI rendering logic
-3. Consistent with AI SDK 6 patterns
-4. Reduces event handler complexity
-
-### Why Track Usage Per-Request?
-
-```typescript
-case 'usage':
-  setUsage({
-    promptTokens: data.promptTokens,
-    completionTokens: data.completionTokens,
-    totalTokens: data.totalTokens,
-    estimatedCost: data.estimatedCost,
-  });
-```
-
-**Benefits:**
-1. Cost visibility for users
-2. Session-level cost tracking
-3. Helps with API budget management
-4. Debug panel shows token breakdown
 
 ### Why Buffer-Based Parsing?
 
@@ -498,7 +388,7 @@ buffer = lines.pop() || '';
 | Layer 3.7 (Agent Streaming) | Backend emits SSE events |
 | Layer 6.1 (State Management) | Updates chat store, trace store (metrics, entries) |
 | Layer 6.4 (Chat Components) | ChatPane consumes messages |
-| Layer 6.5 (Debug Panel) | Shows trace entries, tool states, usage metrics |
+| Layer 6.5/6.6 (Debug Panel) | Shows trace entries, metrics, cost tracking |
 
 ### Event Flow Diagram
 
@@ -542,25 +432,25 @@ buffer = lines.pop() || '';  // Don't discard
 
 ### Tool State Not Updating
 
-**Cause:** `updateToolState` not finding entry.
+**Cause:** `completeEntry` not finding entry by toolCallId.
 
 **Debug:**
 ```typescript
 console.log('Tool result for:', data.toolCallId);
-console.log('Current logs:', useLogStore.getState().logs);
+console.log('Pending timings:', useTraceStore.getState().pendingTimings);
 ```
 
-### Usage Not Displaying
+### Metrics Not Displaying
 
-**Cause:** `usage` event not emitted or store not connected.
+**Cause:** Token data not being extracted from step-finish events.
 
 **Debug:**
 ```typescript
 // In processSSEEvent
-console.log('Usage event:', data);
+console.log('Step finish usage:', data.usage);
 // In component
-const usage = useUsageStore();
-console.log('Usage state:', usage);
+const metrics = useTraceStore.getState().getMetrics();
+console.log('Metrics:', metrics);
 ```
 
 ### Session Not Persisting

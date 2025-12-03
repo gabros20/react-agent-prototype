@@ -4204,7 +4204,7 @@ export const addImageToSectionTool: any = tool({
 export const addImageToSectionTool: any = tool({
   description: "Add an uploaded image to a page section field (hero image, background, etc.). Updates section content with image URL and alt text.",
   inputSchema: z.object({
-    imageId: z.string().describe('Image ID (from findImage or listConversationImages)'),
+    imageId: z.string().describe('Image ID (from findImage or listAllImages)'),
     pageSectionId: z.string().describe("Page section ID"),
     fieldName: z.string().describe('Field name (e.g., "image", "heroImage", "backgroundImage")'),
     localeCode: z.string().optional().default("en").describe("Locale code"),

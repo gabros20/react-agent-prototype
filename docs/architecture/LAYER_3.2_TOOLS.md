@@ -217,17 +217,17 @@ The "magic" is that modern LLMs are **trained** to output structured function ca
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │                    ALL_TOOLS Registry                       │  │
 │  │                                                             │  │
-│  │   48+ tools organized by domain:                            │  │
+│  │   45 tools organized by domain:                             │  │
 │  │                                                             │  │
 │  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │  │
 │  │   │  Pages  │ │Sections │ │ Images  │ │  Posts  │           │  │
-│  │   │  (8)    │ │  (6)    │ │  (6)    │ │  (6)    │           │  │
+│  │   │  (6)    │ │  (8)    │ │  (7)    │ │  (7)    │           │  │
 │  │   └─────────┘ └─────────┘ └─────────┘ └─────────┘           │  │
 │  │                                                             │  │
 │  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │  │
-│  │   │ Entries │ │  Nav    │ │  Site   │ │  Web    │           │  │
-│  │   │  (5)    │ │  (5)    │ │  (3)    │ │Research │           │  │
-│  │   └─────────┘ └─────────┘ └─────────┘ │  (3)    │           │  │
+│  │   │ Entries │ │  Nav    │ │ Search  │ │  Web    │           │  │
+│  │   │  (2)    │ │  (5)    │ │  (2)    │ │Research │           │  │
+│  │   └─────────┘ └─────────┘ └─────────┘ │  (5)+   │           │  │
 │  │                                       └─────────┘           │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
@@ -313,86 +313,105 @@ export const cms_createPage = tool({
 
 ## Tool Categories
 
-### CMS - Pages (8 tools)
+### CMS - Pages (6 tools)
 
 | Tool                        | Purpose                                | Risk     |
 | --------------------------- | -------------------------------------- | -------- |
-| `cms_getPages`              | List all pages                         | Safe     |
-| `cms_getPage`               | Get single page (with/without content) | Safe     |
-| `cms_createPage`            | Create new page                        | Safe     |
-| `cms_createPageWithContent` | Create page with sections              | Safe     |
-| `cms_updatePage`            | Update page metadata                   | Moderate |
-| `cms_deletePage`            | Delete page (requires confirmation)    | High     |
-| `cms_findResource`          | Fuzzy search for pages                 | Safe     |
-| `cms_searchPages`           | Semantic search                        | Safe     |
+| `cmsGetPage`                | Get single page (with/without content) | Safe     |
+| `cmsCreatePage`             | Create new page                        | Safe     |
+| `cmsCreatePageWithContent`  | Create page with sections              | Safe     |
+| `cmsUpdatePage`             | Update page metadata                   | Moderate |
+| `cmsDeletePage`             | Delete page (requires confirmation)    | High     |
+| `cmsListPages`              | List all pages                         | Safe     |
 
-### CMS - Sections (6 tools)
+### CMS - Sections (8 tools)
 
 | Tool                       | Purpose                                | Risk     |
 | -------------------------- | -------------------------------------- | -------- |
-| `cms_getPageSections`      | List sections on a page                | Safe     |
-| `cms_getSectionContent`    | Get specific section content           | Safe     |
-| `cms_getSectionFields`     | Get section template fields/schema     | Safe     |
-| `cms_listSectionTemplates` | List available section templates       | Safe     |
-| `cms_addSectionToPage`     | Add section to page                    | Safe     |
-| `cms_updateSectionContent` | Update section content (merges)        | Moderate |
-| `cms_deletePageSection`    | Remove section (requires confirmation) | High     |
+| `cmsListSectionTemplates`  | List available section templates       | Safe     |
+| `cmsSectionFields`         | Get section template fields/schema     | Safe     |
+| `cmsAddSectionToPage`      | Add section to page                    | Safe     |
+| `cmsUpdateSectionContent`  | Update section content (merges)        | Moderate |
+| `cmsDeletePageSection`     | Remove single section (confirmation)   | High     |
+| `cmsDeletePageSections`    | Remove multiple sections (confirmation)| High     |
+| `cmsGetPageSections`       | List sections on a page                | Safe     |
+| `cmsGetSectionContent`     | Get specific section content           | Safe     |
 
-### CMS - Images (6 tools)
+### CMS - Images (7 tools)
 
-| Tool                         | Purpose                          | Risk     |
-| ---------------------------- | -------------------------------- | -------- |
-| `cms_listConversationImages` | List uploaded images in session  | Safe     |
-| `cms_findImage`              | Find image by description        | Safe     |
-| `cms_searchImages`           | Semantic image search            | Safe     |
-| `cms_updateSectionImage`     | Attach image to section          | Moderate |
-| `cms_replaceImage`           | Replace image reference          | Moderate |
-| `cms_deleteImage`            | Delete image (requires approval) | High     |
+| Tool                     | Purpose                          | Risk     |
+| ------------------------ | -------------------------------- | -------- |
+| `findImageTool`          | Find image by description        | Safe     |
+| `searchImagesTool`       | Semantic image search            | Safe     |
+| `listAllImagesTool`      | List all images in system        | Safe     |
+| `addImageToSectionTool`  | Attach image to section          | Moderate |
+| `updateSectionImageTool` | Update image in section          | Moderate |
+| `replaceImageTool`       | Replace image reference          | Moderate |
+| `deleteImageTool`        | Delete image (confirmation)      | High     |
 
-### CMS - Posts (6 tools)
+### CMS - Posts (7 tools)
 
-| Tool              | Purpose                          | Risk     |
-| ----------------- | -------------------------------- | -------- |
-| `cms_getPosts`    | List blog posts                  | Safe     |
-| `cms_getPost`     | Get single post                  | Safe     |
-| `cms_createPost`  | Create draft post                | Safe     |
-| `cms_updatePost`  | Update post content              | Moderate |
-| `cms_publishPost` | Publish post (requires approval) | High     |
-| `cms_archivePost` | Archive post (requires approval) | High     |
-| `cms_deletePost`  | Delete post (requires approval)  | High     |
+| Tool             | Purpose                          | Risk     |
+| ---------------- | -------------------------------- | -------- |
+| `cmsCreatePost`  | Create draft post                | Safe     |
+| `cmsUpdatePost`  | Update post content              | Moderate |
+| `cmsPublishPost` | Publish post (confirmation)      | High     |
+| `cmsArchivePost` | Archive post (confirmation)      | High     |
+| `cmsDeletePost`  | Delete post (confirmation)       | High     |
+| `cmsListPosts`   | List blog posts                  | Safe     |
+| `cmsGetPost`     | Get single post                  | Safe     |
 
 ### CMS - Navigation (5 tools)
 
 | Tool                       | Purpose            | Risk     |
 | -------------------------- | ------------------ | -------- |
-| `cms_getNavigation`        | Get all nav items  | Safe     |
-| `cms_addNavigationItem`    | Add nav link       | Safe     |
-| `cms_updateNavigationItem` | Update nav link    | Moderate |
-| `cms_toggleNavigationItem` | Show/hide nav item | Moderate |
-| `cms_removeNavigationItem` | Remove nav item    | High     |
+| `getNavigationTool`        | Get all nav items  | Safe     |
+| `addNavigationItemTool`    | Add nav link       | Safe     |
+| `updateNavigationItemTool` | Update nav link    | Moderate |
+| `removeNavigationItemTool` | Remove nav item    | High     |
+| `toggleNavigationItemTool` | Show/hide nav item | Moderate |
 
-### CMS - Site Settings (3 tools)
+### CMS - Entries (2 tools)
 
-| Tool                     | Purpose              | Risk     |
-| ------------------------ | -------------------- | -------- |
-| `cms_getSiteSettings`    | Get global settings  | Safe     |
-| `cms_updateSiteSettings` | Update settings      | Moderate |
-| `cms_getSiteSetting`     | Get specific setting | Safe     |
+| Tool                     | Purpose                  | Risk |
+| ------------------------ | ------------------------ | ---- |
+| `cmsGetCollectionEntries`| Get entries by collection| Safe |
+| `cmsGetEntryContent`     | Get entry content        | Safe |
+
+### Search (2 tools)
+
+| Tool            | Purpose                   | Risk |
+| --------------- | ------------------------- | ---- |
+| `searchVector`  | Semantic vector search    | Safe |
+| `cmsFindResource` | Fuzzy search for resources| Safe |
 
 ### Web Research (3 tools)
 
-| Tool               | Purpose                    | Risk |
-| ------------------ | -------------------------- | ---- |
-| `web_quickSearch`  | Fast web search (snippets) | Safe |
-| `web_deepResearch` | Comprehensive research     | Safe |
-| `web_fetchContent` | Extract content from URL   | Safe |
+| Tool                 | Purpose                    | Risk |
+| -------------------- | -------------------------- | ---- |
+| `webQuickSearchTool` | Fast web search (snippets) | Safe |
+| `webDeepResearchTool`| Comprehensive research     | Safe |
+| `webFetchContentTool`| Extract content from URL   | Safe |
+
+### Stock Photos (2 tools)
+
+| Tool                    | Purpose                  | Risk |
+| ----------------------- | ------------------------ | ---- |
+| `pexelsSearchPhotosTool`| Search Pexels photos     | Safe |
+| `pexelsDownloadPhotoTool`| Download and save photo | Safe |
 
 ### HTTP (2 tools)
 
-| Tool        | Purpose                         | Risk |
-| ----------- | ------------------------------- | ---- |
-| `http_get`  | Fetch from URL                  | Safe |
-| `http_post` | Post to URL (requires approval) | High |
+| Tool        | Purpose            | Risk |
+| ----------- | ------------------ | ---- |
+| `httpGet`   | Fetch from URL     | Safe |
+| `httpPost`  | Post to URL        | High |
+
+### Planning (1 tool)
+
+| Tool              | Purpose           | Risk |
+| ----------------- | ----------------- | ---- |
+| `planAnalyzeTask` | Analyze task plan | Safe |
 
 ---
 
@@ -472,31 +491,29 @@ Metadata is stored separately from tool definitions:
 ```typescript
 // server/tools/types.ts
 export const TOOL_METADATA: Record<string, ToolMeta> = {
-	cms_createPage: {
+	cmsCreatePage: {
 		category: "cms",
 		riskLevel: "safe",
-		requiresApproval: false,
 		tags: ["page", "create", "content"],
 	},
 
-	cms_deletePage: {
+	cmsDeletePage: {
 		category: "cms",
 		riskLevel: "high",
-		requiresApproval: false, // Uses confirmation flag instead
+		// Uses confirmed flag pattern (conversational HITL)
 		tags: ["page", "delete", "destructive"],
 	},
 
-	cms_deleteImage: {
+	deleteImageTool: {
 		category: "cms",
 		riskLevel: "high",
-		requiresApproval: true, // Uses HITL approval queue
+		// Uses confirmed flag pattern (conversational HITL)
 		tags: ["image", "delete", "destructive"],
 	},
 
-	http_post: {
+	httpPost: {
 		category: "http",
 		riskLevel: "high",
-		requiresApproval: true,
 		tags: ["http", "external", "write"],
 	},
 };
@@ -504,79 +521,63 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
 
 ### Risk Levels
 
-| Level      | Description                      | Handling                          |
-| ---------- | -------------------------------- | --------------------------------- |
-| `safe`     | Read-only or creates new content | Execute immediately               |
-| `moderate` | Updates existing content         | Execute with logging              |
-| `high`     | Deletes or external writes       | Requires confirmation or approval |
+| Level      | Description                      | Handling                                |
+| ---------- | -------------------------------- | --------------------------------------- |
+| `safe`     | Read-only or creates new content | Execute immediately                     |
+| `moderate` | Updates existing content         | Execute with logging                    |
+| `high`     | Deletes or external writes       | Requires confirmed flag (conversational)|
 
 ---
 
-## Two Confirmation Patterns
+## Confirmation Pattern
 
-### Pattern 1: Explicit Confirmation Flag
+All destructive operations use the **Conversational Confirmed Flag Pattern**:
 
-Used for: `cms_deletePage`, `cms_deletePageSection`
+Used for: `cmsDeletePage`, `cmsDeletePageSection`, `cmsDeletePost`, `deleteImageTool`, etc.
 
 ```typescript
-export const cms_deletePage = tool({
-	description: "Delete a page. Requires explicit confirmation.",
+export const cmsDeletePage = tool({
+	description: "Delete a page permanently. Requires confirmed: true.",
 	inputSchema: z.object({
-		pageId: z.string(),
-		confirmed: z.boolean().default(false).describe("Must be true to actually delete"),
+		slug: z.string().optional(),
+		id: z.string().optional(),
+		confirmed: z.boolean().optional().describe("Must be true to actually delete"),
 	}),
 	execute: async (input, { experimental_context }) => {
 		const ctx = experimental_context as AgentContext;
 
-		// First call: confirm flag false
+		// First call: confirmed flag missing or false
 		if (!input.confirmed) {
+			const page = await ctx.services.pageService.getPage(input);
 			return {
 				requiresConfirmation: true,
-				message: `Are you sure you want to delete this page? This cannot be undone.`,
-				pageId: input.pageId,
+				message: `Are you sure you want to delete page "${page.name}"? This cannot be undone.`,
+				page: { id: page.id, slug: page.slug, name: page.name },
 			};
 		}
 
-		// Second call: confirmed
-		await ctx.services.pageService.deletePage(input.pageId);
-		return { success: true, message: "Page deleted" };
+		// Second call: confirmed: true
+		await ctx.services.pageService.deletePage(input.id!);
+		return { success: true, message: "Page deleted successfully." };
 	},
 });
 ```
 
 **Flow:**
 
-1. Agent calls `cms_deletePage({ pageId: "123", confirmed: false })`
-2. Tool returns `{ requiresConfirmation: true, message: "..." }`
-3. Agent tells user and waits
-4. User confirms
-5. Agent calls `cms_deletePage({ pageId: "123", confirmed: true })`
-6. Page is deleted
+1. User: "Delete the about page"
+2. Agent calls `cmsDeletePage({ slug: "about" })` (no confirmed flag)
+3. Tool returns `{ requiresConfirmation: true, message: "Are you sure..." }`
+4. Agent presents confirmation to user in chat
+5. User responds "yes" or "no"
+6. If yes, agent calls `cmsDeletePage({ slug: "about", confirmed: true })`
+7. Page is deleted
 
-### Pattern 2: HITL Approval Queue
-
-Used for: `cms_deleteImage`, `cms_publishPost`, `http_post`
-
-```typescript
-// Handled in orchestrator, not in tool
-if (TOOL_METADATA[toolName]?.requiresApproval) {
-  yield { type: 'approval-required', toolName, input };
-  const approved = await approvalQueue.waitForApproval(approvalId);
-  if (!approved) {
-    return { cancelled: true };
-  }
-}
-// Then execute tool
-```
-
-**Flow:**
-
-1. Agent calls `cms_deleteImage({ imageId: "456" })`
-2. Orchestrator detects `requiresApproval: true`
-3. Emits `approval-required` event
-4. Frontend shows modal
-5. User approves/denies
-6. If approved, tool executes
+**Key Benefits:**
+- No modal/popup needed - confirmation happens in natural conversation
+- No separate approval endpoint
+- Agent can provide context about what will be deleted
+- User can ask follow-up questions before confirming
 
 See [Layer 3.5 HITL](./LAYER_3.5_HITL.md) for full details.
 
@@ -794,7 +795,7 @@ const wrappedTool = withLogging(withRetry(withValidation(baseTool)));
 2. **Orchestrator handles cross-cutting** - Retry, logging centralized
 3. **Simpler testing** - Tools are pure functions
 
-### Why 48+ Tools?
+### Why 45 Tools?
 
 More tools = more capabilities. LLMs handle large tool sets well with good descriptions.
 

@@ -58,21 +58,6 @@ router.get("/api/images/:id/details", async (req, res) => {
 });
 
 /**
- * GET /api/images/conversation/:sessionId
- * Get all images in a conversation
- */
-router.get("/api/images/conversation/:sessionId", async (req, res) => {
-	try {
-		const images = await imageProcessingService.getConversationImages(req.params.sessionId);
-		res.json(ApiResponse.success(images));
-	} catch (error) {
-		res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
-			ApiResponse.error(ErrorCodes.INTERNAL_ERROR, error instanceof Error ? error.message : "Failed to get images")
-		);
-	}
-});
-
-/**
  * GET /api/images/search?q=query&page=1&limit=10
  * Search images by natural language query with pagination
  */

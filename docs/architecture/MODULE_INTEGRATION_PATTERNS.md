@@ -124,10 +124,10 @@ const agent = new ToolLoopAgent({
 **How tools are registered, filtered, and executed with context injection.**
 
 **📁 Key Files:**
-- `server/tools/all-tools.ts` - All 21 tools (lines 1-760)
+- `server/tools/all-tools.ts` - All 45 tools
 - `server/tools/types.ts` - AgentContext interface
-- `server/routes/agent.ts` - Context building (lines 60-75)
-- `server/agent/orchestrator.ts` - Agent initialization (lines 90-110)
+- `server/routes/agent.ts` - Thin controller (~100 lines)
+- `server/services/agent/orchestrator.ts` - AgentOrchestrator service
 
 **🔧 Key Exports:**
 - `export const ALL_TOOLS = { 'cms.getPage': cmsGetPage, ... }` (line 750)
@@ -136,10 +136,10 @@ const agent = new ToolLoopAgent({
 ```mermaid
 flowchart TB
     subgraph "Tool Definitions"
-        T1[cms.getPage<br/>tool definition<br/>all-tools.ts:15-65]
-        T2[cms.createPage<br/>tool definition]
-        T3[cms.listPages<br/>tool definition]
-        TN[... 18 more tools]
+        T1[cmsGetPage<br/>tool definition]
+        T2[cmsCreatePage<br/>tool definition]
+        T3[cmsListPages<br/>tool definition]
+        TN[... 42 more tools]
     end
     
     subgraph "Registry"
@@ -222,9 +222,9 @@ export const cmsGetPage = tool({
 
 // 2. Registry (server/tools/all-tools.ts)
 export const ALL_TOOLS = {
-  'cms.getPage': cmsGetPage,
-  'cms.createPage': cmsCreatePage,
-  // ... all 21 tools
+  cmsGetPage,
+  cmsCreatePage,
+  // ... all 45 tools
 }
 
 // 3. Context Building (server/routes/agent.ts)
@@ -693,223 +693,112 @@ export function createAgentRoutes(services: ServiceContainer) {
 
 ---
 
-## 5. HITL Approval Flow (Promise-Based)
+## 5. HITL Confirmation Flow (Conversational)
 
-**Promise-based approval queue for asynchronous tool approval.**
+**Destructive operations use a conversational confirmation pattern via the `confirmed` flag.**
 
 **📁 Key Files:**
-- `server/services/approval-queue.ts` - Promise coordination logic
-- `server/agent/orchestrator.ts` - Integration (lines 280-320)
-- `server/routes/agent.ts` - Approval endpoint (POST /approval/:id)
-- `app/assistant/_components/hitl-modal.tsx` - User approval UI
-- `app/assistant/_stores/approval-store.ts` - Frontend approval state
+- `server/tools/all-tools.ts` - Tools with `confirmed` flag pattern
+- `server/prompts/core/base-rules.xml` - Confirmation behavior instructions
+- `app/assistant/_stores/trace-store.ts` - Tracks confirmation-required entries
+- `app/assistant/_hooks/use-agent.ts` - Detects requiresConfirmation in tool results
 
-**🔧 Key Methods:**
-- `approvalQueue.addRequest(id, toolName, input)` - Returns Promise (line 45)
-- `approvalQueue.resolveRequest(id, decision)` - Resolves Promise (line 75)
-- `result.addToolApprovalResponse({ decision })` - AI SDK method
-- `useApprovalStore.setPendingApproval()` - Shows modal
+**🔧 Key Pattern:**
+- First call: Tool returns `{ requiresConfirmation: true, message: "..." }`
+- Agent asks user for confirmation in chat
+- Second call: User confirms, agent calls with `confirmed: true`
+- Tool executes destructive operation
 
 ```mermaid
 sequenceDiagram
-    participant Agent as Agent<br/>ToolLoopAgent
-    participant Stream as Stream Processor<br/>orchestrator.ts:280-320
-    participant Queue as ApprovalQueue<br/>(Promise Map)
-    participant SSE as SSE Response<br/>(Express)
-    participant Frontend as Frontend<br/>(React)
     participant User as User
-    
-    Note over Agent,User: Tool Needs Approval
-    Agent->>Stream: tool-approval-request event
-    Stream->>Queue: addRequest(approvalId, toolName, input)
-    Queue->>Queue: Create promise<br/>Store in map
-    Queue-->>Stream: Promise (pending)
-    Stream->>SSE: SSE: approval-required event
-    SSE->>Frontend: data: {type: 'approval-required', ...}
-    Frontend->>User: Show modal
-    
-    Note over Agent,User: User Decision
-    User->>Frontend: Click Approve/Reject
-    Frontend->>SSE: POST /agent/approval/:id {decision}
-    SSE->>Queue: resolveRequest(approvalId, decision)
-    Queue->>Queue: Find promise in map<br/>Resolve/reject promise
-    Queue-->>Stream: Promise resolved
-    Stream->>Agent: result.addToolApprovalResponse()
-    
-    alt Approved
-        Agent->>Agent: Execute tool
-        Agent->>Stream: tool-result event
-        Stream->>SSE: SSE: tool-result
-        SSE->>Frontend: Tool completed
-    else Rejected
-        Agent->>Agent: Skip tool
-        Agent->>Stream: error event
-        Stream->>SSE: SSE: error
-        SSE->>Frontend: Tool rejected
-    end
-    
-    Note over Agent,User: Timeout Protection
-    Queue->>Queue: setTimeout(5 min)
-    Queue->>Queue: Auto-reject if no response
-    Queue->>Stream: Promise rejected
-    Stream->>SSE: SSE: error (timeout)
+    participant Chat as Chat UI
+    participant Agent as ReAct Agent
+    participant Tool as Destructive Tool
+    participant SSE as SSE Stream
+    participant Trace as Trace Store
+
+    Note over User,Trace: Conversational Confirmation Flow
+
+    User->>Chat: "Delete the about page"
+    Chat->>Agent: User message
+
+    Agent->>Tool: cms_deletePage({ slug: "about" })
+    Note right of Tool: First call: no confirmed flag
+
+    Tool->>Agent: { requiresConfirmation: true,<br/>message: "Are you sure..." }
+    Agent->>SSE: tool-result with requiresConfirmation
+    SSE->>Trace: Add confirmation-required entry
+
+    Agent->>Chat: "This will permanently delete...<br/>Are you sure?"
+    Chat->>User: Display confirmation message
+
+    User->>Chat: "yes"
+    Chat->>Agent: User confirms
+
+    Agent->>Tool: cms_deletePage({ slug: "about", confirmed: true })
+    Note right of Tool: Second call: with confirmed: true
+
+    Tool->>Agent: { success: true, message: "Deleted" }
+    Agent->>Chat: "Done! Page deleted."
+    Chat->>User: Display completion
 ```
 
 **Code Pattern:**
 ```typescript
-// 1. Approval Queue (server/services/approval-queue.ts)
-interface ApprovalRequest {
-  approvalId: string;
-  toolName: string;
-  input: Record<string, any>;
-  timestamp: Date;
-  promise: {
-    resolve: (response: ApprovalResponse) => void;
-    reject: (reason: string) => void;
-  };
-  timeoutId: NodeJS.Timeout;
-}
+// Tool with confirmed flag (server/tools/all-tools.ts)
+export const cmsDeletePage = tool({
+  description: 'Delete a page - REQUIRES CONFIRMATION',
+  inputSchema: z.object({
+    id: z.string().optional(),
+    slug: z.string().optional(),
+    confirmed: z.boolean().optional().describe('Must be true to execute deletion'),
+  }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
 
-class ApprovalQueue {
-  private requests = new Map<string, ApprovalRequest>();
-  private readonly TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
-  
-  addRequest(
-    approvalId: string,
-    toolName: string,
-    input: Record<string, any>
-  ): Promise<ApprovalResponse> {
-    return new Promise((resolve, reject) => {
-      // Auto-reject after timeout
-      const timeoutId = setTimeout(() => {
-        this.requests.delete(approvalId);
-        reject(new Error('Approval request timed out'));
-      }, this.TIMEOUT_MS);
-      
-      // Store request
-      this.requests.set(approvalId, {
-        approvalId,
-        toolName,
-        input,
-        timestamp: new Date(),
-        promise: { resolve, reject },
-        timeoutId
-      });
-    });
-  }
-  
-  resolveRequest(
-    approvalId: string,
-    decision: 'approved' | 'rejected',
-    reason?: string
-  ): void {
-    const request = this.requests.get(approvalId);
-    if (!request) {
-      throw new Error(`Approval request not found: ${approvalId}`);
+    // Get the page first
+    const page = await ctx.services.pageService.getPageBySlugOrId(input.slug, input.id);
+    if (!page) return { error: 'Page not found' };
+
+    // Check confirmation
+    if (!input.confirmed) {
+      return {
+        requiresConfirmation: true,
+        message: `Are you sure you want to delete "${page.name}"? This will permanently remove the page and all sections.`,
+        page: { id: page.id, slug: page.slug, name: page.name },
+      };
     }
-    
-    // Clear timeout
-    clearTimeout(request.timeoutId);
-    
-    // Resolve promise
-    if (decision === 'approved') {
-      request.promise.resolve({
-        decision: 'approved',
-        timestamp: new Date()
-      });
-    } else {
-      request.promise.reject(
-        new Error(reason || 'User rejected approval')
-      );
-    }
-    
-    // Remove from map
-    this.requests.delete(approvalId);
-  }
-}
 
-export const approvalQueue = new ApprovalQueue();
-
-// 2. Orchestrator Integration (server/agent/orchestrator.ts)
-export async function streamAgentWithApproval(...) {
-  for await (const chunk of streamResult.fullStream) {
-    if (chunk.type === 'tool-approval-request') {
-      const approvalId = randomUUID();
-      
-      // Emit SSE event to frontend
-      stream.write({
-        type: 'approval-required',
-        approvalId,
-        toolName: chunk.toolName,
-        input: chunk.input,
-        timestamp: new Date().toISOString()
-      });
-      
-      try {
-        // Wait for user decision (promise blocks here)
-        const response = await approvalQueue.addRequest(
-          approvalId,
-          chunk.toolName,
-          chunk.input
-        );
-        
-        // User approved - continue execution
-        result.addToolApprovalResponse({
-          decision: 'approved',
-          timestamp: response.timestamp
-        });
-        
-      } catch (error) {
-        // User rejected or timeout
-        result.addToolApprovalResponse({
-          decision: 'rejected',
-          reason: error.message
-        });
-      }
-    }
-  }
-}
-
-// 3. API Endpoint (server/routes/agent.ts)
-router.post('/approval/:approvalId', async (req, res) => {
-  const { approvalId } = req.params;
-  const { decision, reason } = req.body;
-  
-  try {
-    approvalQueue.resolveRequest(approvalId, decision, reason);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(404).json({ error: error.message });
-  }
+    // Execute deletion
+    await ctx.services.pageService.deletePage(page.id);
+    return { success: true, message: `Page "${page.name}" deleted` };
+  },
 });
 
-// 4. Frontend Integration (app/assistant/_hooks/use-agent.ts)
-if (event.type === 'approval-required') {
-  // Show modal
-  useApprovalStore.getState().setPendingApproval({
-    approvalId: event.approvalId,
-    toolName: event.toolName,
-    input: event.input
-  });
+// Frontend detection (app/assistant/_hooks/use-agent.ts)
+case 'tool-result': {
+  const result = data.result || {};
+  if (result.requiresConfirmation === true) {
+    // Log as special trace entry type
+    addEntry({
+      traceId: currentTraceId,
+      type: 'confirmation-required',
+      level: 'warn',
+      toolName: data.toolName,
+      summary: `${data.toolName}: Confirmation required`,
+      output: result,
+    });
+  }
 }
-
-// 5. Modal Handler (app/assistant/_components/hitl-modal.tsx)
-const handleApprove = async () => {
-  await fetch(`/api/agent/approval/${approvalId}`, {
-    method: 'POST',
-    body: JSON.stringify({ decision: 'approved' })
-  });
-  
-  closeModal();
-};
 ```
 
 **Key Features:**
-- ✅ Promise-based coordination
-- ✅ 5-minute timeout (auto-reject)
-- ✅ Async/await friendly
-- ✅ No polling needed
-- ✅ Clean error handling
+- ✅ No separate approval endpoint needed
+- ✅ No modal UI needed - all inline chat
+- ✅ Agent explains consequences before confirming
+- ✅ Natural conversational flow
+- ✅ Simple tool-level implementation
 
 ---
 

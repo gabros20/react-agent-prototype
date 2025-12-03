@@ -5,15 +5,17 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Clock, Wrench, Layers, Zap, AlertCircle, Loader2 } from "lucide-react";
+import { ChevronDown, Clock, Wrench, Layers, Zap, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import {
 	useTraceStore,
 	type ConversationLog,
 	type TraceEntry,
+	type TraceMetrics,
 	formatDuration,
 } from "../../_stores/trace-store";
 import { useChatStore } from "../../_stores/chat-store";
 import { TimelineEntry } from "./timeline-entry";
+import { sessionsApi } from "@/lib/api";
 
 // Entry types that should be indented when inside a step
 const STEP_CHILD_TYPES = new Set(["tool-call", "text-streaming"]);
@@ -85,7 +87,7 @@ function ConversationSection({ conversation, isExpanded, onToggleExpanded }: Con
 	// For completed conversations, use the stored entries
 	const entries = useMemo(() => {
 		if (conversation.isLive) {
-			return entriesByTrace.get(conversation.id) || [];
+			return entriesByTrace[conversation.id] || [];
 		}
 		return conversation.entries || [];
 	}, [conversation.isLive, conversation.id, conversation.entries, entriesByTrace]);
@@ -245,6 +247,19 @@ function ConversationSection({ conversation, isExpanded, onToggleExpanded }: Con
 							</div>
 						);
 					})}
+
+					{/* Completion footer - shown when conversation is done */}
+					{isComplete && stats && (
+						<div className="flex items-center gap-2 py-2 px-3 text-xs text-muted-foreground border-t border-border/30 mt-2">
+							<CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+							<span>Completed in {formatDuration(stats.totalDuration)}</span>
+							{stats.cost > 0 && (
+								<span className="text-muted-foreground/60">
+									&bull; ${stats.cost.toFixed(4)}
+								</span>
+							)}
+						</div>
+					)}
 				</div>
 			</CollapsibleContent>
 		</Collapsible>
@@ -274,40 +289,35 @@ export function ConversationAccordion({ className }: ConversationAccordionProps)
 			return; // Already fetched
 		}
 
-		console.log("[ConversationAccordion] Fetching logs for session:", sid);
 		setIsLoading(true);
 		lastFetchedSessionId.current = sid;
 
 		try {
-			const response = await fetch(`/api/sessions/${sid}/logs`);
-			console.log("[ConversationAccordion] Response status:", response.status);
-			if (response.ok) {
-				const data = await response.json();
-				console.log("[ConversationAccordion] Logs data:", data);
-				if (data.data && Array.isArray(data.data)) {
-					const logs: ConversationLog[] = data.data.map((log: any) => ({
-						id: log.id,
-						sessionId: log.sessionId,
-						conversationIndex: log.conversationIndex,
-						userPrompt: log.userPrompt,
-						startedAt: new Date(log.startedAt),
-						completedAt: log.completedAt ? new Date(log.completedAt) : null,
-						metrics: log.metrics,
-						modelInfo: log.modelInfo,
-						entries: (log.entries || []) as TraceEntry[],
-						isLive: false,
-					}));
-					console.log("[ConversationAccordion] Parsed logs count:", logs.length);
-					setPersistedLogs(logs);
-					// Also load into trace store so use-agent can calculate correct next index
-					loadConversationLogs(sid, logs);
-				} else {
-					setPersistedLogs([]);
-					loadConversationLogs(sid, []);
-				}
+			const rawLogs = await sessionsApi.getLogs(sid) as Array<Record<string, unknown>>;
+			if (Array.isArray(rawLogs)) {
+				const logs: ConversationLog[] = rawLogs.map((log) => ({
+					id: log.id as string,
+					sessionId: log.sessionId as string,
+					conversationIndex: log.conversationIndex as number,
+					userPrompt: log.userPrompt as string,
+					startedAt: new Date(log.startedAt as string),
+					completedAt: log.completedAt ? new Date(log.completedAt as string) : null,
+					metrics: log.metrics as TraceMetrics | null,
+					modelInfo: log.modelInfo as { modelId: string; pricing: { prompt: number; completion: number } | null } | null,
+					entries: ((log.entries || []) as TraceEntry[]),
+					isLive: false,
+				}));
+				setPersistedLogs(logs);
+				// Also load into trace store so use-agent can calculate correct next index
+				loadConversationLogs(sid, logs);
+			} else {
+				setPersistedLogs([]);
+				loadConversationLogs(sid, []);
 			}
 		} catch (error) {
 			console.error("Failed to fetch conversation logs:", error);
+			setPersistedLogs([]);
+			loadConversationLogs(sid, []);
 		} finally {
 			setIsLoading(false);
 		}
@@ -315,8 +325,6 @@ export function ConversationAccordion({ className }: ConversationAccordionProps)
 
 	// Fetch logs when sessionId changes
 	useEffect(() => {
-		console.log("[ConversationAccordion] useEffect triggered, sessionId:", sessionId);
-
 		if (!sessionId) {
 			setPersistedLogs([]);
 			lastFetchedSessionId.current = null;
@@ -331,7 +339,6 @@ export function ConversationAccordion({ className }: ConversationAccordionProps)
 		// Subscribe to chat store changes to catch hydration
 		const unsubscribe = useChatStore.subscribe((state, prevState) => {
 			if (state.sessionId && state.sessionId !== prevState.sessionId) {
-				console.log("[ConversationAccordion] Store subscription: sessionId changed to", state.sessionId);
 				fetchLogs(state.sessionId);
 			}
 		});
@@ -339,7 +346,6 @@ export function ConversationAccordion({ className }: ConversationAccordionProps)
 		// Check if there's already a sessionId (from hydration that happened before mount)
 		const currentSessionId = useChatStore.getState().sessionId;
 		if (currentSessionId && lastFetchedSessionId.current !== currentSessionId) {
-			console.log("[ConversationAccordion] Initial fetch for hydrated sessionId:", currentSessionId);
 			fetchLogs(currentSessionId);
 		}
 

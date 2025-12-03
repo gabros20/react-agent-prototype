@@ -169,6 +169,10 @@ export const cmsPublishPost = tool({
     // Publish
     const published = await ctx.services.entryService.publishEntry(entry.id)
 
+    if (!published) {
+      throw new Error(`Failed to publish post: ${entry.slug}`)
+    }
+
     return {
       success: true,
       post: {
@@ -176,7 +180,7 @@ export const cmsPublishPost = tool({
         slug: entry.slug,
         title: entry.title,
         status: 'published',
-        publishedAt: published.publishedAt,
+        publishedAt: published.publishedAt ?? new Date(),
         message: 'Post published successfully and is now publicly visible'
       }
     }

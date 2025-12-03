@@ -99,20 +99,74 @@ export interface ConversationLog {
 }
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Apply filters to entries - pure function for computing derived state */
+function applyFilters(entries: TraceEntry[], filters: TraceFilters): TraceEntry[] {
+	return entries.filter((entry) => {
+		// Type filter
+		if (filters.types.length > 0 && !filters.types.includes(entry.type)) {
+			return false;
+		}
+
+		// Level filter
+		if (filters.levels.length > 0 && !filters.levels.includes(entry.level)) {
+			return false;
+		}
+
+		// Job events toggle
+		if (!filters.showJobEvents && entry.type.startsWith("job-")) {
+			return false;
+		}
+
+		// Search query
+		if (filters.searchQuery) {
+			const query = filters.searchQuery.toLowerCase();
+			const searchable = [entry.summary, entry.toolName, JSON.stringify(entry.input), JSON.stringify(entry.output)]
+				.filter(Boolean)
+				.join(" ")
+				.toLowerCase();
+
+			if (!searchable.includes(query)) {
+				return false;
+			}
+		}
+
+		return true;
+	});
+}
+
+/** Compute derived state from current entries and filters */
+function computeDerivedState(
+	entriesByTrace: Record<string, TraceEntry[]>,
+	activeTraceId: string | null,
+	filters: TraceFilters
+): { activeTraceEntries: TraceEntry[]; filteredEntries: TraceEntry[] } {
+	const activeTraceEntries = entriesByTrace[activeTraceId || ""] || [];
+	const filteredEntries = applyFilters(activeTraceEntries, filters);
+	return { activeTraceEntries, filteredEntries };
+}
+
+// ============================================================================
 // Store
 // ============================================================================
 
 interface TraceState {
-	// Entries grouped by traceId
-	entriesByTrace: Map<string, TraceEntry[]>;
+	// Entries grouped by traceId (Record instead of Map for proper Zustand reactivity)
+	entriesByTrace: Record<string, TraceEntry[]>;
 	allTraceIds: string[];
 	activeTraceId: string | null;
 
-	// Model and pricing per trace
-	modelInfoByTrace: Map<string, { modelId: string; pricing: ModelPricing | null }>;
+	// Derived state (computed after mutations, subscribed by components)
+	activeTraceEntries: TraceEntry[];
+	filteredEntries: TraceEntry[];
 
-	// Timing tracking for duration calculation
-	pendingTimings: Map<string, number>; // id -> startTime
+	// Model and pricing per trace (Record instead of Map)
+	modelInfoByTrace: Record<string, { modelId: string; pricing: ModelPricing | null }>;
+
+	// Timing tracking for duration calculation (Record instead of Map)
+	pendingTimings: Record<string, number>; // id -> startTime
 
 	// Filters
 	filters: TraceFilters;
@@ -178,11 +232,13 @@ const DEFAULT_FILTERS: TraceFilters = {
 };
 
 export const useTraceStore = create<TraceState>((set, get) => ({
-	entriesByTrace: new Map(),
+	entriesByTrace: {},
 	allTraceIds: [],
 	activeTraceId: null,
-	modelInfoByTrace: new Map(),
-	pendingTimings: new Map(),
+	activeTraceEntries: [],
+	filteredEntries: [],
+	modelInfoByTrace: {},
+	pendingTimings: {},
 	filters: DEFAULT_FILTERS,
 	selectedEntryId: null,
 	isModalOpen: false,
@@ -202,84 +258,116 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 		};
 
 		set((state) => {
-			const newEntriesByTrace = new Map(state.entriesByTrace);
-			const traceEntries = newEntriesByTrace.get(fullEntry.traceId) || [];
+			const traceEntries = state.entriesByTrace[fullEntry.traceId] || [];
 
 			// Prevent duplicate IDs - if entry with this ID exists, skip
 			if (traceEntries.some((e) => e.id === id)) {
 				return state;
 			}
 
-			newEntriesByTrace.set(fullEntry.traceId, [...traceEntries, fullEntry]);
+			const newEntriesByTrace = {
+				...state.entriesByTrace,
+				[fullEntry.traceId]: [...traceEntries, fullEntry],
+			};
 
 			// Track new trace IDs
-			const newTraceIds = state.allTraceIds.includes(fullEntry.traceId) ? state.allTraceIds : [...state.allTraceIds, fullEntry.traceId];
+			const newTraceIds = state.allTraceIds.includes(fullEntry.traceId)
+				? state.allTraceIds
+				: [...state.allTraceIds, fullEntry.traceId];
 
 			// Auto-set active trace if none set
 			const activeTraceId = state.activeTraceId || fullEntry.traceId;
 
 			// Track timing for entries that need duration calculation
-			const newPendingTimings = new Map(state.pendingTimings);
+			const newPendingTimings = { ...state.pendingTimings };
 			if (fullEntry.type === "tool-call" || fullEntry.type === "job-queued") {
-				newPendingTimings.set(fullEntry.toolCallId || fullEntry.jobId || id, fullEntry.timestamp);
+				newPendingTimings[fullEntry.toolCallId || fullEntry.jobId || id] = fullEntry.timestamp;
 			}
+
+			// Recompute derived state
+			const derived = computeDerivedState(newEntriesByTrace, activeTraceId, state.filters);
 
 			return {
 				entriesByTrace: newEntriesByTrace,
 				allTraceIds: newTraceIds,
 				activeTraceId,
 				pendingTimings: newPendingTimings,
+				...derived,
 			};
 		});
 	},
 
 	updateEntry: (id, updates) => {
 		set((state) => {
-			const newEntriesByTrace = new Map(state.entriesByTrace);
+			let newEntriesByTrace = state.entriesByTrace;
+			let found = false;
 
-			for (const [traceId, entries] of newEntriesByTrace) {
+			for (const traceId of Object.keys(state.entriesByTrace)) {
+				const entries = state.entriesByTrace[traceId];
 				const index = entries.findIndex((e) => e.id === id);
 				if (index !== -1) {
 					const updatedEntries = [...entries];
 					updatedEntries[index] = { ...updatedEntries[index], ...updates };
-					newEntriesByTrace.set(traceId, updatedEntries);
+					newEntriesByTrace = {
+						...state.entriesByTrace,
+						[traceId]: updatedEntries,
+					};
+					found = true;
 					break;
 				}
 			}
 
-			return { entriesByTrace: newEntriesByTrace };
+			if (!found) return state;
+
+			// Recompute derived state
+			const derived = computeDerivedState(newEntriesByTrace, state.activeTraceId, state.filters);
+
+			return { entriesByTrace: newEntriesByTrace, ...derived };
 		});
 	},
 
 	deleteEntry: (id) => {
 		set((state) => {
-			const newEntriesByTrace = new Map(state.entriesByTrace);
+			let newEntriesByTrace = state.entriesByTrace;
+			let found = false;
 
-			for (const [traceId, entries] of newEntriesByTrace) {
+			for (const traceId of Object.keys(state.entriesByTrace)) {
+				const entries = state.entriesByTrace[traceId];
 				const index = entries.findIndex((e) => e.id === id);
 				if (index !== -1) {
 					const updatedEntries = entries.filter((e) => e.id !== id);
-					newEntriesByTrace.set(traceId, updatedEntries);
+					newEntriesByTrace = {
+						...state.entriesByTrace,
+						[traceId]: updatedEntries,
+					};
+					found = true;
 					break;
 				}
 			}
 
-			return { entriesByTrace: newEntriesByTrace };
+			if (!found) return state;
+
+			// Recompute derived state
+			const derived = computeDerivedState(newEntriesByTrace, state.activeTraceId, state.filters);
+
+			return { entriesByTrace: newEntriesByTrace, ...derived };
 		});
 	},
 
 	completeEntry: (id, output, error) => {
 		const state = get();
-		const startTime = state.pendingTimings.get(id);
+		const startTime = state.pendingTimings[id];
 		const duration = startTime ? Date.now() - startTime : undefined;
 
 		set((state) => {
-			const newPendingTimings = new Map(state.pendingTimings);
-			newPendingTimings.delete(id);
+			const newPendingTimings = { ...state.pendingTimings };
+			delete newPendingTimings[id];
 
-			const newEntriesByTrace = new Map(state.entriesByTrace);
+			let newEntriesByTrace = state.entriesByTrace;
+			let found = false;
 
-			for (const [traceId, entries] of newEntriesByTrace) {
+			for (const traceId of Object.keys(state.entriesByTrace)) {
+				const entries = state.entriesByTrace[traceId];
 				const index = entries.findIndex((e) => e.toolCallId === id || e.jobId === id || e.id === id);
 				if (index !== -1) {
 					const updatedEntries = [...entries];
@@ -289,34 +377,54 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 						output,
 						error,
 					};
-					newEntriesByTrace.set(traceId, updatedEntries);
+					newEntriesByTrace = {
+						...state.entriesByTrace,
+						[traceId]: updatedEntries,
+					};
+					found = true;
 					break;
 				}
 			}
 
+			if (!found) {
+				return { pendingTimings: newPendingTimings };
+			}
+
+			// Recompute derived state
+			const derived = computeDerivedState(newEntriesByTrace, state.activeTraceId, state.filters);
+
 			return {
 				entriesByTrace: newEntriesByTrace,
 				pendingTimings: newPendingTimings,
+				...derived,
 			};
 		});
 	},
 
 	setModelInfo: (traceId, modelId, pricing) => {
-		set((state) => {
-			const newModelInfoByTrace = new Map(state.modelInfoByTrace);
-			newModelInfoByTrace.set(traceId, { modelId, pricing });
-			return { modelInfoByTrace: newModelInfoByTrace };
-		});
+		set((state) => ({
+			modelInfoByTrace: {
+				...state.modelInfoByTrace,
+				[traceId]: { modelId, pricing },
+			},
+		}));
 	},
 
 	setActiveTrace: (traceId) => {
-		set({ activeTraceId: traceId, selectedEntryId: null });
+		set((state) => {
+			// Recompute derived state for new active trace
+			const derived = computeDerivedState(state.entriesByTrace, traceId, state.filters);
+			return { activeTraceId: traceId, selectedEntryId: null, ...derived };
+		});
 	},
 
 	setFilters: (filters) => {
-		set((state) => ({
-			filters: { ...state.filters, ...filters },
-		}));
+		set((state) => {
+			const newFilters = { ...state.filters, ...filters };
+			// Recompute only filteredEntries (activeTraceEntries unchanged)
+			const filteredEntries = applyFilters(state.activeTraceEntries, newFilters);
+			return { filters: newFilters, filteredEntries };
+		});
 	},
 
 	setSelectedEntry: (id) => {
@@ -336,28 +444,35 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			const targetTraceId = traceId || state.activeTraceId;
 			if (!targetTraceId) return state;
 
-			const newEntriesByTrace = new Map(state.entriesByTrace);
-			newEntriesByTrace.delete(targetTraceId);
+			const newEntriesByTrace = { ...state.entriesByTrace };
+			delete newEntriesByTrace[targetTraceId];
 
 			const newTraceIds = state.allTraceIds.filter((id) => id !== targetTraceId);
-			const newActiveTraceId = state.activeTraceId === targetTraceId ? newTraceIds[newTraceIds.length - 1] || null : state.activeTraceId;
+			const newActiveTraceId =
+				state.activeTraceId === targetTraceId ? newTraceIds[newTraceIds.length - 1] || null : state.activeTraceId;
+
+			// Recompute derived state
+			const derived = computeDerivedState(newEntriesByTrace, newActiveTraceId, state.filters);
 
 			return {
 				entriesByTrace: newEntriesByTrace,
 				allTraceIds: newTraceIds,
 				activeTraceId: newActiveTraceId,
 				selectedEntryId: null,
+				...derived,
 			};
 		});
 	},
 
 	clearAllTraces: () => {
 		set({
-			entriesByTrace: new Map(),
+			entriesByTrace: {},
 			allTraceIds: [],
 			activeTraceId: null,
-			modelInfoByTrace: new Map(),
-			pendingTimings: new Map(),
+			activeTraceEntries: [],
+			filteredEntries: [],
+			modelInfoByTrace: {},
+			pendingTimings: {},
 			selectedEntryId: null,
 			isModalOpen: false,
 			modalEntry: null,
@@ -475,7 +590,7 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 
 	exportTrace: (traceId) => {
 		const state = get();
-		const entries = state.entriesByTrace.get(traceId) || [];
+		const entries = state.entriesByTrace[traceId] || [];
 		const metrics = get().getMetrics();
 
 		const exportData = {
@@ -508,8 +623,18 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			const time = new Date(e.timestamp).toISOString();
 			const duration = e.duration ? ` (${e.duration}ms)` : "";
 			const tool = e.toolName ? ` [${e.toolName}]` : "";
-			const inputStr = e.input ? `\n  Input: ${JSON.stringify(e.input, null, 2).split('\n').map((l, i) => i === 0 ? l : '  ' + l).join('\n')}` : "";
-			const outputStr = e.output ? `\n  Output: ${JSON.stringify(e.output, null, 2).split('\n').map((l, i) => i === 0 ? l : '  ' + l).join('\n')}` : "";
+			const inputStr = e.input
+				? `\n  Input: ${JSON.stringify(e.input, null, 2)
+						.split("\n")
+						.map((l, i) => (i === 0 ? l : "  " + l))
+						.join("\n")}`
+				: "";
+			const outputStr = e.output
+				? `\n  Output: ${JSON.stringify(e.output, null, 2)
+						.split("\n")
+						.map((l, i) => (i === 0 ? l : "  " + l))
+						.join("\n")}`
+				: "";
 			const errorStr = e.error ? `\n  Error: ${e.error.message}` : "";
 
 			return `[${time}] [${e.type}]${tool}${duration}\n  ${e.summary}${inputStr}${outputStr}${errorStr}`;
@@ -541,7 +666,9 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			}
 			if (log.metrics) {
 				const m = log.metrics;
-				sections.push(`Metrics: ${formatDuration(m.totalDuration)} | ${m.toolCallCount} tools | ${m.stepCount} steps | ${m.tokens?.input || 0} in / ${m.tokens?.output || 0} out`);
+				sections.push(
+					`Metrics: ${formatDuration(m.totalDuration)} | ${m.toolCallCount} tools | ${m.stepCount} steps | ${m.tokens?.input || 0} in / ${m.tokens?.output || 0} out`
+				);
 			}
 			sections.push(`${"=".repeat(80)}`);
 			sections.push("");
@@ -567,47 +694,15 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 		await navigator.clipboard.writeText(sections.join("\n"));
 	},
 
+	// Keep for backward compatibility - returns the computed filteredEntries
 	getFilteredEntries: () => {
-		const state = get();
-		const entries = state.entriesByTrace.get(state.activeTraceId || "") || [];
-
-		return entries.filter((entry) => {
-			// Type filter
-			if (state.filters.types.length > 0 && !state.filters.types.includes(entry.type)) {
-				return false;
-			}
-
-			// Level filter
-			if (state.filters.levels.length > 0 && !state.filters.levels.includes(entry.level)) {
-				return false;
-			}
-
-			// Job events toggle
-			if (!state.filters.showJobEvents && entry.type.startsWith("job-")) {
-				return false;
-			}
-
-			// Search query
-			if (state.filters.searchQuery) {
-				const query = state.filters.searchQuery.toLowerCase();
-				const searchable = [entry.summary, entry.toolName, JSON.stringify(entry.input), JSON.stringify(entry.output)]
-					.filter(Boolean)
-					.join(" ")
-					.toLowerCase();
-
-				if (!searchable.includes(query)) {
-					return false;
-				}
-			}
-
-			return true;
-		});
+		return get().filteredEntries;
 	},
 
 	getMetrics: () => {
 		const state = get();
-		const entries = state.entriesByTrace.get(state.activeTraceId || "") || [];
-		const modelInfo = state.modelInfoByTrace.get(state.activeTraceId || "");
+		const entries = state.entriesByTrace[state.activeTraceId || ""] || [];
+		const modelInfo = state.modelInfoByTrace[state.activeTraceId || ""];
 
 		const metrics: TraceMetrics = {
 			totalDuration: 0,

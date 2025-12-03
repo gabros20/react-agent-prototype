@@ -16,6 +16,7 @@ interface OpenRouterModel {
   };
   architecture?: {
     modality: string;
+    input_modalities?: string[];
   };
   top_provider?: {
     is_moderated?: boolean;
@@ -75,16 +76,25 @@ async function fetchModelsFromOpenRouter(): Promise<TransformedModel[]> {
 
   const data = (await response.json()) as { data: OpenRouterModel[] };
 
-  // Filter for models with tools support
-  const toolModels = data.data.filter((model) =>
-    model.supported_parameters?.includes("tools")
-  );
+  // Filter for models with:
+  // 1. Tools support (required for agent functionality)
+  // 2. Text input modality (accepts text as input)
+  const filteredModels = data.data.filter((model) => {
+    const hasTools = model.supported_parameters?.includes("tools");
+    const hasTextInput = model.architecture?.input_modalities?.includes("text");
+    return hasTools && hasTextInput;
+  });
 
-  // Sort by context length (high to low)
-  toolModels.sort((a, b) => b.context_length - a.context_length);
+  // Sort by input cost (lowest first) - more useful than context length
+  // Free models first, then by price ascending
+  filteredModels.sort((a, b) => {
+    const costA = parseFloat(a.pricing.prompt);
+    const costB = parseFloat(b.pricing.prompt);
+    return costA - costB;
+  });
 
   // Transform to our format
-  return toolModels.map((model) => ({
+  return filteredModels.map((model) => ({
     id: model.id,
     name: model.name,
     description: model.description || "",

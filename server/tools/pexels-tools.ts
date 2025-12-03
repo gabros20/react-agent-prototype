@@ -4,22 +4,28 @@
  * Two tools for sourcing free stock photos:
  * - pexels_searchPhotos: Browse photos by keyword
  * - pexels_downloadPhoto: Download selected photo into system
+ *
+ * DESIGN NOTE: The Pexels service is intentionally kept as a singleton via
+ * getPexelsService(). It's a stateless API client that only needs an API key
+ * (from env vars) and doesn't require session context or database access.
+ * This is acceptable per the architectural decision to avoid bloating
+ * AgentContext with stateless external API wrappers.
  */
 
 import { tool } from "ai";
 import { z } from "zod";
-import { db } from "../db/client";
-import { images, imageMetadata, conversationImages } from "../db/schema";
-import { eq, like } from "drizzle-orm";
+import { images, imageMetadata } from "../db/schema";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getPexelsService } from "../services/ai/pexels.service";
 import imageProcessingService from "../services/storage/image-processing.service";
+import type { AgentContext } from "./types";
 
 // ============================================================================
 // Tool 1: Search Photos
 // ============================================================================
 
-export const pexelsSearchPhotosTool: any = tool({
+export const pexelsSearchPhotosTool = tool({
 	description: `Search free stock photos from Pexels. Returns preview results with photographer credits. Use pexels_downloadPhoto to add selected photos to the system.`,
 	inputSchema: z.object({
 		query: z.string().describe("Search query (e.g., 'sunset beach', 'modern office')"),
@@ -51,12 +57,8 @@ export const pexelsSearchPhotosTool: any = tool({
 			.optional()
 			.describe("Color filter"),
 	}),
-	execute: async (input: {
-		query: string;
-		perPage?: number;
-		orientation?: "landscape" | "portrait" | "square";
-		color?: string;
-	}): Promise<any> => {
+	execute: async (input) => {
+		// Pexels service is stateless - uses singleton pattern (see file header)
 		const pexelsService = getPexelsService();
 
 		if (!pexelsService.isConfigured()) {
@@ -73,7 +75,7 @@ export const pexelsSearchPhotosTool: any = tool({
 				query: input.query,
 				perPage: input.perPage || 10,
 				orientation: input.orientation,
-				color: input.color as any,
+				color: input.color,
 			});
 
 			return {
@@ -106,14 +108,14 @@ export const pexelsSearchPhotosTool: any = tool({
 // Tool 2: Download Photo
 // ============================================================================
 
-export const pexelsDownloadPhotoTool: any = tool({
+export const pexelsDownloadPhotoTool = tool({
 	description: `Download a Pexels photo into the system. Checks for duplicates, processes image, stores attribution. Photo becomes searchable via cms_searchImages after processing completes. No sessionId needed - uses current session automatically.`,
 	inputSchema: z.object({
 		photoId: z.number().describe("Pexels photo ID (from search results)"),
 	}),
-	execute: async (input: { photoId: number }, { experimental_context }): Promise<any> => {
-		const ctx = experimental_context as any;
-		const sessionId = ctx?.sessionId;
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext;
+		const sessionId = ctx.sessionId;
 
 		if (!sessionId) {
 			return {
@@ -122,6 +124,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 			};
 		}
 
+		// Pexels service is stateless - uses singleton pattern (see file header)
 		const pexelsService = getPexelsService();
 
 		if (!pexelsService.isConfigured()) {
@@ -134,37 +137,18 @@ export const pexelsDownloadPhotoTool: any = tool({
 		try {
 			// Check for duplicate by Pexels ID
 			const sourceTag = `pexels:${input.photoId}`;
-			const existing = await db.query.imageMetadata.findFirst({
+			const existing = await ctx.db.query.imageMetadata.findFirst({
 				where: eq(imageMetadata.source, sourceTag),
 			});
 
 			if (existing) {
 				// Get the image record
-				const existingImage = await db.query.images.findFirst({
+				const existingImage = await ctx.db.query.images.findFirst({
 					where: eq(images.id, existing.imageId),
 					with: { metadata: true },
 				});
 
 				if (existingImage) {
-					// Check if already linked to this conversation
-					const alreadyLinked = await db.query.conversationImages.findFirst({
-						where: (ci, { and, eq }) =>
-							and(
-								eq(ci.sessionId, sessionId),
-								eq(ci.imageId, existingImage.id)
-							),
-					});
-
-					// Link to conversation if not already
-					if (!alreadyLinked) {
-						await db.insert(conversationImages).values({
-							id: randomUUID(),
-							sessionId: sessionId,
-							imageId: existingImage.id,
-							uploadedAt: new Date(),
-						});
-					}
-
 					// Get the local URL
 					const localUrl = existingImage.filePath ? `/uploads/${existingImage.filePath}` : undefined;
 
@@ -176,7 +160,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 						filename: existingImage.originalFilename || existingImage.filename,
 						description: existingImage.metadata?.description,
 						photographer: existingImage.metadata?.detailedDescription?.replace("Photo by ", "").replace(" on Pexels", "") || "Unknown",
-						message: "Photo already in system, linked to conversation",
+						message: "Photo already in system (duplicate by Pexels ID)",
 					};
 				}
 			}
@@ -198,7 +182,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 			// Add/update metadata with Pexels attribution
 			const attribution = `Photo by ${download.metadata.photographer} on Pexels`;
 
-			await db
+			await ctx.db
 				.insert(imageMetadata)
 				.values({
 					id: randomUUID(),
@@ -224,11 +208,11 @@ export const pexelsDownloadPhotoTool: any = tool({
 			const startTime = Date.now();
 
 			let finalStatus = "processing";
-			let imageRecord: any = null;
+			let imageRecord: typeof images.$inferSelect | null = null;
 			while (Date.now() - startTime < maxWaitMs) {
-				imageRecord = await db.query.images.findFirst({
+				imageRecord = await ctx.db.query.images.findFirst({
 					where: eq(images.id, processResult.imageId),
-				});
+				}) ?? null;
 
 				if (imageRecord?.status === "completed") {
 					finalStatus = "completed";
@@ -266,7 +250,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 					photographer: download.metadata.photographer,
 					photographerUrl: download.metadata.photographerUrl,
 					message: `Downloaded. Processing still in progress. ${attribution}`,
-					status: "processing",
+					status: "processing" as const,
 				};
 			}
 
@@ -280,7 +264,7 @@ export const pexelsDownloadPhotoTool: any = tool({
 				photographer: download.metadata.photographer,
 				photographerUrl: download.metadata.photographerUrl,
 				message: `Downloaded and processed. ${attribution}`,
-				status: "completed",
+				status: "completed" as const,
 			};
 		} catch (error) {
 			return {

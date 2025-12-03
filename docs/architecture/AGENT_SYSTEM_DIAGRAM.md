@@ -40,8 +40,7 @@ flowchart TB
         subgraph ZustandStores["Zustand Stores - _stores/"]
             ChatStore["useChatStore<br/>messages, sessionId, isStreaming"]
             SessionStore["useSessionStore<br/>sessions, currentSessionId"]
-            TraceStore["useTraceStore<br/>trace entries, debug panel"]
-            LogStore["useLogStore<br/>execution logs"]
+            TraceStore["useTraceStore<br/>trace entries, metrics, debug panel"]
         end
 
         subgraph ClientHook["Hook - _hooks/use-agent.ts"]
@@ -233,7 +232,7 @@ flowchart TB
     %% === FLOW 15: Response Stream ===
     WriteSSE -->|"SSE format:<br/>event: type<br/>data: JSON"| SSEParser
     SSEParser -->|"text-delta"| ChatStore
-    SSEParser -->|"tool-result"| LogStore
+    SSEParser -->|"tool-result"| TraceStore
     SSEParser -->|"result: sessionId"| SessionStore
     ChatStore --> ChatPane
     TraceStore --> DebugPane
@@ -253,7 +252,7 @@ flowchart TB
     classDef error fill:#ffccbc,stroke:#333
 
     class ChatPane,MessageInput,DebugPane frontend
-    class ChatStore,SessionStore,TraceStore,LogStore store
+    class ChatStore,SessionStore,TraceStore store
     class StreamRoute,WriteSSE,ProxyRoute route
     class AgentContext,ContainerSingleton,DbInstance,VectorIndex,Services context
     class PromptModules,WorkingMemStr,ToolsFormatted,PromptCompose,SystemPrompt prompt

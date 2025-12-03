@@ -68,6 +68,8 @@ import { PageService } from './page-service';
 │  │  │  readonly sectionService: SectionService           │  │  │
 │  │  │  readonly entryService: EntryService               │  │  │
 │  │  │  readonly sessionService: SessionService           │  │  │
+│  │  │  readonly conversationLogService: ConversationLogService│  │
+│  │  │  get agentOrchestrator: AgentOrchestrator (lazy)   │  │  │
 │  │  └────────────────────────────────────────────────────┘  │  │
 │  │                                                          │  │
 │  │  Static Methods:                                         │  │
@@ -113,7 +115,9 @@ import { EntryService } from "./cms/entry-service";
 import { PageService } from "./cms/page-service";
 import { SectionService } from "./cms/section-service";
 import { SessionService } from "./session-service";
+import { ConversationLogService } from "./conversation-log-service";
 import { VectorIndexService } from "./vector-index";
+import { AgentOrchestrator } from "./agent";
 
 export class ServiceContainer {
   // Singleton instance
@@ -126,6 +130,10 @@ export class ServiceContainer {
   readonly sectionService: SectionService;
   readonly entryService: EntryService;
   readonly sessionService: SessionService;
+  readonly conversationLogService: ConversationLogService;
+
+  // Lazy-initialized to avoid circular dependency
+  private _agentOrchestrator?: AgentOrchestrator;
 
   // Private constructor - use initialize() instead
   private constructor(db: DrizzleDB) {
@@ -143,6 +151,9 @@ export class ServiceContainer {
 
     // Initialize session service
     this.sessionService = new SessionService(db);
+
+    // Initialize conversation log service
+    this.conversationLogService = new ConversationLogService(db);
   }
 
   // Async initialization (call once at startup)
@@ -168,6 +179,19 @@ export class ServiceContainer {
   // Cleanup on shutdown
   async dispose(): Promise<void> {
     await this.vectorIndex.close();
+  }
+
+  // Lazy getter for AgentOrchestrator (avoids circular dependency)
+  get agentOrchestrator(): AgentOrchestrator {
+    if (!this._agentOrchestrator) {
+      this._agentOrchestrator = new AgentOrchestrator({
+        db: this.db,
+        services: this,
+        sessionService: this.sessionService,
+        vectorIndex: this.vectorIndex,
+      });
+    }
+    return this._agentOrchestrator;
   }
 }
 ```
@@ -243,6 +267,12 @@ this.entryService = new EntryService(db, this.vectorIndex);
 
 // Session Service: depends only on db
 this.sessionService = new SessionService(db);
+
+// Conversation Log Service: depends only on db
+this.conversationLogService = new ConversationLogService(db);
+
+// AgentOrchestrator: lazy getter (depends on full container)
+get agentOrchestrator() { return new AgentOrchestrator(this); }
 ```
 
 **Dependency Graph:**
@@ -250,15 +280,16 @@ this.sessionService = new SessionService(db);
 ```
                     db (DrizzleDB)
                          │
-        ┌────────────────┼────────────────┐
-        │                │                │
-        ▼                ▼                ▼
-  VectorIndex      SessionService    (shared)
-        │                                 │
-        ├─────────────────────────────────┤
-        │                │                │
-        ▼                ▼                ▼
-  PageService    SectionService    EntryService
+        ┌────────────────┼────────────────┬────────────────┐
+        │                │                │                │
+        ▼                ▼                ▼                ▼
+  VectorIndex      SessionService   ConversationLog   (shared)
+        │                                                  │
+        ├──────────────────────────────────────────────────┤
+        │                │                │                │
+        ▼                ▼                ▼                ▼
+  PageService    SectionService    EntryService     AgentOrchestrator
+                                                     (lazy, uses all)
 ```
 
 ---

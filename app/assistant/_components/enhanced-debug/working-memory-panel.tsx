@@ -7,6 +7,7 @@ import { Brain, Database, FileText, Image, Layers, Tag } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useTraceStore } from '../../_stores/trace-store';
 import { useChatStore } from '../../_stores/chat-store';
+import { sessionsApi } from '@/lib/api';
 
 const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
   page: FileText,
@@ -41,11 +42,8 @@ export function WorkingMemoryPanel({ className }: WorkingMemoryPanelProps) {
   const fetchWorkingMemory = async () => {
     if (!sessionId) return;
     try {
-      const res = await fetch(`/api/v1/sessions/${sessionId}/working-memory`);
-      if (res.ok) {
-        const { data } = await res.json();
-        if (data?.entities) loadEntities(data.entities);
-      }
+      const data = await sessionsApi.getWorkingMemory(sessionId);
+      if (data?.entities) loadEntities(data.entities);
     } catch (e) {
       console.error('Failed to fetch working memory:', e);
     }

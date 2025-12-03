@@ -1,18 +1,25 @@
+/**
+ * Site Settings Tools - Navigation and global site configuration
+ *
+ * Uses experimental_context for database access (AI SDK v6 pattern).
+ * The SiteSettingsService is instantiated per-request from context.db.
+ */
+
 import { tool } from "ai";
 import { z } from "zod";
-import { db } from "../db/client";
 import { SiteSettingsService } from "../services/cms/site-settings-service";
-
-const siteSettingsService = new SiteSettingsService(db);
+import type { AgentContext } from "./types";
 
 /**
  * Get global navigation items
  */
-export const getNavigationTool: any = tool({
+export const getNavigationTool = tool({
   description:
     "Get the global navigation items that appear in header and footer. Returns all navigation items with their label, link, location (header/footer/both), and visibility status.",
   inputSchema: z.object({}),
-  execute: async (): Promise<any> => {
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    const siteSettingsService = new SiteSettingsService(ctx.db);
     try {
       const navItems = await siteSettingsService.getNavigationItems();
 
@@ -33,7 +40,7 @@ export const getNavigationTool: any = tool({
 /**
  * Add a new navigation item
  */
-export const addNavigationItemTool: any = tool({
+export const addNavigationItemTool = tool({
   description:
     "Add a new navigation item to the global navigation. Maximum 5 items allowed. The item will be visible by default. IMPORTANT: Use the page preview URL format '/pages/slug?locale=en' for page links.",
   inputSchema: z.object({
@@ -43,7 +50,9 @@ export const addNavigationItemTool: any = tool({
       .enum(["header", "footer", "both"])
       .describe("Where to show: 'header', 'footer', or 'both'"),
   }),
-  execute: async (input: { label: string; href: string; location: "header" | "footer" | "both" }): Promise<any> => {
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    const siteSettingsService = new SiteSettingsService(ctx.db);
     try {
       const updatedItems = await siteSettingsService.addNavigationItem({
         label: input.label,
@@ -69,7 +78,7 @@ export const addNavigationItemTool: any = tool({
 /**
  * Update an existing navigation item
  */
-export const updateNavigationItemTool: any = tool({
+export const updateNavigationItemTool = tool({
   description:
     "Update an existing navigation item. Can change the label, href, location, or visibility. Find the item by its current label.",
   inputSchema: z.object({
@@ -82,15 +91,11 @@ export const updateNavigationItemTool: any = tool({
       .describe("New location (optional)"),
     visible: z.boolean().optional().describe("Show or hide the item (optional)"),
   }),
-  execute: async (input: {
-    label: string;
-    newLabel?: string;
-    newHref?: string;
-    newLocation?: "header" | "footer" | "both";
-    visible?: boolean;
-  }): Promise<any> => {
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    const siteSettingsService = new SiteSettingsService(ctx.db);
     try {
-      const updates: any = {};
+      const updates: { label?: string; href?: string; location?: "header" | "footer" | "both"; visible?: boolean } = {};
       if (input.newLabel) updates.label = input.newLabel;
       if (input.newHref) updates.href = input.newHref;
       if (input.newLocation) updates.location = input.newLocation;
@@ -115,13 +120,15 @@ export const updateNavigationItemTool: any = tool({
 /**
  * Remove a navigation item
  */
-export const removeNavigationItemTool: any = tool({
+export const removeNavigationItemTool = tool({
   description:
     "Remove a navigation item from the global navigation by its label.",
   inputSchema: z.object({
     label: z.string().describe("Label of the nav item to remove"),
   }),
-  execute: async (input: { label: string }): Promise<any> => {
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    const siteSettingsService = new SiteSettingsService(ctx.db);
     try {
       const updatedItems = await siteSettingsService.removeNavigationItem(input.label);
 
@@ -143,16 +150,18 @@ export const removeNavigationItemTool: any = tool({
 /**
  * Toggle navigation item visibility
  */
-export const toggleNavigationItemTool: any = tool({
+export const toggleNavigationItemTool = tool({
   description:
     "Toggle the visibility of a navigation item (show/hide). Finds the item by label and flips its visibility state.",
   inputSchema: z.object({
     label: z.string().describe("Label of the nav item to toggle"),
   }),
-  execute: async (input: { label: string }): Promise<any> => {
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    const siteSettingsService = new SiteSettingsService(ctx.db);
     try {
       const updatedItems = await siteSettingsService.toggleNavigationItemVisibility(input.label);
-      const item = updatedItems.find((item) => item.label === input.label);
+      const item = updatedItems.find((navItem) => navItem.label === input.label);
 
       return {
         success: true,

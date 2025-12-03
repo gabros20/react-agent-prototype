@@ -126,3 +126,121 @@ RESEARCH GUIDANCE
 4. **Dive deeper into Perplexity sources** - If you need more info from any Perplexity-returned sources, use the default `web_search` tool to extract content from the provided links for points of interest
 5. **Final synthesis** - Once enough context is gathered from all sources, synthesize and process the information into the final deliverable
    This approach combines web search breadth with Perplexity's curated insights, allows iterative refinement of documentation, and enables deep-diving into specific sources for comprehensive research.
+
+---
+
+## CODEBASE ARCHITECTURE
+
+This codebase implements a CMS agent using AI SDK v6's ToolLoopAgent pattern.
+
+### Key Directories
+
+```
+server/
+├── agent/           # AI SDK agent configuration (cms-agent.ts)
+├── db/              # Drizzle ORM schema and migrations
+├── routes/          # Express routes (thin controllers)
+├── services/        # Business logic layer
+│   ├── agent/       # AgentOrchestrator (stream/generate execution)
+│   ├── cms/         # CMS services (pages, sections, entries)
+│   ├── storage/     # Image processing
+│   └── working-memory/  # Entity extraction
+├── tools/           # AI agent tools (41 total)
+├── queues/          # BullMQ job queues (Redis)
+└── workers/         # Background job workers
+
+app/
+├── assistant/       # Chat UI
+│   ├── _components/ # React components
+│   ├── _hooks/      # Custom hooks (use-agent.ts)
+│   └── _stores/     # Zustand stores
+└── api/             # Next.js API routes (proxy to Express)
+
+lib/
+├── api/             # Frontend API client layer
+└── debug-logger/    # Debug logging abstraction
+```
+
+### Architectural Patterns
+
+**1. Tool Definition Pattern**
+```typescript
+export const myTool = tool({
+  description: "...",
+  inputSchema: z.object({ /* ... */ }),
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    // Use ctx.db, ctx.services, ctx.logger
+    return { success: true, data: result };
+  },
+});
+```
+
+**2. Thin Routes, Fat Services**
+Routes handle HTTP concerns only. Business logic lives in services:
+```typescript
+// routes/agent.ts - thin controller
+router.post("/stream", async (req, res) => {
+  const options = schema.parse(req.body);
+  const orchestrator = services.getAgentOrchestrator();
+  for await (const event of orchestrator.executeStream(options)) {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+});
+```
+
+**3. Frontend API Client**
+All API calls go through `lib/api/*`. No inline `fetch()` in stores/hooks:
+```typescript
+import { sessionsApi, agentApi } from "@/lib/api";
+const sessions = await sessionsApi.list();
+const stream = await agentApi.stream({ prompt, sessionId });
+```
+
+**4. Debug Logger**
+Decouple logging from SSE parsing with semantic API:
+```typescript
+import { debugLogger } from "@/lib/debug-logger";
+
+// Scoped trace logging
+const trace = debugLogger.trace(traceId);
+trace.start({ sessionId, userPrompt });
+trace.toolCall("cms_getPage", { slug: "home" }, callId);
+trace.toolResult(callId, { id: "page-1" });
+trace.complete({ metrics });
+
+// Quick logging to active trace
+debugLogger.info("Event occurred", { data });
+```
+
+**5. Context Injection Pattern**
+All tools receive services via `experimental_context`:
+```typescript
+interface AgentContext {
+  db: DrizzleDB;
+  services: ServiceContainer;
+  session: SessionService;
+  logger: AgentLogger;
+  writer: StreamWriter;
+}
+```
+
+### Anti-Patterns to Avoid
+
+- ❌ `ServiceContainer.get()` singleton access in tools
+- ❌ Module-level service instantiation
+- ❌ Inline `fetch()` calls in stores/hooks
+- ❌ Direct trace-store manipulation (use debug-logger)
+- ❌ Business logic in route handlers
+- ❌ Mixed `: any` types without justification
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `server/agent/cms-agent.ts` | AI SDK agent config with tools |
+| `server/services/agent/orchestrator.ts` | Stream/generate execution |
+| `server/tools/types.ts` | AgentContext interface |
+| `lib/api/index.ts` | Frontend API client exports |
+| `lib/debug-logger/index.ts` | Debug logger abstraction |
+| `app/assistant/_hooks/use-agent.ts` | Agent communication hook |

@@ -11,7 +11,6 @@ import type { AgentContext } from './types'
 import {
   findImageTool,
   searchImagesTool,
-  listConversationImagesTool,
   addImageToSectionTool,
   replaceImageTool,
   deleteImageTool,
@@ -863,7 +862,6 @@ export const ALL_TOOLS = {
   // Images
   'cms_findImage': findImageTool,
   'cms_searchImages': searchImagesTool,
-  'cms_listConversationImages': listConversationImagesTool,
   'cms_listAllImages': listAllImagesTool,
   'cms_addImageToSection': addImageToSectionTool,
   'cms_updateSectionImage': updateSectionImageTool,
@@ -1045,12 +1043,6 @@ export const TOOL_METADATA = {
     riskLevel: 'safe',
     requiresApproval: false,
     tags: ['read', 'image', 'search']
-  },
-  'cms_listConversationImages': {
-    category: 'images',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'image']
   },
   'cms_listAllImages': {
     category: 'images',

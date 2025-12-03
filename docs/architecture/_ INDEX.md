@@ -1,7 +1,7 @@
 # Architecture Documentation Index
 
 > **ReAct AI Agent CMS** - Full-stack TypeScript architecture overview
-> **Updated**: 2025-12-01 (AI SDK 6 Migration)
+> **Updated**: 2025-12-03
 
 This index provides a high-level view of the system's major architectural layers. Each layer document is self-contained but references related layers where integration occurs.
 
@@ -230,7 +230,8 @@ The Client layer handles the Next.js frontend, React components, Zustand state m
 | 6.2 | [SSE Streaming](./LAYER_6.2_SSE_STREAMING.md)       | `LAYER_6.2_SSE_STREAMING.md`    | Event parsing, buffer handling, store dispatch        |
 | 6.3 | [Session UI](./LAYER_6.3_SESSION_UI.md)             | `LAYER_6.3_SESSION_UI.md`       | Session sidebar, switching, clear history             |
 | 6.4 | [Chat Components](./LAYER_6.4_CHAT_COMPONENTS.md)   | `LAYER_6.4_CHAT_COMPONENTS.md`  | Message display, input form, markdown rendering       |
-| 6.5 | [HITL UI](./LAYER_6.5_HITL_UI.md)                   | `LAYER_6.5_HITL_UI.md`          | Trace observability, confirmation visualization       |
+| 6.5 | [HITL UI](./LAYER_6.5_HITL_UI.md)                   | `LAYER_6.5_HITL_UI.md`          | Confirmation visualization, approval patterns         |
+| 6.6 | [Trace Observability](./LAYER_6.6_TRACE_OBSERVABILITY.md) | `LAYER_6.6_TRACE_OBSERVABILITY.md` | Debug panel, trace entries, conversation logs |
 
 ### Client Reading Order
 
@@ -246,7 +247,8 @@ The Client layer handles the Next.js frontend, React components, Zustand state m
 
 **Advanced Features:**
 
-5. [6.5 HITL UI](./LAYER_6.5_HITL_UI.md) - Trace and confirmation visualization
+5. [6.5 HITL UI](./LAYER_6.5_HITL_UI.md) - Confirmation visualization
+6. [6.6 Trace Observability](./LAYER_6.6_TRACE_OBSERVABILITY.md) - Debug panel, conversation logs
 
 ---
 
@@ -293,8 +295,8 @@ The Rendering layer handles server-side HTML generation using Nunjucks templates
 | Vector Store | LanceDB                                 |
 | Queue        | BullMQ + Redis                          |
 | Agent        | AI SDK v6 + OpenRouter (GPT-4o-mini)    |
-| Tokenizer    | js-tiktoken (NEW)                       |
-| Pricing      | OpenRouter pricing service (NEW)        |
+| Tokenizer    | js-tiktoken                             |
+| Pricing      | OpenRouter pricing service              |
 | Templates    | Nunjucks                                |
 | Frontend     | Next.js 16 + React 19 (port 3000)       |
 | State        | Zustand                                 |
@@ -318,8 +320,8 @@ External:
 ```
 server/
 ├── agent/           # CMS Agent module (AI SDK 6)
-│   ├── cms-agent.ts     # ToolLoopAgent singleton (NEW)
-│   └── system-prompt.ts # Modular prompt composition (NEW)
+│   ├── cms-agent.ts     # ToolLoopAgent singleton
+│   └── system-prompt.ts # Modular prompt composition
 ├── db/              # Schema, migrations
 ├── middleware/      # Express middleware
 ├── prompts/         # Modular XML prompts
@@ -328,9 +330,9 @@ server/
 ├── queues/          # BullMQ job definitions
 ├── routes/          # API endpoints
 ├── services/        # Business logic
-│   ├── conversation-log-service.ts # Debug log persistence (NEW)
-│   ├── openrouter-pricing.ts       # Cost calculation (NEW)
-│   ├── worker-events.service.ts    # Redis pub/sub (NEW)
+│   ├── conversation-log-service.ts # Debug log persistence
+│   ├── openrouter-pricing.ts       # Cost calculation
+│   ├── worker-events.service.ts    # Redis pub/sub
 │   └── ...
 ├── templates/       # Nunjucks templates
 ├── tools/           # Agent tools (21 total)
@@ -338,14 +340,16 @@ server/
 └── workers/         # Background processors
 
 lib/
-├── tokenizer.ts     # Token counting (NEW)
+├── api/             # Frontend API client layer
+├── debug-logger/    # Debug logging abstraction
+├── tokenizer.ts     # Token counting
 └── ...
 
 app/
 ├── assistant/       # Chat UI (main interface)
-│   ├── _components/ # React components (debug-pane enhanced)
+│   ├── _components/ # React components (enhanced-debug panel)
 │   ├── _hooks/      # Custom hooks (useAgent with AI SDK 6)
-│   └── _stores/     # Zustand stores (trace-store enhanced)
+│   └── _stores/     # Zustand stores (chat, session, trace, models)
 ├── api/             # Next.js API routes
 └── components/      # Shared UI components
 
@@ -378,9 +382,9 @@ scripts/
 | Services  | Database       | Drizzle ORM queries               |
 | Services  | Vector Store   | LanceDB embeddings                |
 | Routes    | Background     | BullMQ job dispatch               |
-| Worker    | Redis          | Publish job events via pub/sub (NEW) |
-| Server    | Client         | Forward worker events via SSE (NEW) |
-| Agent     | ConversationLog | Save trace entries + metrics (NEW) |
+| Worker    | Redis          | Publish job events via pub/sub |
+| Server    | Client         | Forward worker events via SSE |
+| Agent     | ConversationLog | Save trace entries + metrics |
 | Worker    | Services       | Image metadata/variant storage    |
 | Rendering | Database       | Page/section data for templates   |
 

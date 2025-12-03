@@ -1,19 +1,11 @@
 'use client';
 
 import { create } from 'zustand';
+import { modelsApi } from '@/lib/api';
+import type { Model } from '@/lib/api';
 
-export interface Model {
-  id: string;
-  name: string;
-  description: string;
-  contextLength: number;
-  contextLengthFormatted: string;
-  costInputPerMillion: string;
-  costOutputPerMillion: string;
-  provider: string;
-  modality?: string;
-  isModerated: boolean;
-}
+// Re-export type for backward compatibility
+export type { Model } from '@/lib/api';
 
 interface ModelsState {
   models: Model[];
@@ -96,14 +88,7 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const response = await fetch('/api/models');
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error?.message || 'Failed to fetch models');
-      }
-
-      const models: Model[] = result.data.models;
+      const { models } = await modelsApi.list();
 
       // Save to cache
       saveToCache(models);
@@ -113,8 +98,9 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
         lastFetched: Date.now(),
         isLoading: false,
       });
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch models';
+      set({ error: message, isLoading: false });
       console.error('Failed to fetch models:', error);
     }
   },

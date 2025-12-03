@@ -437,31 +437,6 @@ Search for multiple images with semantic similarity scoring.
 }
 ```
 
-### cms_listConversationImages
-
-List images uploaded in current session. **No parameters needed** - uses current session automatically from context.
-
-```javascript
-{}  // Empty - sessionId auto-detected from context
-
-// Returns
-{
-  success: true,
-  images: [
-    {
-      id: "img-abc123",
-      filename: "puppy.jpg",
-      originalFilename: "my-puppy.jpg",
-      url: "/uploads/images/2025/12/02/original/img-abc123.jpg",
-      status: "completed",
-      uploadedAt: "2025-12-02T10:30:00Z",
-      description: "Golden retriever puppy...",
-      tags: ["puppy", "dog"]
-    }
-  ]
-}
-```
-
 ### cms_listAllImages
 
 List all images in the entire system (not just current conversation).
@@ -664,24 +639,6 @@ Responsive image variants.
 
 -   `idx_variants_image` ON `imageId`
 -   `idx_variants_type` ON `(imageId, variantType)`
-
-### conversation_images
-
-Link images to chat sessions.
-
-| Column     | Type      | Description                |
-| ---------- | --------- | -------------------------- |
-| id         | TEXT      | UUID primary key           |
-| sessionId  | TEXT      | FK to sessions.id          |
-| imageId    | TEXT      | FK to images.id            |
-| messageId  | TEXT      | Optional message reference |
-| uploadedAt | TIMESTAMP | Upload time                |
-| orderIndex | INTEGER   | Display order              |
-
-**Indexes:**
-
--   `idx_conv_images_session` ON `sessionId`
--   `idx_conv_images_image` ON `imageId`
 
 ### page_section_images
 
