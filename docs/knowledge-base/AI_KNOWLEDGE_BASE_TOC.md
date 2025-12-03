@@ -4,7 +4,7 @@
 **Organization**: 12 layers (Foundation → Advanced) with 72 topics total  
 **Grounding**: Research papers, production systems, proven implementations from this codebase
 
-**Last Updated**: 2025-12-02  
+**Last Updated**: 2025-12-03
 **Status**: 🚧 In Progress
 
 ---
@@ -256,26 +256,29 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
     -   **Includes**: GPT-4.1/Claude 4.5/Gemini 2.5 pricing, complexity-based router, cascade pattern, custom provider abstraction, prompt caching
     -   **Research**: SWE-bench results, provider strengths comparison, 10 authoritative sources
     -   **Key Insight**: Hybrid routing saves 80-90% by using cheap models for simple tasks, premium for complex
--   [0.2.4 Trade-offs (Cost, Latency, Capabilities)](./kb/0-foundations/0.2.4-tradeoffs.md) ⏳
+-   [0.2.4 Trade-offs (Cost, Latency, Capabilities)](./kb/0-foundations/0.2.4-tradeoffs.md) ✅
+    -   **Status**: ✅ Complete - Restructured with 2025 pricing (Dec 2025)
+    -   **Length**: 370+ lines with TL;DR, Core Concept, Implementation Patterns
+    -   **Includes**: Iron Triangle (cost/latency/quality), 2025 model pricing, optimization strategies, prompt caching
 
 #### 0.3 Tokens, Embeddings, and Vector Spaces
 
 -   [0.3.1 Tokenization (BPE, WordPiece, SentencePiece)](./kb/0-foundations/0.3.1-tokenization.md) ✅
-    -   **Status**: Complete - Comprehensive guide to subword tokenization algorithms
-    -   **Length**: 750+ lines with algorithm comparisons, real-world examples
-    -   **Includes**: BPE (GPT), WordPiece (BERT), SentencePiece (T5), cost optimization, codebase integration
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 380+ lines with TL;DR, Core Concept, Implementation Patterns
+    -   **Includes**: BPE (GPT), WordPiece (BERT), SentencePiece (T5), GitHub 4× faster BPE (2024), tiktoken optimization
 -   [0.3.2 Embedding Models & Vector Spaces](./kb/0-foundations/0.3.2-embedding-models.md) ✅
-    -   **Status**: Complete - Deep dive into semantic embeddings for search and RAG
-    -   **Length**: 700+ lines with model comparisons, implementation examples
-    -   **Includes**: OpenAI text-embedding-3, SBERT, BGE, vector search in your codebase (LanceDB)
+    -   **Status**: ✅ Complete - Restructured with 2025 MTEB findings (Dec 2025)
+    -   **Length**: 460+ lines with TL;DR, 4 Implementation Patterns, hybrid search
+    -   **Includes**: Voyage-3-large (MTEB #1), OpenAI text-embedding-3, Cohere, SBERT, MTEB inflation warning
 -   [0.3.3 Vector Similarity Metrics](./kb/0-foundations/0.3.3-vector-similarity.md) ✅
-    -   **Status**: Complete - Comprehensive guide to measuring embedding similarity
-    -   **Length**: 900+ lines with formulas, visualizations, implementations
-    -   **Includes**: Cosine similarity, dot product, Euclidean, Manhattan, normalization, LanceDB integration
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 340+ lines with TL;DR, Core Concept, Implementation Patterns
+    -   **Includes**: Cosine similarity, dot product, Euclidean, Manhattan, normalization for speed (3× faster)
 -   [0.3.4 Dimensionality Trade-offs](./kb/0-foundations/0.3.4-dimensionality.md) ✅
-    -   **Status**: Complete - Deep dive into embedding dimensions and optimization
-    -   **Length**: 1000+ lines with comparisons, benchmarks, reduction techniques
-    -   **Includes**: 384/768/1536/3072 dims comparison, curse of dimensionality, PCA, UMAP, OpenAI flexible dimensions
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Length**: 370+ lines with TL;DR, Core Concept, 3 Implementation Patterns
+    -   **Includes**: 768-1536 sweet spot, curse of dimensionality, PCA, UMAP, OpenAI flexible dimensions API
 
 ---
 

@@ -15,7 +15,7 @@ import { z } from "zod";
 import type { ModelMessage } from "ai";
 import { cmsAgent, AGENT_CONFIG, type AgentCallOptions } from "../agent/cms-agent";
 import { getSystemPrompt } from "../agent/system-prompt";
-import { EntityExtractor, WorkingContext } from "../services/working-memory";
+import { EntityExtractor } from "../services/working-memory";
 import type { ServiceContainer } from "../services/service-container";
 import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 import { getSiteAndEnv } from "../utils/get-context";
@@ -35,16 +35,6 @@ const agentRequestSchema = z.object({
     })
     .optional()
 })
-
-// Working memory: Store per session (in-memory for now)
-const workingContexts = new Map<string, WorkingContext>();
-
-function getWorkingContext(sessionId: string): WorkingContext {
-	if (!workingContexts.has(sessionId)) {
-		workingContexts.set(sessionId, new WorkingContext());
-	}
-	return workingContexts.get(sessionId)!;
-}
 
 export function createAgentRoutes(services: ServiceContainer) {
 	const router = express.Router();
@@ -142,8 +132,8 @@ export function createAgentRoutes(services: ServiceContainer) {
 				cmsTarget = { siteId: site.id, environmentId: env.id };
 			}
 
-			// Get working context for this session
-			const workingContext = getWorkingContext(sessionId);
+			// Load working context for this session from DB
+			const workingContext = await services.sessionService.loadWorkingContext(sessionId);
 			const extractor = new EntityExtractor();
 
 			// Determine which model to use (request override or default)
@@ -430,6 +420,20 @@ export function createAgentRoutes(services: ServiceContainer) {
 							error: (error as Error).message,
 						});
 					}
+
+					// Persist working memory to DB
+					try {
+						await services.sessionService.saveWorkingContext(sessionId, workingContext);
+						logger.info("Saved working context", {
+							sessionId,
+							entityCount: workingContext.size(),
+						});
+					} catch (error) {
+						logger.error("Failed to save working context", {
+							sessionId,
+							error: (error as Error).message,
+						});
+					}
 				}
 
 				// Send final result
@@ -521,8 +525,8 @@ export function createAgentRoutes(services: ServiceContainer) {
 				cmsTarget = { siteId: site.id, environmentId: env.id };
 			}
 
-			// Get working context for this session
-			const workingContext = getWorkingContext(sessionId);
+			// Load working context for this session from DB
+			const workingContext = await services.sessionService.loadWorkingContext(sessionId);
 
 			// Build agent call options
 			const agentOptions: AgentCallOptions = {
@@ -593,8 +597,15 @@ export function createAgentRoutes(services: ServiceContainer) {
 					];
 
 					await services.sessionService.saveMessages(sessionId, updatedMessages);
+
+					// Persist working memory to DB
+					await services.sessionService.saveWorkingContext(sessionId, workingContext);
+					logger.info("Saved working context", {
+						sessionId,
+						entityCount: workingContext.size(),
+					});
 				} catch (error) {
-					logger.error("Failed to save messages", {
+					logger.error("Failed to save messages or working context", {
 						error: (error as Error).message,
 					});
 				}

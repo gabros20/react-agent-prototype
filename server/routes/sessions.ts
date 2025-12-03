@@ -104,6 +104,25 @@ export function createSessionRoutes(services: ServiceContainer) {
   });
 
   // =========================================================================
+  // WORKING MEMORY
+  // =========================================================================
+
+  // GET /v1/sessions/:id/working-memory - Get working memory entities for session
+  router.get("/:id/working-memory", async (req, res, next) => {
+    try {
+      const workingContext = await services.sessionService.loadWorkingContext(req.params.id);
+      const state = workingContext.toJSON();
+
+      res.json(ApiResponse.success({
+        entities: state.entities,
+        size: workingContext.size(),
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // =========================================================================
   // MESSAGE MANAGEMENT
   // =========================================================================
 

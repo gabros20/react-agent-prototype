@@ -128,6 +128,14 @@ interface TraceState {
 	expandedConversationIds: Set<string>; // Which conversations are expanded
 	clearedAt: number | null; // Timestamp when logs were cleared (for triggering refetch)
 
+	// Persisted working memory entities (loaded from DB on session load)
+	persistedWorkingMemory: Array<{
+		type: string;
+		id: string;
+		name: string;
+		timestamp: string | Date; // String from API, Date after parsing
+	}>;
+
 	// Actions
 	addEntry: (entry: Omit<TraceEntry, "id"> & { id?: string }) => void;
 	updateEntry: (id: string, updates: Partial<TraceEntry>) => void;
@@ -149,6 +157,9 @@ interface TraceState {
 	toggleConversationExpanded: (conversationId: string) => void;
 	setConversationExpanded: (conversationId: string, expanded: boolean) => void;
 	getConversationLogs: () => ConversationLog[];
+
+	// Working memory actions
+	loadPersistedWorkingMemory: (entities: Array<{ type: string; id: string; name: string; timestamp: string | Date }>) => void;
 
 	// Export utilities
 	exportTrace: (traceId: string) => string;
@@ -180,6 +191,7 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 	activeSessionId: null,
 	expandedConversationIds: new Set(),
 	clearedAt: null,
+	persistedWorkingMemory: [],
 
 	addEntry: (entry) => {
 		const id = entry.id || crypto.randomUUID();
@@ -353,6 +365,7 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			conversationLogs: [],
 			expandedConversationIds: new Set(),
 			clearedAt: Date.now(), // Signal to components to clear persisted logs
+			persistedWorkingMemory: [],
 		});
 	},
 
@@ -420,6 +433,11 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 		const state = get();
 		// Just return persisted logs - live traces are added via addConversationLog during streaming
 		return state.conversationLogs;
+	},
+
+	// Working memory actions
+	loadPersistedWorkingMemory: (entities) => {
+		set({ persistedWorkingMemory: entities });
 	},
 
 	// Get aggregated metrics across ALL conversation logs

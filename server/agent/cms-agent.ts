@@ -127,6 +127,9 @@ export const cmsAgent = new ToolLoopAgent({
 	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
 
 	// Context window management - trim if too long
+	// TODO: Future enhancement - use `activeTools` in prepareStep for phase-based tool control
+	// Example: Restrict to read-only tools during planning, enable write tools during execution
+	// See: https://v6.ai-sdk.dev/docs/agents/loop-control#active-tools
 	prepareStep: async ({ messages }: { messages: any[] }) => {
 		// Trim history if too long (prevent token overflow)
 		if (messages.length > 20) {

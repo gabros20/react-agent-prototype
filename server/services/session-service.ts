@@ -250,10 +250,13 @@ export class SessionService {
     // Delete messages
     await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
 
-    // Update session timestamp
+    // Reset working memory and update timestamp
     await this.db
       .update(schema.sessions)
-      .set({ updatedAt: new Date() })
+      .set({
+        workingContext: null,
+        updatedAt: new Date()
+      })
       .where(eq(schema.sessions.id, sessionId));
 
     return { success: true, clearedSessionId: sessionId };
@@ -380,12 +383,16 @@ export class SessionService {
       where: eq(schema.sessions.id, sessionId),
     });
 
-    if (!session?.workingContext || typeof session.workingContext !== 'string') {
+    if (!session?.workingContext) {
       return new WorkingContext();
     }
 
     try {
-      const state = JSON.parse(session.workingContext) as WorkingContextState;
+      // With mode: "json", Drizzle auto-parses the stored JSON
+      // If it's already an object, use directly; if string, parse it
+      const state = typeof session.workingContext === 'string'
+        ? JSON.parse(session.workingContext) as WorkingContextState
+        : session.workingContext as WorkingContextState;
       return WorkingContext.fromJSON(state);
     } catch (error) {
       // If parsing fails, return empty context
