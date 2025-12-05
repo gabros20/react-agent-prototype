@@ -49,24 +49,23 @@ export type ToolSearchOutput = z.infer<typeof ToolSearchOutputSchema>;
 // ============================================================================
 
 export const toolSearchTool = tool({
-	description: `UNLOCK DYNAMIC tools by describing what you need. After this returns, the tools appear in YOUR TOOL LIST - call them directly!
+	description: `Discover tools by capability keywords. Returns tools + rules for using them.
 
-ONE search per capability. Do NOT repeat searches for the same thing.
+Search multiple capabilities at once for efficiency:
+- "web search pexels create post" -> gets web, image, and post tools
+- "list pages update section" -> gets page listing and editing tools
 
-Examples:
-- "list pages" → unlocks cms_listPages → call it next
-- "find image" → unlocks image tools → call them next
-- "create page" → unlocks page tools → call them next`,
+Use higher limit (8-10) for complex multi-capability searches.`,
 
 	inputSchema: z.object({
-		query: z.string().describe("What do you need to do? Describe the capability needed."),
-		limit: z.number().optional().default(5).describe("Max tools to return (default: 5)"),
+		query: z.string().describe("Capability keywords (e.g. 'web search pexels create post')"),
+		limit: z.number().optional().default(8).describe("Max tools to return (default: 8)"),
 	}),
 
 	// AI SDK 6: outputSchema validates results and enables type inference
 	outputSchema: ToolSearchOutputSchema,
 
-	execute: async ({ query, limit = 5 }): Promise<ToolSearchOutput> => {
+	execute: async ({ query, limit = 8 }): Promise<ToolSearchOutput> => {
 		console.log(`[tool_search] Query: "${query}", limit: ${limit}`);
 
 		// 1. Run hybrid search with confidence (BM25 + vector fallback)
@@ -117,9 +116,9 @@ If you can answer the user's question without CMS tools, respond directly.`,
 		console.log(`[tool_search] Found ${tools.length} tools: [${tools.map((t) => t.name).join(", ")}]`);
 		console.log(`[tool_search] Categories: [${categories.join(", ")}]`);
 
-		// Build action-oriented instruction with the primary tool
-		const primaryTool = tools[0]?.name || "the discovered tool";
-		const instruction = `UNLOCKED. NOW CALL ${primaryTool}() to complete the task. Do NOT search again - these tools are ready to use.`;
+		// Build instruction - tools are now available, rules explain how to use them
+		const toolNames = tools.map((t) => t.name).join(", ");
+		const instruction = `Tools unlocked: ${toolNames}. Read the rules above, then use these tools to complete the task.`;
 
 		return {
 			tools,

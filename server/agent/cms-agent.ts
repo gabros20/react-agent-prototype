@@ -216,10 +216,10 @@ DO NOT call ${last.name} with the same parameters again.`,
 		}
 
 		// Message trimming for long conversations (prevent token overflow)
-		if (!result.messages && messages.length > 20) {
+		if (!result.messages && messages.length > 30) {
 			result.messages = [
 				messages[0], // Keep system prompt
-				...messages.slice(-10), // Keep last 10 messages
+				...messages.slice(-15), // Keep last 15 messages for long-horizon tasks
 			];
 		}
 
