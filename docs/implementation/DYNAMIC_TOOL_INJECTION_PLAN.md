@@ -1,7 +1,8 @@
 # Dynamic Tool Injection Implementation Plan
 
-> **Status**: Planning Phase
+> **Status**: ✅ Implemented (Phases 0-8 Complete)
 > **Created**: 2025-12-04
+> **Implemented**: 2025-12-05
 > **Based on**: [DYNAMIC_TOOL_INJECTION_V2.md](../research/DYNAMIC_TOOL_INJECTION_V2.md)
 
 ---
@@ -773,24 +774,24 @@ Rules live in markdown files - plain text, easy to edit. No XML parsing needed.
 
     -   Keep all existing tools
     -   Add `tool_search` to exports
-    -   Create `DISCOVERY_TOOLS` for initial tools
-    -   Create `CMS_TOOLS` for discoverable tools
+    -   Create `CORE_TOOLS` for initial tools (always available)
+    -   Create `DYNAMIC_TOOLS` for discoverable tools
 
 -   [ ] **5.2.2** Export structure:
 
     ```typescript
-    export const DISCOVERY_TOOLS = {
+    export const CORE_TOOLS = {
     	tool_search: toolSearchTool,
     };
 
-    export const CMS_TOOLS = {
+    export const DYNAMIC_TOOLS = {
     	cms_getPage: cmsGetPage,
-    	// ... all 40+ CMS tools
+    	// ... all 40+ tools (CMS, web search, images, etc.)
     };
 
     export const ALL_TOOLS = {
-    	...DISCOVERY_TOOLS,
-    	...CMS_TOOLS,
+    	...CORE_TOOLS,
+    	...DYNAMIC_TOOLS,
     };
     ```
 

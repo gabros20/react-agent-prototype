@@ -1,6 +1,6 @@
 /**
  * All Tools - Native AI SDK v6 Pattern
- * 
+ *
  * Tools created ONCE with execute functions that receive experimental_context.
  * No factories, no wrappers, no recreation - pure AI SDK v6 pattern.
  */
@@ -8,6 +8,9 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import type { AgentContext } from './types'
+
+// Discovery tool import (must be at top to avoid circular init issues)
+import { toolSearchTool } from './discovery/tool-search'
 import {
   findImageTool,
   searchImagesTool,
@@ -833,6 +836,9 @@ export const planAnalyzeTask = tool({
 // ============================================================================
 
 export const ALL_TOOLS = {
+  // Discovery (Phase 5 - Dynamic Tool Injection)
+  'tool_search': toolSearchTool,
+
   // Pages
   'cms_getPage': cmsGetPage,
   'cms_createPage': cmsCreatePage,
@@ -902,278 +908,92 @@ export const ALL_TOOLS = {
 }
 
 // ============================================================================
-// Tool Metadata (separate from tools)
+// Discovery & CMS Tool Exports (for Dynamic Tool Injection)
+// ============================================================================
+//
+// Tool metadata is now in TOOL_INDEX (discovery/tool-index.ts)
 // ============================================================================
 
-export const TOOL_METADATA = {
-  'cms_getPage': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'page']
-  },
-  'cms_createPage': {
-    category: 'cms',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'page']
-  },
-  'cms_createPageWithContent': {
-    category: 'cms',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'create', 'page', 'composite']
-  },
-  'cms_updatePage': {
-    category: 'cms',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'page']
-  },
-  'cms_deletePage': {
-    category: 'cms',
-    riskLevel: 'high',
-    requiresApproval: true,  // Uses confirmed flag pattern
-    tags: ['delete', 'dangerous']
-  },
-  'cms_listPages': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'list']
-  },
-  'cms_listSectionTemplates': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'section', 'list']
-  },
-  'cms_getSectionFields': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'section']
-  },
-  'cms_addSectionToPage': {
-    category: 'cms',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'section', 'page']
-  },
-  'cms_updateSectionContent': {
-    category: 'cms',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'section', 'content']
-  },
-  'cms_deletePageSection': {
-    category: 'cms',
-    riskLevel: 'high',
-    requiresApproval: true,  // Uses confirmed flag pattern
-    tags: ['delete', 'section', 'dangerous']
-  },
-  'cms_deletePageSections': {
-    category: 'cms',
-    riskLevel: 'high',
-    requiresApproval: true,  // Uses confirmed flag pattern
-    tags: ['delete', 'section', 'batch', 'dangerous']
-  },
-  'cms_getPageSections': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'section', 'granular']
-  },
-  'cms_getSectionContent': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'section', 'content', 'granular']
-  },
-  'cms_getCollectionEntries': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'collection', 'entry', 'granular']
-  },
-  'cms_getEntryContent': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'entry', 'content', 'granular']
-  },
-  'search_vector': {
-    category: 'search',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'search']
-  },
-  'cms_findResource': {
-    category: 'cms',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'search', 'fuzzy']
-  },
-  'http_get': {
-    category: 'http',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['http', 'external']
-  },
-  'http_post': {
-    category: 'http',
-    riskLevel: 'high',
-    requiresApproval: true,
-    tags: ['http', 'external', 'write']
-  },
-  'plan_analyzeTask': {
-    category: 'planning',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['planning', 'analysis']
-  },
-  'cms_findImage': {
-    category: 'images',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'image', 'search']
-  },
-  'cms_searchImages': {
-    category: 'images',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'image', 'search']
-  },
-  'cms_listAllImages': {
-    category: 'images',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'image', 'list']
-  },
-  'cms_addImageToSection': {
-    category: 'images',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'image', 'section']
-  },
-  'cms_updateSectionImage': {
-    category: 'images',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'update', 'image', 'section']
-  },
-  'cms_replaceImage': {
-    category: 'images',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'image']
-  },
-  'cms_deleteImage': {
-    category: 'images',
-    riskLevel: 'high',
-    requiresApproval: true,
-    tags: ['write', 'image', 'destructive']
-  },
-  'cms_getNavigation': {
-    category: 'site-settings',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'navigation']
-  },
-  'cms_addNavigationItem': {
-    category: 'site-settings',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'navigation']
-  },
-  'cms_updateNavigationItem': {
-    category: 'site-settings',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'update', 'navigation']
-  },
-  'cms_removeNavigationItem': {
-    category: 'site-settings',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'navigation', 'destructive']
-  },
-  'cms_toggleNavigationItem': {
-    category: 'site-settings',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['write', 'navigation']
-  },
-  'cms_createPost': {
-    category: 'posts',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'create', 'post']
-  },
-  'cms_updatePost': {
-    category: 'posts',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'update', 'post']
-  },
-  'cms_publishPost': {
-    category: 'posts',
-    riskLevel: 'high',
-    requiresApproval: true,
-    tags: ['write', 'post', 'publish', 'destructive']
-  },
-  'cms_archivePost': {
-    category: 'posts',
-    riskLevel: 'high',
-    requiresApproval: true,
-    tags: ['write', 'post', 'archive', 'destructive']
-  },
-  'cms_deletePost': {
-    category: 'posts',
-    riskLevel: 'high',
-    requiresApproval: true,
-    tags: ['write', 'post', 'delete', 'destructive', 'permanent']
-  },
-  'cms_listPosts': {
-    category: 'posts',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'post', 'list']
-  },
-  'cms_getPost': {
-    category: 'posts',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'post']
-  },
-  'web_quickSearch': {
-    category: 'web-research',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'search', 'web', 'external']
-  },
-  'web_deepResearch': {
-    category: 'web-research',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['read', 'research', 'web', 'external', 'async']
-  },
-  'web_fetchContent': {
-    category: 'web-research',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'fetch', 'web', 'external']
-  },
-  'pexels_searchPhotos': {
-    category: 'stock-images',
-    riskLevel: 'safe',
-    requiresApproval: false,
-    tags: ['read', 'search', 'external', 'pexels']
-  },
-  'pexels_downloadPhoto': {
-    category: 'stock-images',
-    riskLevel: 'moderate',
-    requiresApproval: false,
-    tags: ['write', 'download', 'external', 'pexels']
-  }
+/**
+ * Core tools - always available at agent startup.
+ * These are the foundational tools the agent has from step 0.
+ */
+export const CORE_TOOLS = {
+  'tool_search': toolSearchTool,
 } as const
+
+/**
+ * Dynamic tools - discoverable via tool_search.
+ * These become available via activeTools after discovery.
+ */
+export const DYNAMIC_TOOLS = {
+  // Pages
+  'cms_getPage': cmsGetPage,
+  'cms_createPage': cmsCreatePage,
+  'cms_createPageWithContent': cmsCreatePageWithContent,
+  'cms_updatePage': cmsUpdatePage,
+  'cms_deletePage': cmsDeletePage,
+  'cms_listPages': cmsListPages,
+
+  // Sections
+  'cms_listSectionTemplates': cmsListSectionTemplates,
+  'cms_getSectionFields': cmsGetSectionFields,
+  'cms_addSectionToPage': cmsAddSectionToPage,
+  'cms_updateSectionContent': cmsUpdateSectionContent,
+  'cms_deletePageSection': cmsDeletePageSection,
+  'cms_deletePageSections': cmsDeletePageSections,
+  'cms_getPageSections': cmsGetPageSections,
+  'cms_getSectionContent': cmsGetSectionContent,
+
+  // Collections & Entries
+  'cms_getCollectionEntries': cmsGetCollectionEntries,
+  'cms_getEntryContent': cmsGetEntryContent,
+
+  // Search
+  'search_vector': searchVector,
+  'cms_findResource': cmsFindResource,
+
+  // Images
+  'cms_findImage': findImageTool,
+  'cms_searchImages': searchImagesTool,
+  'cms_listAllImages': listAllImagesTool,
+  'cms_addImageToSection': addImageToSectionTool,
+  'cms_updateSectionImage': updateSectionImageTool,
+  'cms_replaceImage': replaceImageTool,
+  'cms_deleteImage': deleteImageTool,
+
+  // Site Settings & Navigation
+  'cms_getNavigation': getNavigationTool,
+  'cms_addNavigationItem': addNavigationItemTool,
+  'cms_updateNavigationItem': updateNavigationItemTool,
+  'cms_removeNavigationItem': removeNavigationItemTool,
+  'cms_toggleNavigationItem': toggleNavigationItemTool,
+
+  // Posts (Blog, Products, etc.)
+  'cms_createPost': cmsCreatePost,
+  'cms_updatePost': cmsUpdatePost,
+  'cms_publishPost': cmsPublishPost,
+  'cms_archivePost': cmsArchivePost,
+  'cms_deletePost': cmsDeletePost,
+  'cms_listPosts': cmsListPosts,
+  'cms_getPost': cmsGetPost,
+
+  // HTTP
+  'http_get': httpGet,
+  'http_post': httpPost,
+
+  // Planning
+  'plan_analyzeTask': planAnalyzeTask,
+
+  // Web Research (Exa AI)
+  'web_quickSearch': webQuickSearchTool,
+  'web_deepResearch': webDeepResearchTool,
+  'web_fetchContent': webFetchContentTool,
+
+  // Stock Photos (Pexels)
+  'pexels_searchPhotos': pexelsSearchPhotosTool,
+  'pexels_downloadPhoto': pexelsDownloadPhotoTool,
+} as const
+
+// Type for dynamic tool names (used by discovery system)
+export type DynamicToolName = keyof typeof DYNAMIC_TOOLS

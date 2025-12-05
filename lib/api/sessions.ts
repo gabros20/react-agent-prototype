@@ -212,12 +212,33 @@ export interface WorkingMemoryEntity {
 }
 
 /**
+ * Tool usage record type
+ */
+export interface ToolUsageRecord {
+  name: string;
+  count: number;
+  lastUsed: string;
+  lastResult: "success" | "error";
+}
+
+/**
+ * Working memory response type
+ */
+export interface WorkingMemoryResponse {
+  entities: WorkingMemoryEntity[];
+  discoveredTools: string[];
+  usedTools: ToolUsageRecord[];
+  size: number;
+  discoveredToolsCount: number;
+}
+
+/**
  * Get working memory entities for a session
  */
 export async function getWorkingMemory(
   sessionId: string
-): Promise<{ entities: WorkingMemoryEntity[]; size: number }> {
-  return api.get<{ entities: WorkingMemoryEntity[]; size: number }>(
+): Promise<WorkingMemoryResponse> {
+  return api.get<WorkingMemoryResponse>(
     `/api/sessions/${sessionId}/working-memory`
   );
 }

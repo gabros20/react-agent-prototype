@@ -4,7 +4,7 @@
 **Organization**: 12 layers (Foundation → Advanced) with 72 topics total  
 **Grounding**: Research papers, production systems, proven implementations from this codebase
 
-**Last Updated**: 2025-12-03
+**Last Updated**: 2025-12-04
 **Status**: 🚧 In Progress
 
 ---
@@ -19,7 +19,7 @@
 
 ---
 
-## How to Use This Knowledge Base
+## How to Use This Knowledge Base/
 
 ### For Beginners
 
@@ -75,14 +75,14 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 57/73 topics (78%)
+**Completion**: 66/73 topics (90%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
 | Layer 0: Foundations                 | 3      | ✅ Complete    | 13/13 (100%) |
 | Layer 1: Prompt Engineering          | 3      | ✅ Complete    | 14/14 (100%) |
 | Layer 2: Context Engineering         | 3      | ✅ Complete    | 12/12 (100%) |
-| Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 8/20 (40%)   |
+| Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 17/20 (85%)  |
 | Layer 4: Memory & State              | 5      | ✅ Complete    | 21/21 (100%) |
 | Layer 5: Retrieval & RAG             | 4      | ⏳ Pending     | 0/20         |
 | Layer 6: Planning & Orchestration    | 4      | ⏳ Pending     | 0/20         |
@@ -93,9 +93,9 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
-**Latest Updates** (2025-12-03):
+**Latest Updates** (2025-12-04):
 
-**Layer 3: Agent Architecture** (8/20 topics - 🚧 40% COMPLETE - Restructured Dec 2025):
+**Layer 3: Agent Architecture** (17/20 topics - 🚧 85% COMPLETE - Restructured Dec 2025):
 
 _What is an AI Agent?_ (3/3 - ✅ COMPLETE):
 
@@ -110,6 +110,22 @@ _ReAct Pattern_ (5/5 - ✅ COMPLETE):
 -   ✅ 3.2.3 Acting Phase - **RESTRUCTURED!** Tool execution, validation, single vs parallel, HITL confirmation
 -   ✅ 3.2.4 Observation Phase - **RESTRUCTURED!** Result interpretation, memory updates, loop control, error recovery
 -   ✅ 3.2.5 AI SDK v6 Implementation - **RESTRUCTURED!** ToolLoopAgent API, streaming, context injection, production patterns
+
+_Tool Calling & Execution_ (5/5 - ✅ COMPLETE):
+
+-   ✅ 3.3.1 Tool Definition - **RESTRUCTURED!** AI SDK v6 `inputSchema`, Zod schemas, rich descriptions, execution flow
+-   ✅ 3.3.2 Tool Registry - **RESTRUCTURED!** Centralized catalog, TOOL_METADATA pattern, dynamic discovery
+-   ✅ 3.3.3 Context Injection - **RESTRUCTURED!** `experimental_context`, AgentContext interface, context factory
+-   ✅ 3.3.4 Result Validation - **RESTRUCTURED!** Read-after-write verification, schema validation, 60% silent failure detection
+-   ✅ 3.3.5 Tool Composition - **RESTRUCTURED!** Sequential, parallel, map-reduce, conditional, hybrid patterns
+
+_Loop Control & Convergence_ (4/5 - 🚧 80% COMPLETE):
+
+-   ✅ 3.4.1 Max Steps - **RESTRUCTURED!** AI SDK v6 `stopWhen: stepCountIs()`, adaptive limits, checkpoints
+-   ✅ 3.4.2 Convergence Detection - **RESTRUCTURED!** Multi-criteria detection, finish tools, goal-state verification
+-   ✅ 3.4.3 Stuck Detection - **RESTRUCTURED!** Exact repetition, progress-based, composite detectors, HITL recovery
+-   ⏳ 3.4.4 Loop State Machine - _Pending_
+-   ✅ 3.4.5 Early Exit - **RESTRUCTURED!** Entropy-based, progress-based, Stop-RAG pattern, exit framework
 
 **Layer 1: Prompt Engineering** (14/14 topics - ✅ 100% COMPLETE):
 
@@ -476,21 +492,39 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 3.3 Tool Calling & Execution
 
--   [3.3.1 Tool Definition (Zod Schemas, Descriptions)](./kb/3-agents/3.3.1-tool-definition.md) ⏳
--   [3.3.2 Tool Registry & Metadata](./kb/3-agents/3.3.2-tool-registry.md) ⏳
+-   [3.3.1 Tool Definition (Zod Schemas, Descriptions)](./kb/3-agents/3.3.1-tool-definition.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: AI SDK v6 `inputSchema` pattern, Zod schemas, rich descriptions, execution flow
+-   [3.3.2 Tool Registry & Metadata](./kb/3-agents/3.3.2-tool-registry.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Centralized catalog, TOOL_METADATA pattern, dynamic discovery, type-safe registry
     -   **Codebase Example**: `server/tools/all-tools.ts` (TOOL_METADATA)
--   [3.3.3 Context Injection (experimental_context)](./kb/3-agents/3.3.3-context-injection.md) ⏳
--   [3.3.4 Result Validation](./kb/3-agents/3.3.4-result-validation.md) ⏳
--   [3.3.5 Tool Composition Patterns](./kb/3-agents/3.3.5-composition.md) ⏳
+-   [3.3.3 Context Injection (experimental_context)](./kb/3-agents/3.3.3-context-injection.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: AI SDK v6 `experimental_context`, AgentContext interface, context factory pattern
+-   [3.3.4 Result Validation](./kb/3-agents/3.3.4-result-validation.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Read-after-write verification, schema validation, business rule checks, 60% silent failure detection
+-   [3.3.5 Tool Composition Patterns](./kb/3-agents/3.3.5-composition.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Sequential, parallel, map-reduce, conditional, hybrid patterns
 
 #### 3.4 Loop Control & Convergence
 
--   [3.4.1 Max Steps Limits](./kb/3-agents/3.4.1-max-steps.md) ⏳
--   [3.4.2 Convergence Detection](./kb/3-agents/3.4.2-convergence.md) ⏳
+-   [3.4.1 Max Steps Limits](./kb/3-agents/3.4.1-max-steps.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: AI SDK v6 `stopWhen: stepCountIs()`, adaptive limits, progressive limits with checkpoints
+-   [3.4.2 Convergence Detection](./kb/3-agents/3.4.2-convergence.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Multi-criteria detection, explicit finish tools, goal-state verification, AI SDK v6 stop conditions
     -   **Research**: AgentFlow (Stanford 2024)
--   [3.4.3 Stuck Detection](./kb/3-agents/3.4.3-stuck-detection.md) ⏳
+-   [3.4.3 Stuck Detection](./kb/3-agents/3.4.3-stuck-detection.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Exact repetition, progress-based, composite detectors, HITL recovery, Autono adaptive abandonment
 -   [3.4.4 Loop State Machine](./kb/3-agents/3.4.4-state-machine.md) ⏳
--   [3.4.5 Early Exit Strategies](./kb/3-agents/3.4.5-early-exit.md) ⏳
+-   [3.4.5 Early Exit Strategies](./kb/3-agents/3.4.5-early-exit.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Entropy-based exit, progress-based exit, Stop-RAG pattern, exit decision framework
 
 ---
 

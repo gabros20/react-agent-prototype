@@ -13,6 +13,7 @@ import uploadRoutes from "./routes/upload";
 import imageRoutes from "./routes/images";
 import { ServiceContainer } from "./services/service-container";
 import { getSubscriber } from "./services/worker-events.service";
+import { validateToolIndex, initBM25Index } from "./tools/discovery";
 
 const app = express();
 const PORT = process.env.EXPRESS_PORT || 8787;
@@ -47,6 +48,12 @@ app.use(express.urlencoded({ extended: true }));
 // Async startup
 async function startServer() {
   try {
+    // Validate tool index at startup (fail fast if misconfigured)
+    validateToolIndex();
+
+    // Initialize BM25 search index for tool discovery
+    initBM25Index();
+
     // Initialize services (includes vector index initialization)
     const services = await ServiceContainer.initialize(db);
     console.log("✓ Services initialized");

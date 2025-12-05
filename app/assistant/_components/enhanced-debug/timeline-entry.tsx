@@ -33,6 +33,8 @@ import {
 	Cpu,
 	User,
 	Type,
+	Search,
+	PlusCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -73,6 +75,9 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	"system-log": FileText,
 	"system-prompt": ScrollText,
 	"user-prompt": User,
+	// Dynamic tool injection
+	"tools-discovered": Search,
+	"active-tools-changed": PlusCircle,
 };
 
 interface TimelineEntryProps {

@@ -335,6 +335,35 @@ export function createTraceLogger(traceId: string): TraceLogger {
 		},
 
 		// =========================================================================
+		// Dynamic Tool Injection
+		// =========================================================================
+
+		toolsDiscovered(tools: string[], categories: string[], query: string) {
+			getStore().addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "tools-discovered",
+				level: "info",
+				summary: `Discovered ${tools.length} tools: [${categories.join(", ")}]`,
+				input: { query },
+				output: { tools, categories },
+			});
+		},
+
+		activeToolsChanged(stepNumber: number, activeTools: string[], newTools: string[]) {
+			getStore().addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "active-tools-changed",
+				level: "info",
+				stepNumber,
+				summary: `+${newTools.length} tools → ${activeTools.length} active`,
+				input: { newTools },
+				output: { activeTools, totalCount: activeTools.length },
+			});
+		},
+
+		// =========================================================================
 		// Working Memory
 		// =========================================================================
 

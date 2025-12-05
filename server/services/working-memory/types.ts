@@ -7,7 +7,17 @@ export interface Entity {
   timestamp: Date;  // Last accessed
 }
 
-/** Serialized state for DB storage */
+/** Tool usage record for tracking which tools were called */
+export interface ToolUsageRecord {
+  name: string;           // Tool name
+  count: number;          // Times called
+  lastUsed: string;       // ISO timestamp
+  lastResult: 'success' | 'error';
+}
+
+/** Serialized state for DB storage (Phase 7 - includes tool tracking) */
 export interface WorkingContextState {
   entities: Entity[];
+  discoveredTools?: string[];      // Tools returned by tool_search
+  usedTools?: ToolUsageRecord[];   // Tools actually called
 }

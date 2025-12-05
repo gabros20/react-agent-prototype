@@ -180,6 +180,15 @@ export function useAgent() {
 				break;
 			}
 
+			case "tools-discovered": {
+				// Handle dynamic tool discovery via tool_search
+				const tools = (d.tools as string[]) || [];
+				const categories = (d.categories as string[]) || [];
+				const query = `discovered ${tools.length} tools`;
+				traceRef.current?.toolsDiscovered(tools, categories, query);
+				break;
+			}
+
 			case "model-info": {
 				if (d.modelId) {
 					const pricing = d.pricing as { prompt: number; completion: number } | null;

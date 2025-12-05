@@ -1,11 +1,14 @@
 /**
  * Tools - Native AI SDK v6 Pattern
- * 
+ *
  * All tools are defined in all-tools.ts with native AI SDK v6 pattern.
  * No registry, no factories, no wrappers - just pure AI SDK tools.
+ *
+ * Tool metadata is in discovery/tool-index.ts (TOOL_INDEX)
  */
 
-export { ALL_TOOLS, TOOL_METADATA } from './all-tools'
+export { ALL_TOOLS, CORE_TOOLS, DYNAMIC_TOOLS } from './all-tools'
+export type { DynamicToolName } from './all-tools'
 export * from './types'
 
 // Log available tools

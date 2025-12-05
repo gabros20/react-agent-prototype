@@ -1056,7 +1056,7 @@ import { ToolLoopAgent, stepCountIs } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { toolSearchTool } from "../tools/discovery/tool-search";
-import { ALL_CMS_TOOLS } from "../tools/all-tools";
+import { DYNAMIC_TOOLS } from "../tools/all-tools";
 import { getMinimalSystemPrompt } from "./system-prompt";
 import { SchemaBasedExtractor } from "../services/working-memory/schema-extractor";
 import type { WorkingMemoryState } from "../services/working-memory/types";
@@ -1101,7 +1101,7 @@ export const cmsAgent = new ToolLoopAgent({
 	instructions: "Dynamic - see prepareCall",
 	tools: {
 		tool_search: toolSearchTool,
-		...ALL_CMS_TOOLS, // All tools registered, filtered via activeTools
+		...DYNAMIC_TOOLS, // All tools registered, filtered via activeTools
 	},
 	callOptionsSchema: AgentCallOptionsSchema,
 

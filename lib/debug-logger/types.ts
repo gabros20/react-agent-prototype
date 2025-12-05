@@ -203,6 +203,26 @@ export interface TraceLogger {
 	toolsAvailable(tools: string[]): void;
 
 	// =========================================================================
+	// Dynamic Tool Injection
+	// =========================================================================
+
+	/**
+	 * Log tools discovered via tool_search
+	 * @param tools List of discovered tool names
+	 * @param categories Categories of discovered tools
+	 * @param query The search query that found them
+	 */
+	toolsDiscovered(tools: string[], categories: string[], query: string): void;
+
+	/**
+	 * Log active tools changed in prepareStep
+	 * @param stepNumber Current step number
+	 * @param activeTools Current list of active tools
+	 * @param newTools Tools added in this step
+	 */
+	activeToolsChanged(stepNumber: number, activeTools: string[], newTools: string[]): void;
+
+	// =========================================================================
 	// Working Memory
 	// =========================================================================
 

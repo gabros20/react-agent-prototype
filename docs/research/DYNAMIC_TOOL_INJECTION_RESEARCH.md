@@ -214,10 +214,10 @@ prepareStep: async ({ stepNumber, steps, messages }) => {
 	const lastToolCalls = steps[steps.length - 1]?.toolCalls || [];
 	const usedCategories = detectCategories(lastToolCalls);
 
-	// Expand tool set if agent used CMS tools (might need images next)
+	// Expand tool set based on detected categories
 	if (usedCategories.includes("cms")) {
 		return {
-			activeTools: [...CMS_TOOLS, ...IMAGE_TOOLS, ...SEARCH_TOOLS],
+			activeTools: [...DYNAMIC_TOOLS], // All dynamic tools become available
 		};
 	}
 

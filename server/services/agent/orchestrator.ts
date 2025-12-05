@@ -530,6 +530,50 @@ export class AgentOrchestrator {
 						result: chunk.output,
 					});
 
+					// Special handling for tool_search - emit tools-discovered event and persist
+					if (chunk.toolName === "tool_search" && chunk.output) {
+						const searchResult = chunk.output as {
+							tools?: Array<{ name: string; description: string }>;
+							rules?: string;
+						};
+						if (searchResult.tools && searchResult.tools.length > 0) {
+							const toolNames = searchResult.tools.map((t) => t.name);
+							// Extract categories from tool names (e.g., cms_getPage -> cms)
+							const categories = [
+								...new Set(
+									toolNames.map((name) => {
+										const prefix = name.split("_")[0];
+										return prefix || "other";
+									})
+								),
+							];
+
+							// Persist discovered tools to working context
+							workingContext.addDiscoveredTools(toolNames);
+
+							writeSSE("tools-discovered", {
+								type: "tools-discovered",
+								tools: toolNames,
+								categories,
+								hasRules: !!searchResult.rules,
+								discoveredTotal: workingContext.discoveredToolsCount(),
+								timestamp: new Date().toISOString(),
+							});
+
+							logger.info("Tools discovered via tool_search", {
+								toolCount: toolNames.length,
+								tools: toolNames,
+								categories,
+								totalDiscovered: workingContext.discoveredToolsCount(),
+							});
+						}
+					}
+
+					// Record tool usage for all tools
+					const toolResult = chunk.output as Record<string, unknown> | undefined;
+					const isSuccess = !toolResult?.error;
+					workingContext.recordToolUsage(chunk.toolName, isSuccess ? "success" : "error");
+
 					// Extract entities from tool result
 					const entities = this.extractor.extract(chunk.toolName, chunk.output);
 					if (entities.length > 0) {

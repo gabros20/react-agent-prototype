@@ -33,7 +33,10 @@ export type TraceEntryType =
 	| "session-loaded" // Previous messages loaded
 	| "system-log" // General log from backend
 	| "system-prompt" // Compiled system prompt (for inspection)
-	| "user-prompt"; // User prompt with token count
+	| "user-prompt" // User prompt with token count
+	// Dynamic tool injection observability
+	| "tools-discovered" // tool_search returned tools
+	| "active-tools-changed"; // prepareStep expanded activeTools
 
 export type TraceLevel = "debug" | "info" | "warn" | "error";
 
@@ -190,6 +193,15 @@ interface TraceState {
 		timestamp: string | Date; // String from API, Date after parsing
 	}>;
 
+	// Persisted discovered/used tools (loaded from DB on session load)
+	persistedDiscoveredTools: string[];
+	persistedUsedTools: Array<{
+		name: string;
+		count: number;
+		lastUsed: string;
+		lastResult: "success" | "error";
+	}>;
+
 	// Actions
 	addEntry: (entry: Omit<TraceEntry, "id"> & { id?: string }) => void;
 	updateEntry: (id: string, updates: Partial<TraceEntry>) => void;
@@ -214,6 +226,10 @@ interface TraceState {
 
 	// Working memory actions
 	loadPersistedWorkingMemory: (entities: Array<{ type: string; id: string; name: string; timestamp: string | Date }>) => void;
+	loadPersistedTools: (
+		discoveredTools: string[],
+		usedTools: Array<{ name: string; count: number; lastUsed: string; lastResult: "success" | "error" }>
+	) => void;
 
 	// Export utilities
 	exportTrace: (traceId: string) => string;
@@ -248,6 +264,8 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 	expandedConversationIds: new Set(),
 	clearedAt: null,
 	persistedWorkingMemory: [],
+	persistedDiscoveredTools: [],
+	persistedUsedTools: [],
 
 	addEntry: (entry) => {
 		const id = entry.id || crypto.randomUUID();
@@ -481,6 +499,8 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			expandedConversationIds: new Set(),
 			clearedAt: Date.now(), // Signal to components to clear persisted logs
 			persistedWorkingMemory: [],
+			persistedDiscoveredTools: [],
+			persistedUsedTools: [],
 		});
 	},
 
@@ -553,6 +573,13 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 	// Working memory actions
 	loadPersistedWorkingMemory: (entities) => {
 		set({ persistedWorkingMemory: entities });
+	},
+
+	loadPersistedTools: (discoveredTools, usedTools) => {
+		set({
+			persistedDiscoveredTools: discoveredTools,
+			persistedUsedTools: usedTools,
+		});
 	},
 
 	// Get aggregated metrics across ALL conversation logs
@@ -783,6 +810,9 @@ export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
 	"system-log": "bg-gray-400",
 	"system-prompt": "bg-pink-500",
 	"user-prompt": "bg-blue-600",
+	// Dynamic tool injection
+	"tools-discovered": "bg-purple-500",
+	"active-tools-changed": "bg-purple-400",
 };
 
 export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
@@ -813,6 +843,9 @@ export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
 	"system-log": "Log",
 	"system-prompt": "System",
 	"user-prompt": "User",
+	// Dynamic tool injection
+	"tools-discovered": "Discovered",
+	"active-tools-changed": "Tools+",
 };
 
 export function formatDuration(ms: number): string {

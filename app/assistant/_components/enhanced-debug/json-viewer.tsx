@@ -17,12 +17,18 @@ export function JsonViewer({ data, maxHeight = "200px", className, onFullView, s
 	const [copied, setCopied] = useState(false);
 
 	const formattedJson = useMemo(() => {
+		// Helper to unescape newlines in stringified JSON
+		// Converts escaped \n inside string values to actual newlines
+		const unescapeNewlines = (json: string): string => {
+			return json.replace(/\\n/g, "\n");
+		};
+
 		// If data is a string, try to parse it as JSON first
 		if (typeof data === "string") {
 			try {
 				const parsed = JSON.parse(data);
 				if (typeof parsed === "object" && parsed !== null) {
-					return JSON.stringify(parsed, null, 2);
+					return unescapeNewlines(JSON.stringify(parsed, null, 2));
 				}
 			} catch {
 				// Not JSON, return as-is with newlines normalized
@@ -30,7 +36,7 @@ export function JsonViewer({ data, maxHeight = "200px", className, onFullView, s
 			}
 		}
 		try {
-			return JSON.stringify(data, null, 2);
+			return unescapeNewlines(JSON.stringify(data, null, 2));
 		} catch {
 			return String(data);
 		}

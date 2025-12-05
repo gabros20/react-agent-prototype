@@ -5,15 +5,24 @@
  * - Module-level singleton agent
  * - Type-safe call options with callOptionsSchema
  * - Dynamic instructions via prepareCall
+ * - Dynamic tool availability via prepareStep (Phase 7)
  * - Native stop conditions
  * - Working memory via system prompt injection
+ *
+ * Dynamic Tool Injection Architecture:
+ * - Agent starts with only tool_search
+ * - Agent discovers tools via tool_search calls
+ * - Discovered tools become available via activeTools in prepareStep
+ * - Rules are injected alongside discovered tools
  */
 
 import { ToolLoopAgent, stepCountIs, NoSuchToolError, InvalidToolInputError } from "ai";
+import type { CoreMessage } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
-import { ALL_TOOLS } from "../tools/all-tools";
-import { getSystemPrompt } from "./system-prompt";
+import { ALL_TOOLS, CORE_TOOLS, DYNAMIC_TOOLS } from "../tools/all-tools";
+import { getAgentSystemPrompt } from "./system-prompt";
+import { getAllDiscoveredTools } from "../tools/discovery";
 import type { AgentContext, AgentLogger, StreamWriter } from "../tools/types";
 import type { DrizzleDB } from "../db/client";
 import type { ServiceContainer } from "../services/service-container";
@@ -95,22 +104,26 @@ export const cmsAgent = new ToolLoopAgent({
 
 	// prepareCall: Build dynamic instructions and inject runtime context
 	prepareCall: ({ options, ...settings }) => {
-		// Generate dynamic system prompt with working memory
-		const dynamicInstructions = getSystemPrompt({
+		// Generate minimal agent system prompt (with tool_search for discovery)
+		const dynamicInstructions = getAgentSystemPrompt({
 			currentDate: new Date().toISOString().split("T")[0],
 			workingMemory: options.workingMemory || "",
 		});
 
 		// Dynamic model selection: use requested model or fall back to default
-		const model = options.modelId ? openrouter.languageModel(options.modelId) : openrouter.languageModel(AGENT_CONFIG.modelId);
+		const model = options.modelId
+			? openrouter.languageModel(options.modelId)
+			: openrouter.languageModel(AGENT_CONFIG.modelId);
 
 		return {
 			...settings,
 			// Override model if custom modelId provided
 			model,
-			// Override instructions with dynamic version
+			// Override instructions with minimal agent prompt
 			instructions: dynamicInstructions,
 			maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
+			// Start with only discovery tool - others added via prepareStep
+			activeTools: ["tool_search"] as (keyof typeof ALL_TOOLS)[],
 			// experimental_context is how tools access runtime services
 			experimental_context: {
 				db: options.db,
@@ -129,21 +142,88 @@ export const cmsAgent = new ToolLoopAgent({
 	// Native stop conditions (combined with OR logic)
 	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
 
-	// Context window management - trim if too long
-	// TODO: Future enhancement - use `activeTools` in prepareStep for phase-based tool control
-	// Example: Restrict to read-only tools during planning, enable write tools during execution
-	// See: https://v6.ai-sdk.dev/docs/agents/loop-control#active-tools
-	prepareStep: async ({ messages }: { messages: any[] }) => {
-		// Trim history if too long (prevent token overflow)
-		if (messages.length > 20) {
+	// Dynamic tool availability via prepareStep
+	// Implements Phase 7 from DYNAMIC_TOOL_INJECTION_PLAN.md
+	prepareStep: async ({
+		stepNumber,
+		steps,
+		messages,
+	}: {
+		stepNumber: number;
+		steps: any[];
+		messages: CoreMessage[];
+	}) => {
+		type ToolName = keyof typeof ALL_TOOLS;
+
+		// Extract tools discovered from working memory (previous turns) + current steps
+		const discoveredTools = getAllDiscoveredTools(messages, steps) as ToolName[];
+
+		// Phase 1: Discovery (step 0, no tools discovered yet)
+		// Use 'auto' - agent decides whether to call tool_search or answer directly
+		if (stepNumber === 0 && discoveredTools.length === 0) {
 			return {
-				messages: [
-					messages[0], // Keep system prompt
-					...messages.slice(-10), // Keep last 10 messages
-				],
+				activeTools: ["tool_search"] as ToolName[],
+				toolChoice: "auto" as const,
 			};
 		}
-		return {};
+
+		// Phase 2: Execution (tools discovered)
+		// All discovered tools available, plus tool_search for additional discovery
+		const activeTools = ["tool_search", ...discoveredTools] as ToolName[];
+
+		const result: {
+			activeTools: ToolName[];
+			toolChoice: "auto";
+			messages?: CoreMessage[];
+		} = {
+			activeTools,
+			toolChoice: "auto" as const,
+		};
+
+		// =====================================================================
+		// Stuck Detection: Detect repeated identical tool calls
+		// =====================================================================
+		const recentCalls = steps.slice(-3).flatMap((step: any) =>
+			(step.toolCalls || []).map((tc: any) => ({
+				name: tc.toolName,
+				input: JSON.stringify(tc.input || {}),
+			}))
+		);
+
+		// Check for 2+ identical consecutive calls
+		if (recentCalls.length >= 2) {
+			const last = recentCalls[recentCalls.length - 1];
+			const secondLast = recentCalls[recentCalls.length - 2];
+
+			if (last.name === secondLast.name && last.input === secondLast.input) {
+				// Inject a system message to break the loop
+				const stuckMessage: CoreMessage = {
+					role: "system" as const,
+					content: `⚠️ STUCK DETECTED: You called ${last.name} with identical parameters twice in a row. This indicates a loop. STOP and try a different approach:
+1. If you need different results, use different parameters
+2. If the tool isn't working, try an alternative tool
+3. If you're blocked, explain the issue to the user
+DO NOT call ${last.name} with the same parameters again.`,
+				};
+
+				// Prepend stuck warning to messages
+				result.messages = result.messages
+					? [result.messages[0], stuckMessage, ...result.messages.slice(1)]
+					: [...messages.slice(0, -1), stuckMessage, messages[messages.length - 1]];
+
+				console.warn(`[prepareStep] Stuck detected: ${last.name} called twice with same params`);
+			}
+		}
+
+		// Message trimming for long conversations (prevent token overflow)
+		if (!result.messages && messages.length > 20) {
+			result.messages = [
+				messages[0], // Keep system prompt
+				...messages.slice(-10), // Keep last 10 messages
+			];
+		}
+
+		return result;
 	},
 
 	// Step completion callback for telemetry

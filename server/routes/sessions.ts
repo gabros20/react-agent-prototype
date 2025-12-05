@@ -115,7 +115,10 @@ export function createSessionRoutes(services: ServiceContainer) {
 
       res.json(ApiResponse.success({
         entities: state.entities,
+        discoveredTools: state.discoveredTools || [],
+        usedTools: state.usedTools || [],
         size: workingContext.size(),
+        discoveredToolsCount: workingContext.discoveredToolsCount(),
       }));
     } catch (error) {
       next(error);

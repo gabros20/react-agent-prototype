@@ -203,7 +203,7 @@ export function TraceDetailModal() {
 
 					<div className='flex-1 min-h-0 px-4 pb-4'>
 						<TabsContent value='input' className='h-full mt-4'>
-							<div className='relative h-[90vh] rounded-lg border bg-muted/30'>
+							<div className='relative h-[65vh] rounded-lg border bg-muted/30'>
 								<Button
 									variant='outline'
 									size='sm'
@@ -226,7 +226,7 @@ export function TraceDetailModal() {
 						</TabsContent>
 
 						<TabsContent value='output' className='h-full mt-4'>
-							<div className='relative h-[90vh] rounded-lg border bg-muted/30'>
+							<div className='relative h-[65vh] rounded-lg border bg-muted/30'>
 								<Button
 									variant='outline'
 									size='sm'
@@ -236,7 +236,7 @@ export function TraceDetailModal() {
 									{copiedTab === "output" ? <Check className='h-4 w-4 mr-1' /> : <Copy className='h-4 w-4 mr-1' />}
 									Copy
 								</Button>
-								<div className='h-[90vh] overflow-scroll p-4'>
+								<div className='h-full overflow-scroll p-4'>
 									<pre className={cn("text-sm font-mono whitespace-pre-wrap", !isOutputString && "text-xs")}>
 										<code
 											dangerouslySetInnerHTML={{
@@ -249,7 +249,7 @@ export function TraceDetailModal() {
 						</TabsContent>
 
 						<TabsContent value='metadata' className='h-full mt-4'>
-							<div className='relative h-[90vh] rounded-lg border bg-muted/30'>
+							<div className='relative h-[65vh] rounded-lg border bg-muted/30'>
 								<Button
 									variant='outline'
 									size='sm'
