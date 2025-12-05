@@ -102,9 +102,7 @@ export const cmsAgent = new ToolLoopAgent({
 		});
 
 		// Dynamic model selection: use requested model or fall back to default
-		const model = options.modelId
-			? openrouter.languageModel(options.modelId)
-			: openrouter.languageModel(AGENT_CONFIG.modelId);
+		const model = options.modelId ? openrouter.languageModel(options.modelId) : openrouter.languageModel(AGENT_CONFIG.modelId);
 
 		return {
 			...settings,

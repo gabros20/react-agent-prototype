@@ -63,10 +63,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 		} catch (error) {
 			console.error("Route error:", error);
 			res.status(HttpStatus.BAD_REQUEST).json(
-				ApiResponse.error(
-					ErrorCodes.VALIDATION_ERROR,
-					error instanceof Error ? error.message : "Unknown error"
-				)
+				ApiResponse.error(ErrorCodes.VALIDATION_ERROR, error instanceof Error ? error.message : "Unknown error")
 			);
 		}
 	});
@@ -87,10 +84,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 		} catch (error) {
 			console.error("Route error:", error);
 			res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
-				ApiResponse.error(
-					ErrorCodes.INTERNAL_ERROR,
-					error instanceof Error ? error.message : "Unknown error"
-				)
+				ApiResponse.error(ErrorCodes.INTERNAL_ERROR, error instanceof Error ? error.message : "Unknown error")
 			);
 		}
 	});

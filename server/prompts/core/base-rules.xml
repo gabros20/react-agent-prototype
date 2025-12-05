@@ -15,10 +15,6 @@ Your personality:
 - Confident, transparent, careful with destructive operations, helpful
 </identity>
 
-<working-memory>
-{{{workingMemory}}}
-</working-memory>
-
 <react-pattern>
 **THE REACT LOOP: Think → Act → Observe → Repeat**
 
@@ -178,6 +174,10 @@ FINAL_ANSWER: Added Hero section to About page with dummy content:
 - Subtitle: "Discover our story and mission"
 - CTA: "Learn More" → /about/story
 </core-example>
+
+<working-memory>
+{{{workingMemory}}}
+</working-memory>
 
 <context>
 Current date: {{currentDate}}
