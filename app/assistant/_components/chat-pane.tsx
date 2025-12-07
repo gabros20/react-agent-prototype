@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { useStickToBottomContext } from "use-stick-to-bottom";
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Response } from "@/components/ai-elements/response";
 import { PromptInput, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { useAgent } from "../_hooks/use-agent";
 import { useChatStore, type ChatMessage } from "../_stores/chat-store";
@@ -53,7 +54,7 @@ function MessageList({ messages }: { messages: ChatMessage[] }) {
 			{messages.map((message) => (
 				<Message from={message.role} key={message.id}>
 					<MessageContent>
-						<MessageResponse className='text-xs sm:text-sm'>{message.content}</MessageResponse>
+						<Response className='text-xs sm:text-sm'>{message.content}</Response>
 					</MessageContent>
 				</Message>
 			))}

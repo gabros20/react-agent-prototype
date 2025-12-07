@@ -530,6 +530,19 @@ export class AgentOrchestrator {
 						result: chunk.output,
 					});
 
+					// Special handling for final_answer - extract content as final text
+					if (chunk.toolName === "final_answer" && chunk.output) {
+						const finalAnswerResult = chunk.output as { content?: string; summary?: string };
+						if (finalAnswerResult.content) {
+							finalText = finalAnswerResult.content;
+							writeSSE("text-delta", {
+								type: "text-delta",
+								delta: finalAnswerResult.content,
+								timestamp: new Date().toISOString(),
+							});
+						}
+					}
+
 					// Special handling for tool_search - emit tools-discovered event and persist
 					if (chunk.toolName === "tool_search" && chunk.output) {
 						const searchResult = chunk.output as {

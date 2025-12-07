@@ -20,9 +20,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
-import { createContext, memo, useContext, useEffect, useState } from "react";
-import { Streamdown } from "streamdown";
-import rehypeRaw from "rehype-raw";
+import { createContext, useContext, useEffect, useState } from "react";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -304,58 +302,6 @@ export const MessageBranchPage = ({
     </ButtonGroupText>
   );
 };
-
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
-
-// Custom image component with fixed dimensions to prevent layout shifts
-// Also fixes malformed URLs where agent adds https:// to local /uploads/ paths
-const MarkdownImage = ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => {
-  // Fix malformed URLs: "https://uploads/..." or "https:///uploads/..." -> "/uploads/..."
-  let fixedSrc = src;
-  if (typeof src === 'string') {
-    // Match https://uploads/... or https:///uploads/... or http variants
-    const malformedMatch = src.match(/^https?:\/+uploads\//);
-    if (malformedMatch) {
-      fixedSrc = src.replace(/^https?:\/+/, '/');
-    }
-  }
-
-  return (
-    <img
-      src={fixedSrc}
-      alt={alt || ""}
-      loading="eager"
-      decoding="sync"
-      className="rounded-md max-w-full h-auto"
-      style={{ maxHeight: "300px", objectFit: "contain" }}
-      {...props}
-    />
-  );
-};
-
-// Use rehype-raw only (no rehype-harden) to allow local /uploads/* images
-// rehype-harden blocks relative paths without a defaultOrigin
-const customRehypePlugins = [rehypeRaw];
-
-export const MessageResponse = memo(
-  ({ className, components, rehypePlugins, ...props }: MessageResponseProps) => (
-    <Streamdown
-      className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className
-      )}
-      components={{
-        img: MarkdownImage,
-        ...components,
-      }}
-      rehypePlugins={rehypePlugins ?? customRehypePlugins}
-      {...props}
-    />
-  ),
-  (prevProps, nextProps) => prevProps.children === nextProps.children
-);
-
-MessageResponse.displayName = "MessageResponse";
 
 export type MessageAttachmentProps = HTMLAttributes<HTMLDivElement> & {
   data: FileUIPart;

@@ -31,8 +31,10 @@ Create post:
     tags: ["plants", "care"]
   }) -> {post: {id, slug, status: "draft"}}
 
-Publish post:
-  cms_publishPost({postSlug: "...", confirmed: true})
+Publish post (confirmation flow):
+  1. cms_publishPost({postSlug: "..."}) -> {requiresConfirmation: true}
+  2. ASK user with final_answer: "Do you want me to publish 'Post Title'?"
+  3. On user confirmation -> cms_publishPost({postSlug: "...", confirmed: true})
 
 Update post with cover:
   cms_updatePost({

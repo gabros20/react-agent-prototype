@@ -24,7 +24,7 @@ export const ToolCategorySchema = z.enum([
 	"http",
 	"site-settings",
 	"planning",
-	"response-format", // Meta-rule for presenting images/content to users
+	"final-answer", // Core tool for presenting final results to user
 ]);
 
 export type ToolCategory = z.infer<typeof ToolCategorySchema>;

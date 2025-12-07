@@ -16,13 +16,13 @@
  * - Rules are injected alongside discovered tools
  */
 
-import { ToolLoopAgent, stepCountIs, NoSuchToolError, InvalidToolInputError } from "ai";
+import { ToolLoopAgent, stepCountIs, hasToolCall, NoSuchToolError, InvalidToolInputError } from "ai";
 import type { CoreMessage } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { ALL_TOOLS, CORE_TOOLS, DYNAMIC_TOOLS } from "../tools/all-tools";
 import { getAgentSystemPrompt } from "./system-prompt";
-import { getAllDiscoveredTools } from "../tools/discovery";
+import { getAllDiscoveredTools, loadRules } from "../tools/discovery";
 import type { AgentContext, AgentLogger, StreamWriter } from "../tools/types";
 import type { DrizzleDB } from "../db/client";
 import type { ServiceContainer } from "../services/service-container";
@@ -81,15 +81,6 @@ export const AgentCallOptionsSchema = z.object({
 export type AgentCallOptions = z.infer<typeof AgentCallOptionsSchema>;
 
 // ============================================================================
-// Custom Stop Condition: FINAL_ANSWER Detection
-// ============================================================================
-
-const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
-	const lastStep = steps[steps.length - 1];
-	return lastStep?.text?.includes("FINAL_ANSWER:") || false;
-};
-
-// ============================================================================
 // CMS Agent Definition
 // ============================================================================
 
@@ -122,8 +113,8 @@ export const cmsAgent = new ToolLoopAgent({
 			// Override instructions with minimal agent prompt
 			instructions: dynamicInstructions,
 			maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
-			// Start with only discovery tool - others added via prepareStep
-			activeTools: ["tool_search"] as (keyof typeof ALL_TOOLS)[],
+			// Start with core tools - others added via prepareStep
+			activeTools: ["tool_search", "final_answer"] as (keyof typeof ALL_TOOLS)[],
 			// experimental_context is how tools access runtime services
 			experimental_context: {
 				db: options.db,
@@ -140,7 +131,8 @@ export const cmsAgent = new ToolLoopAgent({
 	},
 
 	// Native stop conditions (combined with OR logic)
-	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
+	// Stops when: max steps reached OR final_answer tool is called
+	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasToolCall("final_answer")],
 
 	// Dynamic tool availability via prepareStep
 	// Implements Phase 7 from DYNAMIC_TOOL_INJECTION_PLAN.md
@@ -158,18 +150,21 @@ export const cmsAgent = new ToolLoopAgent({
 		// Extract tools discovered from working memory (previous turns) + current steps
 		const discoveredTools = getAllDiscoveredTools(messages, steps) as ToolName[];
 
+		// Core tools always available
+		const coreTools: ToolName[] = ["tool_search", "final_answer"];
+
 		// Phase 1: Discovery (step 0, no tools discovered yet)
 		// Use 'auto' - agent decides whether to call tool_search or answer directly
 		if (stepNumber === 0 && discoveredTools.length === 0) {
 			return {
-				activeTools: ["tool_search"] as ToolName[],
+				activeTools: coreTools,
 				toolChoice: "auto" as const,
 			};
 		}
 
 		// Phase 2: Execution (tools discovered)
-		// All discovered tools available, plus tool_search for additional discovery
-		const activeTools = ["tool_search", ...discoveredTools] as ToolName[];
+		// All discovered tools available, plus core tools
+		const activeTools = [...coreTools, ...discoveredTools] as ToolName[];
 
 		const result: {
 			activeTools: ToolName[];
@@ -212,6 +207,36 @@ DO NOT call ${last.name} with the same parameters again.`,
 					: [...messages.slice(0, -1), stuckMessage, messages[messages.length - 1]];
 
 				console.warn(`[prepareStep] Stuck detected: ${last.name} called twice with same params`);
+			}
+		}
+
+		// =====================================================================
+		// Final Answer Rules Injection: Inject when workflow is in progress
+		// =====================================================================
+		const hasUsedWorkflowTools = steps.some((s: any) =>
+			s.toolCalls?.some(
+				(tc: any) =>
+					tc.toolName !== "tool_search" && tc.toolName !== "final_answer"
+			)
+		);
+
+		if (hasUsedWorkflowTools || stepNumber >= 3) {
+			const finalAnswerRules = loadRules("final-answer");
+			if (finalAnswerRules) {
+				// Inject rules as a system message before the last user message
+				const rulesMessage: CoreMessage = {
+					role: "system" as const,
+					content: `<final-answer-rules>\n${finalAnswerRules}\n</final-answer-rules>`,
+				};
+
+				// Only inject if not already modified by stuck detection
+				if (!result.messages) {
+					result.messages = [
+						messages[0], // System prompt
+						rulesMessage,
+						...messages.slice(1),
+					];
+				}
 			}
 		}
 

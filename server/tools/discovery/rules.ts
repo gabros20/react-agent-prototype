@@ -57,25 +57,12 @@ export function loadRules(category: ToolCategory): string {
 	}
 }
 
-// Categories that trigger response-format rules injection
-const IMAGE_RELATED_CATEGORIES: ToolCategory[] = ["images", "pexels", "posts"];
-
 /**
  * Get combined rules for multiple categories.
  * Deduplicates and formats for system prompt injection.
- * Automatically includes response-format rules when image-related categories are present.
  */
 export function getRules(categories: ToolCategory[]): string {
 	const uniqueCategories = [...new Set(categories)];
-
-	// Auto-inject response-format when image-related tools are discovered
-	const hasImageRelated = uniqueCategories.some((c) =>
-		IMAGE_RELATED_CATEGORIES.includes(c)
-	);
-	if (hasImageRelated && !uniqueCategories.includes("response-format")) {
-		uniqueCategories.push("response-format");
-	}
-
 	const rules: string[] = [];
 
 	for (const category of uniqueCategories) {
@@ -129,7 +116,7 @@ export function preloadRules(): void {
 		"http",
 		"site-settings",
 		"planning",
-		"response-format",
+		"final-answer",
 	];
 
 	for (const category of categories) {

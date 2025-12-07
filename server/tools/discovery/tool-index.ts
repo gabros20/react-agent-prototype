@@ -18,7 +18,7 @@ import type { ToolMetadata } from "./types";
 
 export const TOOL_INDEX: Record<string, ToolMetadata> = {
 	// ==========================================================================
-	// Discovery (1 tool)
+	// Core Tools (2 tools)
 	// ==========================================================================
 
 	tool_search: {
@@ -38,6 +38,27 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 		riskLevel: "safe",
 		requiresConfirmation: false,
 		extraction: null, // Discovery tool doesn't produce entities
+	},
+
+	final_answer: {
+		name: "final_answer",
+		description:
+			"Present final results to user. Call when all actions are complete.",
+		category: "final-answer",
+		phrases: [
+			"final answer",
+			"complete",
+			"done",
+			"finished",
+			"respond",
+			"present results",
+			"wrap up",
+			"summarize",
+		],
+		relatedTools: [],
+		riskLevel: "safe",
+		requiresConfirmation: false,
+		extraction: null, // Core tool - no entity extraction
 	},
 
 	// ==========================================================================

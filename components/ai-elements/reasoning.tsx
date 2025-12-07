@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
-import { Streamdown } from "streamdown";
+import { Response } from "./response";
 import { Shimmer } from "./shimmer";
 
 type ReasoningContextValue = {
@@ -168,7 +168,7 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown {...props}>{children}</Streamdown>
+      <Response className="text-muted-foreground">{children}</Response>
     </CollapsibleContent>
   )
 );

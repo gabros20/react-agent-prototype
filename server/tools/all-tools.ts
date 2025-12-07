@@ -9,8 +9,9 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import type { AgentContext } from './types'
 
-// Discovery tool import (must be at top to avoid circular init issues)
+// Core tool imports (must be at top to avoid circular init issues)
 import { toolSearchTool } from './discovery/tool-search'
+import { finalAnswerTool } from './core/final-answer'
 import {
   findImageTool,
   searchImagesTool,
@@ -836,8 +837,9 @@ export const planAnalyzeTask = tool({
 // ============================================================================
 
 export const ALL_TOOLS = {
-  // Discovery (Phase 5 - Dynamic Tool Injection)
+  // Core tools (always available)
   'tool_search': toolSearchTool,
+  'final_answer': finalAnswerTool,
 
   // Pages
   'cms_getPage': cmsGetPage,
@@ -920,6 +922,7 @@ export const ALL_TOOLS = {
  */
 export const CORE_TOOLS = {
   'tool_search': toolSearchTool,
+  'final_answer': finalAnswerTool,
 } as const
 
 /**

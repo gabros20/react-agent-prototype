@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "ca233cdd575a8189",
+        "id": "06d03911a3b5143f",
         "type": "tabs",
         "children": [
           {
-            "id": "974d0433f089a4b1",
+            "id": "78c6c50f5cf8c074",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "architecture/LAYER_5.1_REDIS_CONNECTION.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "LAYER_5.1_REDIS_CONNECTION"
+              "title": "New tab"
             }
           }
         ]
@@ -78,7 +74,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 354.5
+    "width": 354.5,
+    "collapsed": true
   },
   "right": {
     "id": "21b6a6d77a0d8894",
@@ -93,11 +90,9 @@
             "type": "leaf",
             "state": {
               "type": "file-properties",
-              "state": {
-                "file": "N - Cursor Rules - Mermaid charts.md"
-              },
+              "state": {},
               "icon": "lucide-info",
-              "title": "File properties for N - Cursor Rules - Mermaid charts"
+              "title": "File properties"
             }
           },
           {
@@ -192,8 +187,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "974d0433f089a4b1",
+  "active": "78c6c50f5cf8c074",
   "lastOpenFiles": [
+    "architecture/_ INDEX.md",
+    "architecture/AGENT_SYSTEM_DIAGRAM.md",
+    "knowledge-base/0-foundations/0.1.2-training-vs-inference.md",
+    "knowledge-base/0-foundations/0.1.1-llm-intro.md",
+    "5frf.canvas",
+    "architecture/LAYER_5.1_REDIS_CONNECTION.md",
     "development/PLAN-v2.md",
     "knowledge-base/4-memory/4.0.1-memory-systems-overview.md",
     "research/TOOLLOOPAGENT_REACT_IMPLEMENTATION.md",
@@ -215,11 +216,6 @@
     "development/DEBUG_LOGGING_SYSTEM.md",
     "ENHANCED_DEBUG_PANEL_PLAN.md",
     "development/IMPLEMENTATION_SPRINTS.md",
-    "architecture/_ INDEX.md",
-    "architecture/LAYER_7.5_POST_RENDERING.md",
-    "architecture/LAYER_7.2_TEMPLATE_REGISTRY.md",
-    "architecture/LAYER_6.4_CHAT_COMPONENTS.md",
-    "architecture/LAYER_5.5_RETRY_AND_ERROR.md",
     "architecture",
     "C - Brease Assistant.canvas",
     "C - Brease Assistant - IMAGE 20251109.png",

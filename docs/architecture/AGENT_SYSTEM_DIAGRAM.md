@@ -901,19 +901,19 @@ sequenceDiagram
 
 ## Quick Reference: Component Mapping
 
-| Diagram Component | Source File                            | Layer Doc                                                 |
-| ----------------- | -------------------------------------- | --------------------------------------------------------- |
-| ToolLoopAgent     | `server/agent/cms-agent.ts`            | [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)               |
-| ALL_TOOLS         | `server/tools/all-tools.ts`            | [3.2 Tools](./LAYER_3.2_TOOLS.md)                         |
-| WorkingContext    | `server/services/working-memory/`      | [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       |
-| Prompts           | `server/prompts/core/` + `workflows/`  | [3.4 Prompts](./LAYER_3.4_PROMPTS.md)                     |
-| ConfirmationFlow  | `server/tools/all-tools.ts` (confirmed flag) | [3.5 HITL](./LAYER_3.5_HITL.md)                      |
-| Retry Logic       | `server/agent/cms-agent.ts`            | [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       |
-| SSE Writer        | `server/routes/agent.ts`               | [3.7 Streaming](./LAYER_3.7_STREAMING.md)                 |
-| AgentContext      | `server/agent/cms-agent.ts`            | [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) |
-| ServiceContainer  | `server/services/service-container.ts` | [1.2 Service Container](./LAYER_1.2_SERVICE_CONTAINER.md) |
-| useAgent          | `app/assistant/_hooks/use-agent.ts`    | [6.2 SSE Streaming](./LAYER_6.2_SSE_STREAMING.md)         |
-| useChatStore      | `app/assistant/_stores/`               | [6.1 State Management](./LAYER_6.1_STATE_MANAGEMENT.md)   |
+| Diagram Component | Source File                                  | Layer Doc                                                 |
+| ----------------- | -------------------------------------------- | --------------------------------------------------------- |
+| ToolLoopAgent     | `server/agent/cms-agent.ts`                  | [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)               |
+| ALL_TOOLS         | `server/tools/all-tools.ts`                  | [3.2 Tools](./LAYER_3.2_TOOLS.md)                         |
+| WorkingContext    | `server/services/working-memory/`            | [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       |
+| Prompts           | `server/prompts/core/` + `workflows/`        | [3.4 Prompts](./LAYER_3.4_PROMPTS.md)                     |
+| ConfirmationFlow  | `server/tools/all-tools.ts` (confirmed flag) | [3.5 HITL](./LAYER_3.5_HITL.md)                           |
+| Retry Logic       | `server/agent/cms-agent.ts`                  | [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       |
+| SSE Writer        | `server/routes/agent.ts`                     | [3.7 Streaming](./LAYER_3.7_STREAMING.md)                 |
+| AgentContext      | `server/agent/cms-agent.ts`                  | [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) |
+| ServiceContainer  | `server/services/service-container.ts`       | [1.2 Service Container](./LAYER_1.2_SERVICE_CONTAINER.md) |
+| useAgent          | `app/assistant/_hooks/use-agent.ts`          | [6.2 SSE Streaming](./LAYER_6.2_SSE_STREAMING.md)         |
+| useChatStore      | `app/assistant/_stores/`                     | [6.1 State Management](./LAYER_6.1_STATE_MANAGEMENT.md)   |
 
 ---
 
