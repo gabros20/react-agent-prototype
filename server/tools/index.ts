@@ -7,8 +7,7 @@
  * Tool metadata is in discovery/tool-index.ts (TOOL_INDEX)
  */
 
-export { ALL_TOOLS, CORE_TOOLS, DYNAMIC_TOOLS } from './all-tools'
-export type { DynamicToolName } from './all-tools'
+export { ALL_TOOLS } from './all-tools'
 export * from './types'
 
 // Log available tools

@@ -15,7 +15,7 @@
 
 import { randomUUID } from "crypto";
 import type { ModelMessage } from "ai";
-import { cmsAgent, AGENT_CONFIG, type AgentCallOptions } from "../../agent/cms-agent";
+import { cmsAgent, AGENT_CONFIG, getLastInjectedInstructions, type AgentCallOptions } from "../../agent/cms-agent";
 import { getSystemPrompt } from "../../agent/system-prompt";
 import { EntityExtractor, WorkingContext } from "../working-memory";
 import { getSiteAndEnv } from "../../utils/get-context";
@@ -348,7 +348,7 @@ export class AgentOrchestrator {
 	): Promise<void> {
 		const workingMemoryStr = workingContext.toContextString();
 		const systemPrompt = getSystemPrompt({
-			currentDate: new Date().toISOString().split("T")[0],
+			currentDate: new Date().toISOString(),
 			workingMemory: workingMemoryStr,
 		});
 
@@ -545,21 +545,13 @@ export class AgentOrchestrator {
 
 					// Special handling for tool_search - emit tools-discovered event and persist
 					if (chunk.toolName === "tool_search" && chunk.output) {
+						// New format: { tools: string[], message: string }
 						const searchResult = chunk.output as {
-							tools?: Array<{ name: string; description: string }>;
-							rules?: string;
+							tools?: string[];
+							message?: string;
 						};
 						if (searchResult.tools && searchResult.tools.length > 0) {
-							const toolNames = searchResult.tools.map((t) => t.name);
-							// Extract categories from tool names (e.g., cms_getPage -> cms)
-							const categories = [
-								...new Set(
-									toolNames.map((name) => {
-										const prefix = name.split("_")[0];
-										return prefix || "other";
-									})
-								),
-							];
+							const toolNames = searchResult.tools;
 
 							// Persist discovered tools to working context
 							workingContext.addDiscoveredTools(toolNames);
@@ -567,8 +559,6 @@ export class AgentOrchestrator {
 							writeSSE("tools-discovered", {
 								type: "tools-discovered",
 								tools: toolNames,
-								categories,
-								hasRules: !!searchResult.rules,
 								discoveredTotal: workingContext.discoveredToolsCount(),
 								timestamp: new Date().toISOString(),
 							});
@@ -576,7 +566,6 @@ export class AgentOrchestrator {
 							logger.info("Tools discovered via tool_search", {
 								toolCount: toolNames.length,
 								tools: toolNames,
-								categories,
 								totalDiscovered: workingContext.discoveredToolsCount(),
 							});
 						}
@@ -648,16 +637,36 @@ export class AgentOrchestrator {
 				case "start-step":
 					currentStep++;
 					stepStartTime = Date.now();
+					const discoveredToolsList = workingContext.getDiscoveredTools();
 					writeSSE("step-start", {
 						type: "step-start",
 						stepNumber: currentStep,
+						discoveredTools: discoveredToolsList,
+						activeTools: ["tool_search", "final_answer", ...discoveredToolsList],
 						timestamp: new Date().toISOString(),
+					});
+
+					// Emit instructions that were injected during prepareStep (runs before start-step)
+					// Small delay to ensure prepareStep has completed (it's synchronous but timing can vary)
+					setImmediate(() => {
+						const injectedInstructions = getLastInjectedInstructions();
+						if (injectedInstructions) {
+							writeSSE("instructions-injected", {
+								type: "instructions-injected",
+								stepNumber: currentStep,
+								tools: injectedInstructions.tools,
+								instructions: injectedInstructions.instructions,
+								updatedSystemPrompt: injectedInstructions.updatedSystemPrompt,
+								timestamp: new Date().toISOString(),
+							});
+						}
 					});
 					break;
 
 				case "finish-step":
 					const stepDuration = Date.now() - stepStartTime;
 					const stepUsage = (chunk as { usage?: { promptTokens?: number; completionTokens?: number } }).usage;
+
 					writeSSE("step-finish", {
 						type: "step-finish",
 						stepNumber: currentStep,

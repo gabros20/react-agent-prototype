@@ -183,9 +183,7 @@ export function useAgent() {
 			case "tools-discovered": {
 				// Handle dynamic tool discovery via tool_search
 				const tools = (d.tools as string[]) || [];
-				const categories = (d.categories as string[]) || [];
-				const query = `discovered ${tools.length} tools`;
-				traceRef.current?.toolsDiscovered(tools, categories, query);
+				traceRef.current?.toolsDiscovered(tools);
 				break;
 			}
 
@@ -224,8 +222,21 @@ export function useAgent() {
 			}
 
 			case "step-start": {
-				traceRef.current?.stepStart(d.stepNumber as number);
+				traceRef.current?.stepStart(d.stepNumber as number, {
+					activeTools: d.activeTools as string[] | undefined,
+					discoveredTools: d.discoveredTools as string[] | undefined,
+				});
 				streamingTextRef.current = "";
+				break;
+			}
+
+			case "instructions-injected": {
+				// Handle injected instructions for debug panel
+				const tools = (d.tools as string[]) || [];
+				const instructions = (d.instructions as string) || "";
+				const stepNumber = d.stepNumber as number;
+				const updatedSystemPrompt = d.updatedSystemPrompt as string | undefined;
+				traceRef.current?.instructionsInjected(stepNumber, tools, instructions, updatedSystemPrompt);
 				break;
 			}
 

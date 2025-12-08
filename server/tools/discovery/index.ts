@@ -42,19 +42,12 @@ export {
 	smartToolSearchWithConfidence,
 	quickToolSearch,
 	expandWithRelatedTools,
-	extractCategories,
 	isContentQuery,
 	type SmartSearchResult,
 } from "./smart-search";
 
-// Rules (Phase 4)
-export {
-	loadRules,
-	getRules,
-	clearRulesCache,
-	getRulesCacheStats,
-	preloadRules,
-} from "./rules";
+// Rules - REMOVED: Now using Per-Tool Instructions via TOOL_INSTRUCTIONS
+// See: server/tools/instructions/index.ts
 
 // Discovery Tool (Phase 5)
 export { toolSearchTool, type ToolSearchOutput } from "./tool-search";

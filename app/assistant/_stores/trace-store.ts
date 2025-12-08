@@ -36,7 +36,8 @@ export type TraceEntryType =
 	| "user-prompt" // User prompt with token count
 	// Dynamic tool injection observability
 	| "tools-discovered" // tool_search returned tools
-	| "active-tools-changed"; // prepareStep expanded activeTools
+	| "active-tools-changed" // prepareStep expanded activeTools
+	| "instructions-injected"; // Tool instructions injected into system prompt
 
 export type TraceLevel = "debug" | "info" | "warn" | "error";
 
@@ -813,6 +814,7 @@ export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
 	// Dynamic tool injection
 	"tools-discovered": "bg-purple-500",
 	"active-tools-changed": "bg-purple-400",
+	"instructions-injected": "bg-fuchsia-500",
 };
 
 export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
@@ -846,6 +848,7 @@ export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
 	// Dynamic tool injection
 	"tools-discovered": "Discovered",
 	"active-tools-changed": "Tools+",
+	"instructions-injected": "Instructions",
 };
 
 export function formatDuration(ms: number): string {

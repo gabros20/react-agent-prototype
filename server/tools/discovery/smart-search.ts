@@ -9,7 +9,7 @@
  * Implements Phase 3.2 from DYNAMIC_TOOL_INJECTION_PLAN.md
  */
 
-import type { ToolSearchResult, ToolCategory } from "./types";
+import type { ToolSearchResult } from "./types";
 import { TOOL_INDEX } from "./tool-index";
 import { bm25Search, isBM25Initialized } from "./bm25-search";
 import { vectorSearch, isVectorInitialized } from "./vector-search";
@@ -147,7 +147,6 @@ export function expandWithRelatedTools(
 			expanded.push({
 				name: relatedMeta.name,
 				category: relatedMeta.category,
-				description: relatedMeta.description,
 				score: tool.score * CONFIG.RELATED_TOOL_SCORE_DISCOUNT,
 				relatedTools:
 					relatedMeta.relatedTools.length > 0
@@ -213,18 +212,6 @@ function blendResults(
 			score: (scores.get(name) || 0) / maxScore, // Normalize to 0-1
 		};
 	});
-}
-
-// ============================================================================
-// Category Extraction
-// ============================================================================
-
-/**
- * Extract unique categories from search results.
- * Used for loading category-specific rules.
- */
-export function extractCategories(tools: ToolSearchResult[]): ToolCategory[] {
-	return [...new Set(tools.map((t) => t.category))];
 }
 
 // ============================================================================

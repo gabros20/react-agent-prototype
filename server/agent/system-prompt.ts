@@ -19,6 +19,7 @@ const __dirname = path.dirname(__filename);
 export interface SystemPromptContext {
 	currentDate: string;
 	workingMemory?: string;
+	activeProtocols?: string;
 }
 
 // Cached compiled template
@@ -46,6 +47,7 @@ export function getSystemPrompt(context: SystemPromptContext): string {
 	return compiledTemplate({
 		...context,
 		workingMemory: context.workingMemory || "",
+		activeProtocols: context.activeProtocols || "",
 	});
 }
 

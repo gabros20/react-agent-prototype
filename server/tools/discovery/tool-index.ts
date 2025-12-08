@@ -23,17 +23,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	tool_search: {
 		name: "tool_search",
-		description:
-			"Search for CMS tools you need. Describe what you want to do in natural language.",
 		category: "search",
-		phrases: [
-			"find tools",
-			"search tools",
-			"what tools",
-			"discover tools",
-			"available tools",
-			"get tools",
-		],
+		phrases: ["find tools", "search tools", "what tools", "discover tools", "available tools", "get tools"],
 		relatedTools: [],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -42,19 +33,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	final_answer: {
 		name: "final_answer",
-		description:
-			"Present final results to user. Call when all actions are complete.",
 		category: "final-answer",
-		phrases: [
-			"final answer",
-			"complete",
-			"done",
-			"finished",
-			"respond",
-			"present results",
-			"wrap up",
-			"summarize",
-		],
+		phrases: ["final answer", "complete", "done", "finished", "respond", "present results", "wrap up", "summarize"],
 		relatedTools: [],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -67,8 +47,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getPage: {
 		name: "cms_getPage",
-		description:
-			"Get page by slug or ID with metadata and section IDs. Use includeContent for full content.",
 		category: "pages",
 		phrases: [
 			"get page",
@@ -97,16 +75,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_createPage: {
 		name: "cms_createPage",
-		description: "Create new empty page. Use cms_createPageWithContent for page with sections.",
 		category: "pages",
-		phrases: [
-			"create page",
-			"new page",
-			"add page",
-			"make page",
-			"build page",
-			"create empty page",
-		],
+		phrases: ["create page", "new page", "add page", "make page", "build page", "create empty page"],
 		relatedTools: ["cms_addSectionToPage", "cms_updateSectionContent"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -120,8 +90,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_createPageWithContent: {
 		name: "cms_createPageWithContent",
-		description:
-			"Create page with hero, features, CTA sections. Best for landing pages. Images added separately.",
 		category: "pages",
 		phrases: [
 			"create page with content",
@@ -147,7 +115,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_updatePage: {
 		name: "cms_updatePage",
-		description: "Update page name, slug, meta description, or SEO settings.",
 		category: "pages",
 		phrases: [
 			"update page",
@@ -173,16 +140,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_deletePage: {
 		name: "cms_deletePage",
-		description:
-			"Delete page permanently with all sections. Requires confirmation.",
 		category: "pages",
-		phrases: [
-			"delete page",
-			"remove page",
-			"trash page",
-			"destroy page",
-			"delete website page",
-		],
+		phrases: ["delete page", "remove page", "trash page", "destroy page", "delete website page"],
 		relatedTools: ["cms_removeNavigationItem"],
 		riskLevel: "destructive",
 		requiresConfirmation: true,
@@ -191,7 +150,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_listPages: {
 		name: "cms_listPages",
-		description: "List all pages in site. Returns names, slugs, IDs.",
 		category: "pages",
 		phrases: [
 			"list pages",
@@ -223,8 +181,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_listSectionTemplates: {
 		name: "cms_listSectionTemplates",
-		description:
-			"List available section types: hero, feature, cta, image-text, testimonial.",
 		category: "sections",
 		phrases: [
 			"list section templates",
@@ -251,8 +207,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getSectionFields: {
 		name: "cms_getSectionFields",
-		description:
-			"Get section schema and field names. Check before updating section content.",
 		category: "sections",
 		phrases: [
 			"section fields",
@@ -276,8 +230,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_addSectionToPage: {
 		name: "cms_addSectionToPage",
-		description:
-			"Add hero, feature, cta, or other section to page. Returns pageSectionId.",
 		category: "sections",
 		phrases: [
 			"add section",
@@ -290,11 +242,7 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 			"add feature section",
 			"put section on page",
 		],
-		relatedTools: [
-			"cms_getSectionFields",
-			"cms_updateSectionContent",
-			"cms_listSectionTemplates",
-		],
+		relatedTools: ["cms_getSectionFields", "cms_updateSectionContent", "cms_listSectionTemplates"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
 		extraction: {
@@ -307,8 +255,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_updateSectionContent: {
 		name: "cms_updateSectionContent",
-		description:
-			"Update section text, title, button. MERGES with existing - only sends changed fields.",
 		category: "sections",
 		phrases: [
 			"update section",
@@ -331,16 +277,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_deletePageSection: {
 		name: "cms_deletePageSection",
-		description:
-			"Delete one section from page. Requires confirmation.",
 		category: "sections",
-		phrases: [
-			"delete section",
-			"remove section",
-			"delete section from page",
-			"remove section from page",
-			"trash section",
-		],
+		phrases: ["delete section", "remove section", "delete section from page", "remove section from page", "trash section"],
 		relatedTools: ["cms_getPageSections"],
 		riskLevel: "destructive",
 		requiresConfirmation: true,
@@ -349,17 +287,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_deletePageSections: {
 		name: "cms_deletePageSections",
-		description:
-			"Delete multiple sections at once. Batch deletion. Requires confirmation.",
 		category: "sections",
-		phrases: [
-			"delete sections",
-			"remove all sections",
-			"delete multiple sections",
-			"clear sections",
-			"batch delete sections",
-			"remove sections",
-		],
+		phrases: ["delete sections", "remove all sections", "delete multiple sections", "clear sections", "batch delete sections", "remove sections"],
 		relatedTools: ["cms_getPageSections"],
 		riskLevel: "destructive",
 		requiresConfirmation: true,
@@ -368,8 +297,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getPageSections: {
 		name: "cms_getPageSections",
-		description:
-			"List all sections on a page with IDs and types. Use includeContent for full data.",
 		category: "sections",
 		phrases: [
 			"get sections",
@@ -395,8 +322,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getSectionContent: {
 		name: "cms_getSectionContent",
-		description:
-			"Get one section's full content by pageSectionId. Granular fetch.",
 		category: "sections",
 		phrases: [
 			"get section content",
@@ -424,20 +349,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_findImage: {
 		name: "cms_findImage",
-		description:
-			"Find one specific image by description. Use for 'the puppy photo' style references.",
 		category: "images",
-		phrases: [
-			"find image",
-			"get image",
-			"locate image",
-			"the image",
-			"that image",
-			"which image",
-			"find photo",
-			"get photo",
-			"specific image",
-		],
+		phrases: ["find image", "get image", "locate image", "the image", "that image", "which image", "find photo", "get photo", "specific image"],
 		relatedTools: ["cms_searchImages", "cms_updateSectionImage"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -451,8 +364,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_searchImages: {
 		name: "cms_searchImages",
-		description:
-			"Search images by description using semantic matching. Returns multiple results.",
 		category: "images",
 		phrases: [
 			"search images",
@@ -480,19 +391,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_listAllImages: {
 		name: "cms_listAllImages",
-		description:
-			"List all uploaded images in the system. Browse entire image library.",
 		category: "images",
-		phrases: [
-			"list images",
-			"all images",
-			"show images",
-			"image library",
-			"browse images",
-			"view all images",
-			"what images",
-			"available images",
-		],
+		phrases: ["list images", "all images", "show images", "image library", "browse images", "view all images", "what images", "available images"],
 		relatedTools: ["cms_searchImages"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -507,16 +407,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_addImageToSection: {
 		name: "cms_addImageToSection",
-		description:
-			"Attach image to section field like backgroundImage or heroImage.",
 		category: "images",
-		phrases: [
-			"add image to section",
-			"attach image",
-			"set section image",
-			"put image in section",
-			"attach image to section",
-		],
+		phrases: ["add image to section", "attach image", "set section image", "put image in section", "attach image to section"],
 		relatedTools: ["cms_getSectionFields", "cms_searchImages"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -525,8 +417,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_updateSectionImage: {
 		name: "cms_updateSectionImage",
-		description:
-			"Set or change section image field. Use for hero background, feature images.",
 		category: "images",
 		phrases: [
 			"update section image",
@@ -547,16 +437,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_replaceImage: {
 		name: "cms_replaceImage",
-		description:
-			"Replace image everywhere it's used across all sections.",
 		category: "images",
-		phrases: [
-			"replace image",
-			"swap image",
-			"change image everywhere",
-			"replace image globally",
-			"substitute image",
-		],
+		phrases: ["replace image", "swap image", "change image everywhere", "replace image globally", "substitute image"],
 		relatedTools: ["cms_searchImages", "cms_findImage"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -565,16 +447,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_deleteImage: {
 		name: "cms_deleteImage",
-		description:
-			"Delete image permanently from system. Cannot be undone. Requires confirmation.",
 		category: "images",
-		phrases: [
-			"delete image",
-			"remove image",
-			"trash image",
-			"delete photo",
-			"remove photo",
-		],
+		phrases: ["delete image", "remove image", "trash image", "delete photo", "remove photo"],
 		relatedTools: ["cms_findImage"],
 		riskLevel: "destructive",
 		requiresConfirmation: true,
@@ -587,17 +461,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getNavigation: {
 		name: "cms_getNavigation",
-		description: "Get current navigation menu items",
 		category: "navigation",
-		phrases: [
-			"get navigation",
-			"show navigation",
-			"menu items",
-			"navigation menu",
-			"site menu",
-			"nav items",
-			"header menu",
-		],
+		phrases: ["get navigation", "show navigation", "menu items", "navigation menu", "site menu", "nav items", "header menu"],
 		relatedTools: ["cms_addNavigationItem", "cms_updateNavigationItem"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -612,16 +477,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_addNavigationItem: {
 		name: "cms_addNavigationItem",
-		description: "Add a new item to the navigation menu",
 		category: "navigation",
-		phrases: [
-			"add navigation item",
-			"add to menu",
-			"add menu item",
-			"add to nav",
-			"add link to navigation",
-			"new menu item",
-		],
+		phrases: ["add navigation item", "add to menu", "add menu item", "add to nav", "add link to navigation", "new menu item"],
 		relatedTools: ["cms_getNavigation"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -630,15 +487,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_updateNavigationItem: {
 		name: "cms_updateNavigationItem",
-		description: "Update an existing navigation menu item",
 		category: "navigation",
-		phrases: [
-			"update navigation item",
-			"edit menu item",
-			"change navigation",
-			"modify nav item",
-			"rename menu item",
-		],
+		phrases: ["update navigation item", "edit menu item", "change navigation", "modify nav item", "rename menu item"],
 		relatedTools: ["cms_getNavigation"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -647,14 +497,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_removeNavigationItem: {
 		name: "cms_removeNavigationItem",
-		description: "Remove an item from the navigation menu",
 		category: "navigation",
-		phrases: [
-			"remove navigation item",
-			"delete menu item",
-			"remove from nav",
-			"delete from menu",
-		],
+		phrases: ["remove navigation item", "delete menu item", "remove from nav", "delete from menu"],
 		relatedTools: ["cms_getNavigation"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -663,15 +507,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_toggleNavigationItem: {
 		name: "cms_toggleNavigationItem",
-		description: "Enable or disable a navigation menu item",
 		category: "navigation",
-		phrases: [
-			"toggle navigation item",
-			"enable menu item",
-			"disable menu item",
-			"hide nav item",
-			"show nav item",
-		],
+		phrases: ["toggle navigation item", "enable menu item", "disable menu item", "hide nav item", "show nav item"],
 		relatedTools: ["cms_getNavigation"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -684,7 +521,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_createPost: {
 		name: "cms_createPost",
-		description: "Create blog post with title, content, tags. Created as draft. Add image via featuredImage.",
 		category: "posts",
 		phrases: [
 			"create post",
@@ -712,17 +548,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_updatePost: {
 		name: "cms_updatePost",
-		description: "Update post title, content, tags, or featuredImage.",
 		category: "posts",
-		phrases: [
-			"update post",
-			"edit post",
-			"modify post",
-			"change post",
-			"update blog",
-			"edit blog post",
-			"change post content",
-		],
+		phrases: ["update post", "edit post", "modify post", "change post", "update blog", "edit blog post", "change post content"],
 		relatedTools: ["cms_getPost"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -736,16 +563,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_publishPost: {
 		name: "cms_publishPost",
-		description: "Publish draft post to make it live. Requires confirmation.",
 		category: "posts",
-		phrases: [
-			"publish post",
-			"publish blog",
-			"make live",
-			"go live",
-			"release post",
-			"publish article",
-		],
+		phrases: ["publish post", "publish blog", "make live", "go live", "release post", "publish article"],
 		relatedTools: ["cms_getPost"],
 		riskLevel: "moderate",
 		requiresConfirmation: true,
@@ -759,15 +578,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_archivePost: {
 		name: "cms_archivePost",
-		description: "Archive post to hide without deleting. Requires confirmation.",
 		category: "posts",
-		phrases: [
-			"archive post",
-			"unpublish post",
-			"hide post",
-			"take down",
-			"archive blog",
-		],
+		phrases: ["archive post", "unpublish post", "hide post", "take down", "archive blog"],
 		relatedTools: ["cms_getPost"],
 		riskLevel: "moderate",
 		requiresConfirmation: true,
@@ -781,15 +593,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_deletePost: {
 		name: "cms_deletePost",
-		description: "Delete post permanently. Cannot be undone. Requires confirmation.",
 		category: "posts",
-		phrases: [
-			"delete post",
-			"remove post",
-			"trash post",
-			"delete blog",
-			"delete article",
-		],
+		phrases: ["delete post", "remove post", "trash post", "delete blog", "delete article"],
 		relatedTools: ["cms_listPosts"],
 		riskLevel: "destructive",
 		requiresConfirmation: true,
@@ -798,19 +603,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_listPosts: {
 		name: "cms_listPosts",
-		description: "List all blog posts. Filter by status: draft, published, archived.",
 		category: "posts",
-		phrases: [
-			"list posts",
-			"show posts",
-			"all posts",
-			"get posts",
-			"blog posts",
-			"view posts",
-			"posts list",
-			"articles",
-			"all blogs",
-		],
+		phrases: ["list posts", "show posts", "all posts", "get posts", "blog posts", "view posts", "posts list", "articles", "all blogs"],
 		relatedTools: ["cms_getPost"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -825,18 +619,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getPost: {
 		name: "cms_getPost",
-		description: "Get post by ID or slug with full content and metadata.",
 		category: "posts",
-		phrases: [
-			"get post",
-			"show post",
-			"read post",
-			"view post",
-			"fetch post",
-			"post details",
-			"blog post content",
-			"get article",
-		],
+		phrases: ["get post", "show post", "read post", "view post", "fetch post", "post details", "blog post content", "get article"],
 		relatedTools: ["cms_updatePost"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -854,16 +638,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getCollectionEntries: {
 		name: "cms_getCollectionEntries",
-		description:
-			"Get all entries for a collection. Lightweight by default.",
 		category: "entries",
-		phrases: [
-			"get collection entries",
-			"list entries",
-			"collection items",
-			"show entries",
-			"entries in collection",
-		],
+		phrases: ["get collection entries", "list entries", "collection items", "show entries", "entries in collection"],
 		relatedTools: ["cms_getEntryContent"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -878,15 +654,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_getEntryContent: {
 		name: "cms_getEntryContent",
-		description: "Get content for a specific entry. Granular fetching.",
 		category: "entries",
-		phrases: [
-			"get entry content",
-			"entry details",
-			"read entry",
-			"fetch entry",
-			"entry data",
-		],
+		phrases: ["get entry content", "entry details", "read entry", "fetch entry", "entry data"],
 		relatedTools: ["cms_getCollectionEntries"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -904,15 +673,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	search_vector: {
 		name: "search_vector",
-		description: "Search for content using vector similarity (semantic search)",
 		category: "search",
-		phrases: [
-			"search vector",
-			"semantic search",
-			"similar content",
-			"find similar",
-			"content search",
-		],
+		phrases: ["search vector", "semantic search", "similar content", "find similar", "content search"],
 		relatedTools: ["cms_findResource"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -921,16 +683,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	cms_findResource: {
 		name: "cms_findResource",
-		description:
-			"Find CMS resource by name/query. Works for pages, sections, collections.",
 		category: "search",
-		phrases: [
-			"find resource",
-			"search resource",
-			"find by name",
-			"locate resource",
-			"search cms",
-		],
+		phrases: ["find resource", "search resource", "find by name", "locate resource", "search cms"],
 		relatedTools: ["search_vector"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -943,16 +697,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	http_get: {
 		name: "http_get",
-		description: "Make HTTP GET request to external API",
 		category: "http",
-		phrases: [
-			"http get",
-			"fetch url",
-			"get request",
-			"api get",
-			"external api",
-			"fetch data",
-		],
+		phrases: ["http get", "fetch url", "get request", "api get", "external api", "fetch data"],
 		relatedTools: ["http_post"],
 		riskLevel: "moderate",
 		requiresConfirmation: false,
@@ -961,15 +707,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	http_post: {
 		name: "http_post",
-		description: "Make HTTP POST request to external API. Requires confirmation.",
 		category: "http",
-		phrases: [
-			"http post",
-			"post request",
-			"send data",
-			"api post",
-			"submit to api",
-		],
+		phrases: ["http post", "post request", "send data", "api post", "submit to api"],
 		relatedTools: ["http_get"],
 		riskLevel: "moderate",
 		requiresConfirmation: true,
@@ -982,15 +721,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	plan_analyzeTask: {
 		name: "plan_analyzeTask",
-		description: "Analyze user request and create execution plan",
 		category: "planning",
-		phrases: [
-			"analyze task",
-			"create plan",
-			"plan steps",
-			"break down task",
-			"task analysis",
-		],
+		phrases: ["analyze task", "create plan", "plan steps", "break down task", "task analysis"],
 		relatedTools: [],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -1003,7 +735,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	web_quickSearch: {
 		name: "web_quickSearch",
-		description: "Fast web search for facts, news, quick info. Returns snippets and links.",
 		category: "research",
 		phrases: [
 			"web search",
@@ -1026,7 +757,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	web_deepResearch: {
 		name: "web_deepResearch",
-		description: "Comprehensive research with full report. Best for blog content. Takes 30-120s.",
 		category: "research",
 		phrases: [
 			"deep research",
@@ -1048,17 +778,8 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	web_fetchContent: {
 		name: "web_fetchContent",
-		description: "Extract content from specific URL. Get article text from webpage.",
 		category: "research",
-		phrases: [
-			"fetch url",
-			"get url content",
-			"extract from url",
-			"read webpage",
-			"fetch page",
-			"get page content",
-			"scrape url",
-		],
+		phrases: ["fetch url", "get url content", "extract from url", "read webpage", "fetch page", "get page content", "scrape url"],
 		relatedTools: ["web_quickSearch"],
 		riskLevel: "safe",
 		requiresConfirmation: false,
@@ -1071,8 +792,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	pexels_searchPhotos: {
 		name: "pexels_searchPhotos",
-		description:
-			"Search free stock photos from Pexels. Returns previews with photographer credit.",
 		category: "pexels",
 		phrases: [
 			"pexels",
@@ -1102,8 +821,6 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 
 	pexels_downloadPhoto: {
 		name: "pexels_downloadPhoto",
-		description:
-			"Download Pexels photo to system. Returns local image ID for use in sections/posts.",
 		category: "pexels",
 		phrases: [
 			"download pexels",

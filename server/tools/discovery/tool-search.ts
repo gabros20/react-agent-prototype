@@ -5,14 +5,15 @@
  * Agent starts with ONLY this tool. Calling it discovers relevant tools
  * which become available via AI SDK 6's activeTools in prepareStep.
  *
- * Implements Phase 5 from DYNAMIC_TOOL_INJECTION_PLAN.md
+ * Per-Tool Instruction Architecture:
+ * - Returns just tool names (lightweight)
+ * - Protocols injected via prepareStep into <active-protocols> section
+ * - No domain rules bundling - per-tool granularity
  */
 
 import { tool } from "ai";
 import { z } from "zod";
-import { smartToolSearchWithConfidence, expandWithRelatedTools, extractCategories, isContentQuery } from "./smart-search";
-import { getRules } from "./rules";
-import { TOOL_INDEX } from "./tool-index";
+import { smartToolSearchWithConfidence } from "./smart-search";
 
 // ============================================================================
 // Configuration
@@ -28,18 +29,12 @@ const CONFIG = {
 // ============================================================================
 
 /**
- * Type-safe output schema for tool_search results.
- * AI SDK 6 validates results against this schema.
+ * Simplified output schema - just tool names.
+ * Protocols are injected via prepareStep, not returned here.
  */
 const ToolSearchOutputSchema = z.object({
-	tools: z.array(
-		z.object({
-			name: z.string(),
-			description: z.string(),
-		})
-	),
-	rules: z.string(),
-	instruction: z.string(),
+	tools: z.array(z.string()),
+	message: z.string(),
 });
 
 export type ToolSearchOutput = z.infer<typeof ToolSearchOutputSchema>;
@@ -49,26 +44,29 @@ export type ToolSearchOutput = z.infer<typeof ToolSearchOutputSchema>;
 // ============================================================================
 
 export const toolSearchTool = tool({
-	description: `Discover tools by capability keywords. Returns tools + rules for using them.
+	description: `Discover tools by ACTION keywords (verbs). Tools become active immediately.
 
-Search multiple capabilities at once for efficiency:
-- "web search pexels create post" -> gets web, image, and post tools
-- "list pages update section" -> gets page listing and editing tools
+IMPORTANT: Include ALL actions needed for your task (6-8 keywords recommended).
+Common actions: create, list, get, update, delete, search, download, publish, archive
 
-Use higher limit (8-10) for complex multi-capability searches.`,
+Examples:
+- "create post publish" → cms_createPost + cms_publishPost
+- "create post pexels search download" → post + pexels tools
+- "web search research fetch" → all web research tools
+- "page create section add update image" → full page building toolkit`,
 
 	inputSchema: z.object({
-		query: z.string().describe("Capability keywords (e.g. 'web search pexels create post')"),
-		limit: z.number().optional().default(8).describe("Max tools to return (default: 8)"),
+		query: z.string().describe("6-8 ACTION keywords covering all task needs (e.g. 'create post publish pexels search download')"),
+		limit: z.number().optional().default(8).describe("Max tools (default: 8)"),
 	}),
 
-	// AI SDK 6: outputSchema validates results and enables type inference
 	outputSchema: ToolSearchOutputSchema,
 
 	execute: async ({ query, limit = 8 }): Promise<ToolSearchOutput> => {
 		console.log(`[tool_search] Query: "${query}", limit: ${limit}`);
 
-		// 1. Run hybrid search with confidence (BM25 + vector fallback)
+		// Run hybrid search with related tools expansion
+		// This ensures related tools (e.g. cms_publishPost with cms_createPost) are included
 		const {
 			tools: searchResults,
 			confidence,
@@ -76,54 +74,27 @@ Use higher limit (8-10) for complex multi-capability searches.`,
 		} = await smartToolSearchWithConfidence(
 			query,
 			limit,
-			{ expandRelated: false } // We'll expand manually for more control
+			{ expandRelated: true }
 		);
 
 		console.log(`[tool_search] Search: confidence=${confidence.toFixed(2)}, source=${source}`);
 
-		// 2. Handle empty or low-confidence results
+		// Handle empty or low-confidence results
 		if (searchResults.length === 0 || confidence < CONFIG.MIN_CONFIDENCE) {
 			console.log(`[tool_search] No good matches for "${query}" (confidence: ${confidence.toFixed(2)})`);
 			return {
 				tools: [],
-				rules: "",
-				instruction: `No tools found matching "${query}".
-
-Try searching for CAPABILITIES (what you want to DO):
-- "create post" → create blog posts
-- "web search" → search the web for information
-- "list pages" → see all CMS pages
-- "find image" or "pexels photos" → find/download images
-- "update section" → modify page content
-
-If you can answer the user's question without CMS tools, respond directly.`,
+				message: `No tools found for "${query}". Try: "create post", "list pages", "pexels photos", "update section".`,
 			};
 		}
 
-		// 3. Expand with related tools for complete capability sets
-		const expandedResults = expandWithRelatedTools(searchResults, limit);
-
-		// 4. Extract categories and load relevant rules
-		const categories = extractCategories(expandedResults);
-		const rules = getRules(categories);
-
-		// 5. Format tools for response
-		const tools = expandedResults.map((t) => ({
-			name: t.name,
-			description: TOOL_INDEX[t.name]?.description || t.description,
-		}));
-
-		console.log(`[tool_search] Found ${tools.length} tools: [${tools.map((t) => t.name).join(", ")}]`);
-		console.log(`[tool_search] Categories: [${categories.join(", ")}]`);
-
-		// Build instruction - tools are now available, rules explain how to use them
-		const toolNames = tools.map((t) => t.name).join(", ");
-		const instruction = `Tools unlocked: ${toolNames}. Read the rules above, then use these tools to complete the task.`;
+		// Return all results up to limit - multi-action tasks need multiple tools
+		const tools = searchResults.slice(0, limit).map((t) => t.name);
+		console.log(`[tool_search] Found ${tools.length} tools: [${tools.join(", ")}]`);
 
 		return {
 			tools,
-			rules,
-			instruction,
+			message: `Found ${tools.length} tools. They are now active. Check <active-protocols> for usage instructions.`,
 		};
 	},
 });

@@ -35,6 +35,7 @@ import {
 	Type,
 	Search,
 	PlusCircle,
+	BookOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -78,6 +79,7 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	// Dynamic tool injection
 	"tools-discovered": Search,
 	"active-tools-changed": PlusCircle,
+	"instructions-injected": BookOpen,
 };
 
 interface TimelineEntryProps {

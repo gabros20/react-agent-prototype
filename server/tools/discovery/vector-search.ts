@@ -68,7 +68,6 @@ async function embed(text: string): Promise<number[]> {
 function buildSearchableText(tool: ToolMetadata): string {
 	return [
 		tool.name.replace(/_/g, " "),
-		tool.description,
 		tool.phrases.join(" "),
 		tool.category,
 	].join(" ");
@@ -175,7 +174,6 @@ export async function vectorSearch(
 		return {
 			name: metadata.name,
 			category: metadata.category,
-			description: metadata.description,
 			score,
 			relatedTools:
 				metadata.relatedTools.length > 0

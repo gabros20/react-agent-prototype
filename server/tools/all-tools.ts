@@ -59,7 +59,7 @@ import { SiteSettingsService } from '../services/cms/site-settings-service'
 // ============================================================================
 
 export const cmsGetPage = tool({
-  description: 'Get a page by slug or ID. By default returns lightweight response (metadata + section IDs). Use includeContent: true for full content (high token cost).',
+  description: 'Get page by slug or ID. Default: lightweight (no content). Use includeContent:true for full content.',
   inputSchema: z.object({
     slug: z.string().optional().describe('Page slug (e.g., "home")'),
     id: z.string().optional().describe('Page ID (UUID)'),
@@ -174,7 +174,7 @@ export const cmsUpdatePage = tool({
 })
 
 export const cmsDeletePage = tool({
-  description: 'Delete a page permanently (CASCADE: deletes all sections). This cannot be undone. Requires confirmed: true.',
+  description: 'Delete page permanently. CASCADE deletes all sections. Requires confirmed:true.',
   inputSchema: z.object({
     slug: z.string().optional().describe('Page slug to delete'),
     id: z.string().optional().describe('Page ID to delete'),
@@ -262,7 +262,7 @@ export const cmsListPages = tool({
 })
 
 export const cmsCreatePageWithContent = tool({
-  description: 'Create a new page with sections and AI-generated text content. IMPORTANT: This tool creates pages with placeholder images. After creation, use cms_searchImages to find relevant images, then cms_updateSectionImage to attach them to sections.',
+  description: 'Create page with sections. Images added separately via cms_updateSectionImage.',
   inputSchema: z.object({
     name: z.string().describe('Page name (e.g., "About Us", "Services", "Contact")'),
     slug: z.string().optional().describe('URL-friendly slug (auto-generated from name if not provided)'),
@@ -388,7 +388,7 @@ export const cmsListSectionTemplates = tool({
 })
 
 export const cmsGetSectionFields = tool({
-  description: 'Get section template fields/schema. Use this to see what fields a section needs (title, subtitle, image, etc.) before adding content.',
+  description: 'Get section template fields/schema. Shows required fields before updating content.',
   inputSchema: z.object({
     id: z.string().optional().describe('Section definition ID'),
     key: z.string().optional().describe('Section definition key')
@@ -416,7 +416,7 @@ export const cmsGetSectionFields = tool({
 })
 
 export const cmsAddSectionToPage = tool({
-  description: 'Add a section to a page. Returns pageSectionId - use with cms_getSectionFields to see required fields, then cms_updateSectionContent to add content.',
+  description: 'Add section to a page. Returns pageSectionId for content updates.',
   inputSchema: z.object({
     pageId: z.string().describe('Page ID to add section to'),
     sectionDefId: z.string().describe('Section definition ID'),
@@ -443,7 +443,7 @@ export const cmsAddSectionToPage = tool({
 })
 
 export const cmsUpdateSectionContent = tool({
-  description: 'Update content for a page section. MERGES with existing content (only provided fields are updated, others preserved). REQUIRED: content object with at least one field.',
+  description: 'Update section content. MERGES with existing - only send fields to change.',
   inputSchema: z.object({
     pageSectionId: z.string().describe('Page section ID'),
     localeCode: z.string().optional().default('en').describe('Locale code'),
@@ -463,7 +463,7 @@ export const cmsUpdateSectionContent = tool({
 })
 
 export const cmsDeletePageSection = tool({
-  description: 'Delete a section from a page. Removes the section instance (not the template). This cannot be undone. Requires confirmed: true.',
+  description: 'Delete section from page. Requires confirmed:true.',
   inputSchema: z.object({
     pageSectionId: z.string().describe('Page section ID (from cms_getPage sections array)'),
     confirmed: z.boolean().optional().describe('Must be true to actually delete')
@@ -494,7 +494,7 @@ export const cmsDeletePageSection = tool({
 })
 
 export const cmsDeletePageSections = tool({
-  description: 'Delete multiple sections from a page in one operation (more efficient than one-by-one). This cannot be undone. Requires confirmed: true.',
+  description: 'Delete multiple sections in batch. Requires confirmed:true.',
   inputSchema: z.object({
     pageSectionIds: z.array(z.string()).describe('Array of page section IDs to delete'),
     pageId: z.string().optional().describe('Optional: page ID for validation'),
@@ -546,7 +546,7 @@ export const cmsDeletePageSections = tool({
 })
 
 export const cmsGetPageSections = tool({
-  description: 'Get all sections for a page (granular fetching). By default returns lightweight response (section metadata only). Use includeContent: true for full content.',
+  description: 'Get all sections for a page. Default: lightweight. Use includeContent:true for full content.',
   inputSchema: z.object({
     pageId: z.string().describe('Page ID'),
     includeContent: z.boolean().optional().default(false).describe('Include full section content (default: false for token efficiency)'),
@@ -570,7 +570,7 @@ export const cmsGetPageSections = tool({
 })
 
 export const cmsGetSectionContent = tool({
-  description: 'Get content for a specific section (granular fetching). Use this when you need content for ONE section to avoid fetching entire page.',
+  description: 'Get content for one section. More efficient than fetching entire page.',
   inputSchema: z.object({
     pageSectionId: z.string().describe('Page section ID (from cms_getPage sectionIds or cms_getPageSections)'),
     localeCode: z.string().optional().default('en').describe('Locale code (default: "en")')
@@ -592,7 +592,7 @@ export const cmsGetSectionContent = tool({
 // ============================================================================
 
 export const cmsGetCollectionEntries = tool({
-  description: 'Get all entries for a collection (granular fetching). By default returns lightweight response (entry metadata only). Use includeContent: true for full content.',
+  description: 'Get entries in a collection. Default: lightweight. Use includeContent:true for full content.',
   inputSchema: z.object({
     collectionId: z.string().describe('Collection ID'),
     includeContent: z.boolean().optional().default(false).describe('Include full entry content (default: false for token efficiency)'),
@@ -616,7 +616,7 @@ export const cmsGetCollectionEntries = tool({
 })
 
 export const cmsGetEntryContent = tool({
-  description: 'Get content for a specific entry (granular fetching). Use this when you need content for ONE entry to avoid fetching entire collection.',
+  description: 'Get content for one entry. More efficient than fetching entire collection.',
   inputSchema: z.object({
     entryId: z.string().describe('Entry ID (from cms_getCollectionEntries)'),
     localeCode: z.string().optional().default('en').describe('Locale code (default: "en")')
@@ -915,88 +915,3 @@ export const ALL_TOOLS = {
 //
 // Tool metadata is now in TOOL_INDEX (discovery/tool-index.ts)
 // ============================================================================
-
-/**
- * Core tools - always available at agent startup.
- * These are the foundational tools the agent has from step 0.
- */
-export const CORE_TOOLS = {
-  'tool_search': toolSearchTool,
-  'final_answer': finalAnswerTool,
-} as const
-
-/**
- * Dynamic tools - discoverable via tool_search.
- * These become available via activeTools after discovery.
- */
-export const DYNAMIC_TOOLS = {
-  // Pages
-  'cms_getPage': cmsGetPage,
-  'cms_createPage': cmsCreatePage,
-  'cms_createPageWithContent': cmsCreatePageWithContent,
-  'cms_updatePage': cmsUpdatePage,
-  'cms_deletePage': cmsDeletePage,
-  'cms_listPages': cmsListPages,
-
-  // Sections
-  'cms_listSectionTemplates': cmsListSectionTemplates,
-  'cms_getSectionFields': cmsGetSectionFields,
-  'cms_addSectionToPage': cmsAddSectionToPage,
-  'cms_updateSectionContent': cmsUpdateSectionContent,
-  'cms_deletePageSection': cmsDeletePageSection,
-  'cms_deletePageSections': cmsDeletePageSections,
-  'cms_getPageSections': cmsGetPageSections,
-  'cms_getSectionContent': cmsGetSectionContent,
-
-  // Collections & Entries
-  'cms_getCollectionEntries': cmsGetCollectionEntries,
-  'cms_getEntryContent': cmsGetEntryContent,
-
-  // Search
-  'search_vector': searchVector,
-  'cms_findResource': cmsFindResource,
-
-  // Images
-  'cms_findImage': findImageTool,
-  'cms_searchImages': searchImagesTool,
-  'cms_listAllImages': listAllImagesTool,
-  'cms_addImageToSection': addImageToSectionTool,
-  'cms_updateSectionImage': updateSectionImageTool,
-  'cms_replaceImage': replaceImageTool,
-  'cms_deleteImage': deleteImageTool,
-
-  // Site Settings & Navigation
-  'cms_getNavigation': getNavigationTool,
-  'cms_addNavigationItem': addNavigationItemTool,
-  'cms_updateNavigationItem': updateNavigationItemTool,
-  'cms_removeNavigationItem': removeNavigationItemTool,
-  'cms_toggleNavigationItem': toggleNavigationItemTool,
-
-  // Posts (Blog, Products, etc.)
-  'cms_createPost': cmsCreatePost,
-  'cms_updatePost': cmsUpdatePost,
-  'cms_publishPost': cmsPublishPost,
-  'cms_archivePost': cmsArchivePost,
-  'cms_deletePost': cmsDeletePost,
-  'cms_listPosts': cmsListPosts,
-  'cms_getPost': cmsGetPost,
-
-  // HTTP
-  'http_get': httpGet,
-  'http_post': httpPost,
-
-  // Planning
-  'plan_analyzeTask': planAnalyzeTask,
-
-  // Web Research (Exa AI)
-  'web_quickSearch': webQuickSearchTool,
-  'web_deepResearch': webDeepResearchTool,
-  'web_fetchContent': webFetchContentTool,
-
-  // Stock Photos (Pexels)
-  'pexels_searchPhotos': pexelsSearchPhotosTool,
-  'pexels_downloadPhoto': pexelsDownloadPhotoTool,
-} as const
-
-// Type for dynamic tool names (used by discovery system)
-export type DynamicToolName = keyof typeof DYNAMIC_TOOLS

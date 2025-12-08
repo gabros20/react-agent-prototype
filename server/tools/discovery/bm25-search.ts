@@ -67,7 +67,6 @@ export function initBM25Index(tools?: ToolMetadata[]): void {
 		fldWeights: {
 			name: 3,        // Tool name is most important
 			phrases: 2,     // Search phrases are key for discovery
-			description: 1, // Description provides context
 			category: 1,    // Category helps with grouping
 		},
 	});
@@ -82,7 +81,6 @@ export function initBM25Index(tools?: ToolMetadata[]): void {
 		const doc = {
 			name: tool.name.replace(/_/g, " "), // cms_getPage -> cms get page
 			phrases: tool.phrases.join(" "),
-			description: tool.description,
 			category: tool.category,
 		};
 
@@ -148,7 +146,6 @@ export function bm25Search(
 			return {
 				name: metadata.name,
 				category: metadata.category,
-				description: metadata.description,
 				score: normalizeScore(score, results),
 				relatedTools:
 					metadata.relatedTools.length > 0

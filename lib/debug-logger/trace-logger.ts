@@ -135,17 +135,23 @@ export function createTraceLogger(traceId: string): TraceLogger {
 		// Step Lifecycle
 		// =========================================================================
 
-		stepStart(stepNumber: number): string {
+		stepStart(stepNumber: number, options?: { activeTools?: string[]; discoveredTools?: string[] }): string {
 			const store = getStore();
+			const activeCount = options?.activeTools?.length || 0;
+			const discoveredCount = options?.discoveredTools?.length || 0;
 
-			// Add step-start entry
+			// Add step-start entry with tool info
 			store.addEntry({
 				traceId,
 				timestamp: Date.now(),
 				type: "step-start",
 				level: "info",
 				stepNumber,
-				summary: `Step ${stepNumber}`,
+				summary: discoveredCount > 0
+					? `Step ${stepNumber} | ${activeCount} active tools (${discoveredCount} discovered)`
+					: `Step ${stepNumber} | ${activeCount} active tools`,
+				input: options?.discoveredTools?.length ? { discoveredTools: options.discoveredTools } : undefined,
+				output: options?.activeTools?.length ? { activeTools: options.activeTools } : undefined,
 			});
 
 			// Create streaming entry for text output
@@ -338,15 +344,14 @@ export function createTraceLogger(traceId: string): TraceLogger {
 		// Dynamic Tool Injection
 		// =========================================================================
 
-		toolsDiscovered(tools: string[], categories: string[], query: string) {
+		toolsDiscovered(tools: string[]) {
 			getStore().addEntry({
 				traceId,
 				timestamp: Date.now(),
 				type: "tools-discovered",
 				level: "info",
-				summary: `Discovered ${tools.length} tools: [${categories.join(", ")}]`,
-				input: { query },
-				output: { tools, categories },
+				summary: `Discovered ${tools.length} tools`,
+				output: { tools },
 			});
 		},
 
@@ -360,6 +365,33 @@ export function createTraceLogger(traceId: string): TraceLogger {
 				summary: `+${newTools.length} tools → ${activeTools.length} active`,
 				input: { newTools },
 				output: { activeTools, totalCount: activeTools.length },
+			});
+		},
+
+		instructionsInjected(stepNumber: number, tools: string[], instructions: string, updatedSystemPrompt?: string) {
+			const store = getStore();
+
+			// Update the system-prompt entry with the full dynamic content
+			// This shows what the agent actually sees (base prompt + injected instructions)
+			if (updatedSystemPrompt) {
+				const entries = store.entriesByTrace[traceId] || [];
+				const systemPromptEntry = entries.find((e) => e.type === "system-prompt");
+				if (systemPromptEntry) {
+					store.updateEntry(systemPromptEntry.id, {
+						input: updatedSystemPrompt,
+					});
+				}
+			}
+
+			store.addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "instructions-injected",
+				level: "info",
+				stepNumber,
+				summary: `${tools.length} tool instructions injected`,
+				input: { tools },
+				output: instructions, // Full instructions in output for expandable view
 			});
 		},
 

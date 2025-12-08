@@ -12,7 +12,7 @@ import type { AgentContext } from './types'
 // ============================================================================
 
 export const cmsCreatePost = tool({
-  description: 'Create a new blog post or collection entry (status: draft by default). Use cms_publishPost to publish it.',
+  description: 'Create blog post as draft. Use cms_publishPost to publish.',
   inputSchema: z.object({
     collectionSlug: z.string().describe('Collection slug (e.g., "blog", "products")'),
     slug: z.string().describe('URL-friendly post slug (e.g., "my-first-post")'),
@@ -228,7 +228,7 @@ export const cmsArchivePost = tool({
 })
 
 export const cmsListPosts = tool({
-  description: 'List posts from a collection. By default returns only published posts. Includes metadata but not full content.',
+  description: 'List posts in a collection. Default: published only. Returns metadata, not full content.',
   inputSchema: z.object({
     collectionSlug: z.string().describe('Collection slug (e.g., "blog")'),
     status: z.enum(['draft', 'published', 'archived', 'all']).optional().default('published').describe('Filter by status (default: published)'),
@@ -343,7 +343,7 @@ export const cmsGetPost = tool({
 })
 
 export const cmsDeletePost = tool({
-  description: 'Permanently delete a blog post. This cannot be undone. Consider using cms_archivePost for soft delete. Requires confirmed: true.',
+  description: 'Permanently delete post. Use cms_archivePost for soft delete. Requires confirmed:true.',
   inputSchema: z.object({
     postSlug: z.string().describe('Post slug to delete'),
     confirmed: z.boolean().optional().describe('Must be true to delete')

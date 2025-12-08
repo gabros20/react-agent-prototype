@@ -20,14 +20,31 @@ import { ToolLoopAgent, stepCountIs, hasToolCall, NoSuchToolError, InvalidToolIn
 import type { CoreMessage } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
-import { ALL_TOOLS, CORE_TOOLS, DYNAMIC_TOOLS } from "../tools/all-tools";
+import { ALL_TOOLS } from "../tools/all-tools";
 import { getAgentSystemPrompt } from "./system-prompt";
-import { getAllDiscoveredTools, loadRules } from "../tools/discovery";
+import { getAllDiscoveredTools } from "../tools/discovery";
+import { getToolInstructions } from "../tools/instructions";
 import type { AgentContext, AgentLogger, StreamWriter } from "../tools/types";
 import type { DrizzleDB } from "../db/client";
 import type { ServiceContainer } from "../services/service-container";
 import type { SessionService } from "../services/session-service";
 import type { VectorIndexService } from "../services/vector-index";
+
+// Module-level store for last injected instructions (for SSE emission)
+let lastInjectedInstructions: {
+	instructions: string;
+	tools: string[];
+	updatedSystemPrompt: string | null;
+} | null = null;
+
+// Store the base system prompt from prepareCall so prepareStep can build updated version
+let currentBaseSystemPrompt: string = "";
+
+export function getLastInjectedInstructions() {
+	const result = lastInjectedInstructions;
+	lastInjectedInstructions = null; // Clear after reading
+	return result;
+}
 
 // ============================================================================
 // Provider Setup
@@ -97,14 +114,15 @@ export const cmsAgent = new ToolLoopAgent({
 	prepareCall: ({ options, ...settings }) => {
 		// Generate minimal agent system prompt (with tool_search for discovery)
 		const dynamicInstructions = getAgentSystemPrompt({
-			currentDate: new Date().toISOString().split("T")[0],
+			currentDate: new Date().toISOString(),
 			workingMemory: options.workingMemory || "",
 		});
 
+		// Store for prepareStep to build updated version with injected instructions
+		currentBaseSystemPrompt = dynamicInstructions;
+
 		// Dynamic model selection: use requested model or fall back to default
-		const model = options.modelId
-			? openrouter.languageModel(options.modelId)
-			: openrouter.languageModel(AGENT_CONFIG.modelId);
+		const model = options.modelId ? openrouter.languageModel(options.modelId) : openrouter.languageModel(AGENT_CONFIG.modelId);
 
 		return {
 			...settings,
@@ -135,16 +153,8 @@ export const cmsAgent = new ToolLoopAgent({
 	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasToolCall("final_answer")],
 
 	// Dynamic tool availability via prepareStep
-	// Implements Phase 7 from DYNAMIC_TOOL_INJECTION_PLAN.md
-	prepareStep: async ({
-		stepNumber,
-		steps,
-		messages,
-	}: {
-		stepNumber: number;
-		steps: any[];
-		messages: CoreMessage[];
-	}) => {
+	// Implements Per-Tool Instruction Architecture from PER_TOOL_INSTRUCTION_ARCHITECTURE.md
+	prepareStep: async ({ stepNumber, steps, messages }: { stepNumber: number; steps: any[]; messages: CoreMessage[] }) => {
 		type ToolName = keyof typeof ALL_TOOLS;
 
 		// Extract tools discovered from working memory (previous turns) + current steps
@@ -177,7 +187,9 @@ export const cmsAgent = new ToolLoopAgent({
 
 		// =====================================================================
 		// Stuck Detection: Detect repeated identical tool calls
+		// Append warning to system prompt (not as separate message to avoid breaking tool_call sequence)
 		// =====================================================================
+		let stuckWarning = "";
 		const recentCalls = steps.slice(-3).flatMap((step: any) =>
 			(step.toolCalls || []).map((tc: any) => ({
 				name: tc.toolName,
@@ -191,52 +203,67 @@ export const cmsAgent = new ToolLoopAgent({
 			const secondLast = recentCalls[recentCalls.length - 2];
 
 			if (last.name === secondLast.name && last.input === secondLast.input) {
-				// Inject a system message to break the loop
-				const stuckMessage: CoreMessage = {
-					role: "system" as const,
-					content: `⚠️ STUCK DETECTED: You called ${last.name} with identical parameters twice in a row. This indicates a loop. STOP and try a different approach:
-1. If you need different results, use different parameters
-2. If the tool isn't working, try an alternative tool
-3. If you're blocked, explain the issue to the user
-DO NOT call ${last.name} with the same parameters again.`,
-				};
-
-				// Prepend stuck warning to messages
-				result.messages = result.messages
-					? [result.messages[0], stuckMessage, ...result.messages.slice(1)]
-					: [...messages.slice(0, -1), stuckMessage, messages[messages.length - 1]];
-
+				stuckWarning = `\n\n STUCK DETECTED: You called ${last.name} with identical parameters twice. STOP looping. Use the tools you already discovered (cms_listPages, etc.) or explain the issue to the user.`;
 				console.warn(`[prepareStep] Stuck detected: ${last.name} called twice with same params`);
 			}
 		}
 
 		// =====================================================================
-		// Final Answer Rules Injection: Inject when workflow is in progress
+		// Per-Tool Protocol Injection: Inject <active-protocols> into system prompt
+		// ALWAYS include core tools (final_answer, tool_search) + any discovered tools
 		// =====================================================================
-		const hasUsedWorkflowTools = steps.some((s: any) =>
-			s.toolCalls?.some(
-				(tc: any) =>
-					tc.toolName !== "tool_search" && tc.toolName !== "final_answer"
-			)
-		);
+		{
+			// Get all tools that need protocols (core tools ALWAYS + discovered)
+			const toolsNeedingProtocols = [...new Set(["final_answer", "tool_search", ...discoveredTools])];
+			const toolInstructions = getToolInstructions(toolsNeedingProtocols);
 
-		if (hasUsedWorkflowTools || stepNumber >= 3) {
-			const finalAnswerRules = loadRules("final-answer");
-			if (finalAnswerRules) {
-				// Inject rules as a system message before the last user message
-				const rulesMessage: CoreMessage = {
-					role: "system" as const,
-					content: `<final-answer-rules>\n${finalAnswerRules}\n</final-answer-rules>`,
+			// Log protocol injection for debugging
+			console.log(`[prepareStep] Step ${stepNumber} | Active tools: [${activeTools.join(", ")}]`);
+			if (discoveredTools.length > 0) {
+				console.log(`[prepareStep] Discovered tools: [${discoveredTools.join(", ")}]`);
+			}
+			console.log(`[prepareStep] Instructions injected for: [${toolsNeedingProtocols.join(", ")}]`);
+
+			// Store for SSE emission (read by orchestrator)
+			// Include the full updated system prompt so debug panel can show what agent actually sees
+			if (toolInstructions) {
+				lastInjectedInstructions = {
+					instructions: toolInstructions,
+					tools: toolsNeedingProtocols,
+					updatedSystemPrompt: null, // Will be set below if we update the prompt
 				};
+			}
 
-				// Only inject if not already modified by stuck detection
-				if (!result.messages) {
-					result.messages = [
-						messages[0], // System prompt
-						rulesMessage,
-						...messages.slice(1),
-					];
+			if (toolInstructions || stuckWarning) {
+				// Build updated system prompt from the base (stored in prepareCall)
+				// NOTE: messages[0] is NOT the system prompt - it's the first conversation message
+				// The system prompt comes from `instructions` field, stored in currentBaseSystemPrompt
+				let updatedContent = currentBaseSystemPrompt;
+
+				// Replace <active-protocols> content in-place (follows template pattern)
+				updatedContent = updatedContent.replace(
+					/<active-protocols>[\s\S]*?<\/active-protocols>/g,
+					`<active-protocols>\n${toolInstructions || ""}\n</active-protocols>`
+				);
+
+				// Strip any existing stuck warnings and append fresh one if needed
+				updatedContent = updatedContent.replace(/\n\n STUCK DETECTED:[\s\S]*$/g, "");
+				if (stuckWarning) {
+					updatedContent += stuckWarning;
+					console.log(`[prepareStep] ⚠️ Stuck warning injected`);
 				}
+
+				// Store full updated system prompt for debug panel
+				if (lastInjectedInstructions) {
+					lastInjectedInstructions.updatedSystemPrompt = updatedContent;
+				}
+
+				// Return updated instructions for this step
+				// AI SDK will use this as the system prompt
+				return {
+					...result,
+					instructions: updatedContent,
+				};
 			}
 		}
 

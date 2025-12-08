@@ -28,9 +28,10 @@ interface StepResult {
 	text?: string;
 }
 
-/** Tool search result structure */
+/** Tool search result structure - matches tool-search.ts output */
 interface ToolSearchResult {
-	tools?: Array<{ name: string }>;
+	tools?: string[];  // tool_search returns string array, not { name: string }[]
+	message?: string;
 }
 
 // ============================================================================
@@ -105,9 +106,10 @@ export function extractToolsFromSteps(steps: StepResult[]): string[] {
 		searchResults?.forEach((sr) => {
 			// AI SDK 5+ uses 'output' instead of 'result'
 			const output = sr.output as ToolSearchResult | undefined;
-			output?.tools?.forEach((t) => {
-				if (t.name) {
-					tools.add(t.name);
+			// tool_search returns string[] not { name: string }[]
+			output?.tools?.forEach((toolName) => {
+				if (toolName && typeof toolName === 'string') {
+					tools.add(toolName);
 				}
 			});
 		});

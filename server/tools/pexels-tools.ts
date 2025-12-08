@@ -26,7 +26,7 @@ import type { AgentContext } from "./types";
 // ============================================================================
 
 export const pexelsSearchPhotosTool = tool({
-	description: `Search free stock photos from Pexels. Returns preview results with photographer credits. Use pexels_downloadPhoto to add selected photos to the system.`,
+	description: `Search Pexels for free stock photos. Use pexels_downloadPhoto to add to system.`,
 	inputSchema: z.object({
 		query: z.string().describe("Search query (e.g., 'sunset beach', 'modern office')"),
 		perPage: z
@@ -109,7 +109,7 @@ export const pexelsSearchPhotosTool = tool({
 // ============================================================================
 
 export const pexelsDownloadPhotoTool = tool({
-	description: `Download a Pexels photo into the system. Checks for duplicates, processes image, stores attribution. Photo becomes searchable via cms_searchImages after processing completes. No sessionId needed - uses current session automatically.`,
+	description: `Download Pexels photo to local system. Returns local URL for use in CMS.`,
 	inputSchema: z.object({
 		photoId: z.number().describe("Pexels photo ID (from search results)"),
 	}),
@@ -275,11 +275,3 @@ export const pexelsDownloadPhotoTool = tool({
 	},
 });
 
-// ============================================================================
-// Export All Tools
-// ============================================================================
-
-export const pexelsTools = {
-	pexels_searchPhotos: pexelsSearchPhotosTool,
-	pexels_downloadPhoto: pexelsDownloadPhotoTool,
-};

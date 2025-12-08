@@ -114,9 +114,10 @@ export interface TraceLogger {
 	/**
 	 * Log step start
 	 * @param stepNumber Step number (1-indexed)
+	 * @param options Optional info about active and discovered tools
 	 * @returns Entry ID for the streaming text entry
 	 */
-	stepStart(stepNumber: number): string;
+	stepStart(stepNumber: number, options?: { activeTools?: string[]; discoveredTools?: string[] }): string;
 
 	/**
 	 * Log step completion
@@ -209,10 +210,8 @@ export interface TraceLogger {
 	/**
 	 * Log tools discovered via tool_search
 	 * @param tools List of discovered tool names
-	 * @param categories Categories of discovered tools
-	 * @param query The search query that found them
 	 */
-	toolsDiscovered(tools: string[], categories: string[], query: string): void;
+	toolsDiscovered(tools: string[]): void;
 
 	/**
 	 * Log active tools changed in prepareStep
@@ -221,6 +220,15 @@ export interface TraceLogger {
 	 * @param newTools Tools added in this step
 	 */
 	activeToolsChanged(stepNumber: number, activeTools: string[], newTools: string[]): void;
+
+	/**
+	 * Log instructions injected into system prompt
+	 * @param stepNumber Current step number
+	 * @param tools List of tools that had instructions injected
+	 * @param instructions The full instruction text that was injected
+	 * @param updatedSystemPrompt The full system prompt with injected content (optional)
+	 */
+	instructionsInjected(stepNumber: number, tools: string[], instructions: string, updatedSystemPrompt?: string): void;
 
 	// =========================================================================
 	// Working Memory
