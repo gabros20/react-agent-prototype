@@ -1,12 +1,10 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Terminal, Copy, Download, Trash2, Clock, Wrench, Layers, Coins, AlertCircle, Check } from "lucide-react";
+import { Terminal, Clock, Wrench, Layers, Coins, AlertCircle } from "lucide-react";
 import { useTraceStore, formatDuration, type TraceMetrics, type ConversationLog, type TraceEntry } from "../../_stores/trace-store";
 import { useChatStore } from "../../_stores/chat-store";
 import { sessionsApi } from "@/lib/api";
@@ -22,17 +20,11 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 	const allTraceIds = useTraceStore((state) => state.allTraceIds);
 	const activeTraceId = useTraceStore((state) => state.activeTraceId);
 	const setActiveTrace = useTraceStore((state) => state.setActiveTrace);
-	const clearAllTraces = useTraceStore((state) => state.clearAllTraces);
-	const exportTrace = useTraceStore((state) => state.exportTrace);
-	const copyAllLogs = useTraceStore((state) => state.copyAllLogs);
 	const liveConversations = useTraceStore((state) => state.conversationLogs);
 	const clearedAt = useTraceStore((state) => state.clearedAt);
 
-	const [copied, setCopied] = useState(false);
-	const [exported, setExported] = useState(false);
 	const [persistedLogs, setPersistedLogs] = useState<ConversationLog[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
-	const [isDeleting, setIsDeleting] = useState(false);
 
 	// Clear persistedLogs when store signals logs were cleared
 	useEffect(() => {
@@ -114,49 +106,6 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 		return { metrics: totals, totalEventCount: eventCount };
 	}, [persistedLogs, liveConversations]);
 
-	const handleCopyAll = async () => {
-		await copyAllLogs();
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
-	};
-
-	const handleExport = () => {
-		if (!activeTraceId) return;
-
-		const json = exportTrace(activeTraceId);
-		const blob = new Blob([json], { type: "application/json" });
-		const url = URL.createObjectURL(blob);
-
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = `trace-${activeTraceId.slice(0, 8)}-${Date.now()}.json`;
-		document.body.appendChild(a);
-		a.click();
-		document.body.removeChild(a);
-		URL.revokeObjectURL(url);
-
-		setExported(true);
-		setTimeout(() => setExported(false), 2000);
-	};
-
-	const handleClearAllLogs = async () => {
-		if (!sessionId) return;
-
-		setIsDeleting(true);
-		try {
-			// Delete from database using API client
-			await sessionsApi.deleteLogs(sessionId);
-			// Clear in-memory state
-			clearAllTraces();
-			// Clear local persisted logs
-			setPersistedLogs([]);
-		} catch (error) {
-			console.error("Failed to delete logs:", error);
-		} finally {
-			setIsDeleting(false);
-		}
-	};
-
 	return (
 		<div className={cn("space-y-3", className)}>
 			{/* Title and actions row */}
@@ -169,67 +118,21 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 					</Badge>
 				</div>
 
-				<div className='flex items-center gap-2'>
-					{/* Trace selector */}
-					{allTraceIds.length > 1 && (
-						<Select value={activeTraceId || ""} onValueChange={setActiveTrace}>
-							<SelectTrigger className='w-[180px] h-8 text-xs'>
-								<SelectValue placeholder='Select trace' />
-							</SelectTrigger>
-							<SelectContent>
-								{allTraceIds.map((id) => (
-									<SelectItem key={id} value={id} className='text-xs font-mono'>
-										{id.slice(0, 8)}...
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					)}
-
-					{/* Copy all logs */}
-					<TooltipProvider>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button variant='outline' size='sm' onClick={handleCopyAll} disabled={totalEventCount === 0}>
-									{copied ? <Check className='h-4 w-4 mr-1' /> : <Copy className='h-4 w-4 mr-1' />}
-									<span className='hidden sm:inline'>Copy All</span>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>
-								<p>Copy all logs to clipboard</p>
-							</TooltipContent>
-						</Tooltip>
-					</TooltipProvider>
-
-					{/* Export JSON */}
-					<TooltipProvider>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button variant='outline' size='sm' onClick={handleExport} disabled={!activeTraceId || totalEventCount === 0}>
-									{exported ? <Check className='h-4 w-4 mr-1' /> : <Download className='h-4 w-4 mr-1' />}
-									<span className='hidden sm:inline'>Export</span>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>
-								<p>Export trace as JSON</p>
-							</TooltipContent>
-						</Tooltip>
-					</TooltipProvider>
-
-					{/* Clear all logs */}
-					<TooltipProvider>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button variant='ghost' size='icon' className='h-8 w-8' onClick={handleClearAllLogs} disabled={totalEventCount === 0 || isDeleting}>
-									<Trash2 className='h-4 w-4' />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent>
-								<p>Delete all logs</p>
-							</TooltipContent>
-						</Tooltip>
-					</TooltipProvider>
-				</div>
+				{/* Trace selector */}
+				{allTraceIds.length > 1 && (
+					<Select value={activeTraceId || ""} onValueChange={setActiveTrace}>
+						<SelectTrigger className='w-[180px] h-8 text-xs'>
+							<SelectValue placeholder='Select trace' />
+						</SelectTrigger>
+						<SelectContent>
+							{allTraceIds.map((id) => (
+								<SelectItem key={id} value={id} className='text-xs font-mono'>
+									{id.slice(0, 8)}...
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				)}
 			</div>
 
 			{/* Metrics row - show skeleton while loading, actual metrics when loaded */}
