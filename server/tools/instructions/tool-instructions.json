@@ -1,0 +1,95 @@
+{
+	"cms_listPosts": "BEFORE: None required\nAFTER: Show count and titles to user\nNEXT: cms_getPost (view details), cms_createPost (new post)\nGOTCHA: Returns all posts by default. Use status param to filter (draft/published/archived).",
+
+	"cms_getPost": "BEFORE: Use cms_listPosts if slug is unknown\nAFTER: Show post details (title, status, slug)\nNEXT: cms_updatePost, cms_publishPost, cms_deletePost\nGOTCHA: Returns full content. Use for viewing/editing specific posts.",
+
+	"cms_createPost": "BEFORE: cms_listPosts to check for duplicate titles\nAFTER: Ask if user wants cover image; ask if ready to publish\nNEXT: pexels_searchPhotos (cover image), cms_publishPost\nGOTCHA: Creates DRAFT only. Set BOTH featuredImage AND content.cover for covers. Blog posts should be substantial (500+ words for guides).",
+
+	"cms_updatePost": "BEFORE: cms_getPost to verify post exists and get current state\nAFTER: Confirm changes made\nNEXT: cms_publishPost if ready to go live\nGOTCHA: For covers, set BOTH featuredImage AND content.cover in same call. Content MERGES with existing.",
+
+	"cms_publishPost": "BEFORE: Post must exist as draft (verify with cms_getPost)\nAFTER: Confirm publication, offer preview at /posts/blog/{slug}\nNEXT: cms_getPost (show final state)\nGOTCHA: Requires confirmation flow - first call returns requiresConfirmation, ask user, then call with confirmed:true.",
+
+	"cms_archivePost": "BEFORE: Post must be published (verify with cms_getPost)\nAFTER: Confirm archival\nNEXT: cms_listPosts (show updated list)\nGOTCHA: Archived posts are hidden but not deleted. Requires confirmed:true.",
+
+	"cms_deletePost": "BEFORE: Verify post exists with cms_getPost\nAFTER: Confirm deletion\nNEXT: cms_listPosts\nGOTCHA: PERMANENT deletion. Requires confirmed:true. Cannot be undone.",
+
+	"cms_listPages": "BEFORE: None required\nAFTER: Show count and page names to user\nNEXT: cms_getPage (view details), cms_createPageWithContent (new page)\nGOTCHA: Returns lightweight list (id, name, slug). Use cms_getPage for full details.",
+
+	"cms_getPage": "BEFORE: cms_listPages if slug unknown\nAFTER: If editing, suggest fetching specific sections\nNEXT: cms_getPageSections, cms_updatePage\nGOTCHA: Default is lightweight (no content). Use includeContent:true only when ALL content needed (expensive).",
+
+	"cms_createPage": "BEFORE: cms_listPages to check slug availability\nAFTER: Offer to add sections, add to navigation\nNEXT: cms_addSectionToPage, cms_addNavigationItem\nGOTCHA: Creates empty page. Use cms_createPageWithContent for page with sections.",
+
+	"cms_createPageWithContent": "BEFORE: cms_listPages to check slug availability\nAFTER: Offer to add images to sections, add to navigation\nNEXT: cms_searchImages, cms_updateSectionImage, cms_addNavigationItem\nGOTCHA: Creates page with placeholder images. Use cms_updateSectionImage to attach real images after.",
+
+	"cms_updatePage": "BEFORE: cms_getPage to verify page exists\nAFTER: Confirm changes\nNEXT: cms_getPage (verify), cms_updateSectionContent (edit sections)\nGOTCHA: Updates page metadata only. Use cms_updateSectionContent for section content.",
+
+	"cms_deletePage": "BEFORE: cms_getPage to verify; cms_getNavigation to check if in menu\nAFTER: Confirm deletion\nNEXT: cms_removeNavigationItem if was in navigation\nGOTCHA: CASCADE deletes all sections. Requires confirmed:true. Use removeFromNavigation:true to clean up nav.",
+
+	"cms_listSectionTemplates": "BEFORE: None required\nAFTER: Show available section types to user\nNEXT: cms_getSectionFields (see required fields), cms_addSectionToPage\nGOTCHA: Returns template definitions, not page sections. Use cms_getPageSections for sections on a page.",
+
+	"cms_getSectionFields": "BEFORE: Know sectionDefId or key (from cms_listSectionTemplates)\nAFTER: Show field schema to user if they need to update content\nNEXT: cms_updateSectionContent with correct field names\nGOTCHA: Use this to discover field names (title, subtitle, backgroundImage, etc.) before updating content.",
+
+	"cms_getPageSections": "BEFORE: cms_getPage to get pageId\nAFTER: Show section list to user\nNEXT: cms_getSectionContent (specific section), cms_updateSectionContent\nGOTCHA: Default lightweight. Use includeContent:true only when needed.",
+
+	"cms_getSectionContent": "BEFORE: cms_getPageSections to get pageSectionId\nAFTER: Show content to user\nNEXT: cms_updateSectionContent (edit), cms_updateSectionImage (change image)\nGOTCHA: Returns full content for ONE section. More efficient than fetching entire page.",
+
+	"cms_addSectionToPage": "BEFORE: cms_getPage (get pageId), cms_listSectionTemplates (get sectionDefId)\nAFTER: Show new pageSectionId, suggest adding content\nNEXT: cms_updateSectionContent, cms_updateSectionImage\nGOTCHA: Returns pageSectionId - use this for content updates, not sectionDefId.",
+
+	"cms_updateSectionContent": "BEFORE: cms_getSectionFields to know field names\nAFTER: Verify update with cms_getSectionContent if needed\nNEXT: cms_updateSectionImage (for images)\nGOTCHA: MERGES with existing - only send fields you want to change. Don't resend all fields.",
+
+	"cms_deletePageSection": "BEFORE: cms_getPageSections to verify section exists\nAFTER: Confirm deletion\nNEXT: cms_getPageSections (verify removal)\nGOTCHA: Requires confirmed:true. Cannot be undone.",
+
+	"cms_deletePageSections": "BEFORE: cms_getPageSections to get all pageSectionIds\nAFTER: Confirm batch deletion\nNEXT: cms_getPageSections (verify)\nGOTCHA: More efficient for deleting multiple sections. Requires confirmed:true.",
+
+	"cms_searchImages": "BEFORE: None required\nAFTER: Show results with local URLs, ask which to use\nNEXT: cms_updateSectionImage (attach to section)\nGOTCHA: EXPAND short queries: \"AI\" -> \"artificial intelligence robot technology\". Always search existing images before Pexels.",
+
+	"cms_findImage": "BEFORE: None required\nAFTER: Show image with local URL\nNEXT: cms_updateSectionImage\nGOTCHA: For finding ONE specific image by description. Use cms_searchImages for multiple results.",
+
+	"cms_listAllImages": "BEFORE: None required\nAFTER: Show all images with previews\nNEXT: cms_searchImages (filter), cms_updateSectionImage (use)\nGOTCHA: May return many results. Consider cms_searchImages with query for filtering.",
+
+	"cms_addImageToSection": "BEFORE: cms_getSectionFields to know image field names\nAFTER: Verify with cms_getSectionContent\nNEXT: None (operation complete)\nGOTCHA: Deprecated - use cms_updateSectionImage instead.",
+
+	"cms_updateSectionImage": "BEFORE: cms_getSectionFields (get field names), cms_searchImages (get imageId)\nAFTER: Confirm image attached\nNEXT: cms_getSectionContent (verify)\nGOTCHA: imageField must match section schema (e.g., \"backgroundImage\", \"image\", \"cover\").",
+
+	"cms_replaceImage": "BEFORE: cms_searchImages to find both old and new image IDs\nAFTER: Confirm replacement\nNEXT: cms_getSectionContent (verify)\nGOTCHA: Replaces image across all usages. Use for site-wide image updates.",
+
+	"cms_deleteImage": "BEFORE: Check image usage (may be in sections)\nAFTER: Confirm deletion\nNEXT: None\nGOTCHA: Requires confirmed:true. Check for usages first to avoid broken images.",
+
+	"pexels_searchPhotos": "BEFORE: cms_searchImages to check if we already have similar images\nAFTER: Show results with previews, ask which to download\nNEXT: pexels_downloadPhoto\nGOTCHA: Use SPECIFIC queries: \"monstera deliciosa leaf close-up\" not \"plant\". Evaluate alt text before downloading.",
+
+	"pexels_downloadPhoto": "BEFORE: pexels_searchPhotos to get photoId\nAFTER: Confirm download, show LOCAL url from response\nNEXT: cms_updateSectionImage (attach), cms_updatePost (set cover)\nGOTCHA: Use LOCAL url from response (/uploads/...). NEVER use pexels.com URLs or https://yourdomain.com/... - only relative paths starting with /uploads/. Include photographer credit.",
+
+	"cms_getNavigation": "BEFORE: None required\nAFTER: Show menu items to user\nNEXT: cms_addNavigationItem, cms_toggleNavigationItem\nGOTCHA: Shows header/footer navigation items with enabled status.",
+
+	"cms_addNavigationItem": "BEFORE: cms_listPages to get correct slug\nAFTER: Confirm addition\nNEXT: cms_getNavigation (verify)\nGOTCHA: href format: /pages/{slug}?locale=en. location: \"header\", \"footer\", or \"both\".",
+
+	"cms_updateNavigationItem": "BEFORE: cms_getNavigation to verify item exists\nAFTER: Confirm update\nNEXT: cms_getNavigation (verify)\nGOTCHA: Match label exactly to find the item.",
+
+	"cms_removeNavigationItem": "BEFORE: cms_getNavigation to verify item exists\nAFTER: Confirm removal\nNEXT: cms_getNavigation (verify)\nGOTCHA: Use cms_toggleNavigationItem to hide without deleting.",
+
+	"cms_toggleNavigationItem": "BEFORE: cms_getNavigation to verify item exists\nAFTER: Confirm toggle\nNEXT: cms_getNavigation (verify)\nGOTCHA: Better than remove - hides item without losing configuration.",
+
+	"cms_getCollectionEntries": "BEFORE: Know collectionId\nAFTER: Show entries to user\nNEXT: cms_getEntryContent (specific entry)\nGOTCHA: Default lightweight. Use includeContent:true only when needed.",
+
+	"cms_getEntryContent": "BEFORE: cms_getCollectionEntries to get entryId\nAFTER: Show entry details\nNEXT: None (entries are read-only through these tools)\nGOTCHA: Returns full content for ONE entry.",
+
+	"search_vector": "BEFORE: None required\nAFTER: Show results with similarity scores\nNEXT: Relevant CMS tool for the resource type found\nGOTCHA: Semantic search - finds related content, not exact matches. Use type param to filter.",
+
+	"cms_findResource": "BEFORE: None required\nAFTER: Show matches\nNEXT: cms_getPage/cms_getSectionContent based on type\nGOTCHA: Fuzzy match on name/slug. Specify resourceType: \"page\", \"section\", or \"collection\".",
+
+	"http_get": "BEFORE: Validate URL is external and safe\nAFTER: Parse response, show relevant data\nNEXT: Depends on use case\nGOTCHA: For fetching external API data. Respect rate limits.",
+
+	"http_post": "BEFORE: Validate URL and payload\nAFTER: Confirm response\nNEXT: Depends on use case\nGOTCHA: Requires confirmed:true. Use for external API submissions only.",
+
+	"web_quickSearch": "BEFORE: None required\nAFTER: Show results with snippets, cite sources\nNEXT: web_fetchContent (get full page), cms_createPost (use for content)\nGOTCHA: Fast (~1-2s). Good for facts, news, links. Use topic param: general/news/finance.",
+
+	"web_deepResearch": "BEFORE: Consider if quickSearch is sufficient\nAFTER: Show AI-generated answer with citations\nNEXT: cms_createPost (create content from findings)\nGOTCHA: More comprehensive (~3-5s). Returns AI answer + sources. Use for blog post research.",
+
+	"web_fetchContent": "BEFORE: web_quickSearch to get URL\nAFTER: Show extracted content\nNEXT: cms_createPost (use content)\nGOTCHA: Fetches full markdown/text from URLs. Up to 10 URLs per call.",
+
+	"plan_analyzeTask": "BEFORE: None required\nAFTER: Execute the planned steps\nNEXT: First tool in the generated plan\nGOTCHA: For complex multi-step tasks. Returns ordered steps with suggested tool calls.",
+
+	"final_answer": "BEFORE: User asks to verify/check? → STOP, call verification tool (cms_getPost, cms_listPosts) FIRST, get result, THEN call final_answer. Complete all tool calls. Only report what tool results prove.\nAFTER: None (ends turn)\nNEXT: None\nGOTCHA:\n- NEVER say 'I will check' - actually check first\n- NEVER repeat previous response - verify fresh and answer concisely\n- Follow-up questions get SHORT answers (e.g., 'Yes, published' not full details)\n- Images: use relative /uploads/... paths only",
+
+	"tool_search": "BEFORE: None required\nAFTER: USE the discovered tools to complete the task. Discovery alone does NOT fulfill user requests.\nNEXT: Call discovered tools (e.g., cms_listPages, cms_createPost, etc.)\nGOTCHA: tool_search only finds tools - you MUST then call those tools. Search by CAPABILITY keywords (\"create post\", \"list pages\") not content."
+}

@@ -55,7 +55,10 @@ async function startServer() {
     initBM25Index();
 
     // Initialize vector search index for semantic tool discovery (async - generates embeddings)
-    await initToolVectorIndex();
+    // Run in background so server can start immediately - BM25 search works while vectors load
+    initToolVectorIndex().catch((err) => {
+      console.warn("⚠️ Vector search init failed (BM25 fallback available):", err.message);
+    });
 
     // Initialize services (includes vector index initialization)
     const services = await ServiceContainer.initialize(db);

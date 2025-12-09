@@ -273,7 +273,8 @@ export function createTraceLogger(traceId: string): TraceLogger {
 			prompt: string,
 			tokens: number,
 			historyTokens?: number,
-			messageCount?: number
+			messageCount?: number,
+			messages?: Array<{ role: string; content: unknown }>
 		) {
 			getStore().addEntry({
 				traceId,
@@ -289,6 +290,7 @@ export function createTraceLogger(traceId: string): TraceLogger {
 					promptTokens: tokens,
 					messageHistoryTokens: historyTokens || 0,
 					messageCount: messageCount || 0,
+					messages: messages || [], // Actual messages sent to LLM (for trimmed view)
 				},
 			});
 		},

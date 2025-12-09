@@ -399,6 +399,12 @@ export class AgentOrchestrator {
 				  )
 				: 0;
 
+		// Serialize messages for frontend consumption
+		const serializedMessages = previousMessages.map((m) => ({
+			role: m.role,
+			content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+		}));
+
 		writeSSE("user-prompt", {
 			type: "user-prompt",
 			traceId: resolved.traceId,
@@ -407,6 +413,8 @@ export class AgentOrchestrator {
 			tokens: userPromptTokens,
 			messageHistoryTokens,
 			messageCount: previousMessages.length,
+			// Include actual messages array for "trimmed" view in Chat History
+			messages: serializedMessages,
 			timestamp: new Date().toISOString(),
 		});
 	}
@@ -531,13 +539,17 @@ export class AgentOrchestrator {
 					});
 
 					// Special handling for final_answer - extract content as final text
+					// Use content if available, otherwise fall back to summary
 					if (chunk.toolName === "final_answer" && chunk.output) {
 						const finalAnswerResult = chunk.output as { content?: string; summary?: string };
-						if (finalAnswerResult.content) {
-							finalText = finalAnswerResult.content;
+						const responseText = finalAnswerResult.content?.trim()
+							? finalAnswerResult.content
+							: finalAnswerResult.summary || "";
+						if (responseText) {
+							finalText = responseText;
 							writeSSE("text-delta", {
 								type: "text-delta",
-								delta: finalAnswerResult.content,
+								delta: responseText,
 								timestamp: new Date().toISOString(),
 							});
 						}

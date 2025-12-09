@@ -10,8 +10,8 @@ Human-in-the-Loop ensures users maintain control over dangerous or irreversible 
 - `server/tools/all-tools.ts` - Tool definitions with `confirmed` parameter
 - `server/tools/post-tools.ts` - Post tools (publish, archive, delete)
 - `server/tools/image-tools.ts` - Image deletion tool
-- `server/prompts/core/base-rules.xml` - Confirmation pattern definition
-- `server/prompts/workflows/*.xml` - Workflow-specific confirmation examples
+- `server/prompts/core/agent.xml` - Confirmation pattern in operational-knowledge
+- `server/tools/instructions/index.ts` - Per-tool GOTCHA patterns for confirmations
 
 ---
 
@@ -179,53 +179,35 @@ export const cmsPublishPost = tool({
 
 ## Prompt Instructions
 
-The confirmation pattern is defined in `base-rules.xml` and inherited by workflow modules:
+The confirmation pattern is defined in `agent.xml` and reinforced in per-tool instructions:
 
 ```xml
-<!-- server/prompts/core/base-rules.xml -->
-<confirmation-pattern>
-**DESTRUCTIVE OPERATIONS:**
-
-Deletion tools require user confirmation:
-- cms_deletePage, cms_deletePageSection, cms_deletePageSections
-- cms_deletePost, cms_deleteImage
-
-**WORKFLOW:**
-1. Call tool WITHOUT confirmed flag
-2. If requiresConfirmation returned → STOP and inform user clearly
-3. Wait for user approval
-4. Call again WITH confirmed: true
-
-**CONFIRMATION RECOGNITION:**
-- YES: "yes", "y", "ok", "proceed", "go ahead", "confirm", "do it", "all"
-- NO: "no", "n", "cancel", "stop", "abort", "don't"
-</confirmation-pattern>
+<!-- server/prompts/core/agent.xml -->
+<operational-knowledge>
+**Confirmations:** When tool returns `requiresConfirmation: true`:
+1. Ask user to confirm via final_answer
+2. On confirmation, call tool with `confirmed: true`
+</operational-knowledge>
 ```
 
-Workflow modules reference this pattern:
+Per-tool instructions reinforce this pattern:
 
-```xml
-<!-- server/prompts/workflows/cms-pages.xml -->
-**Delete sections** (follows confirmation-pattern):
-"Delete all sections from about" →
-1. cms_getPage("about") → sectionIds
-2. cms_deletePageSections(ids) → requiresConfirmation
-3. STOP, inform user, wait
-4. On "yes" → cms_deletePageSections(ids, confirmed: true)
+```typescript
+// server/tools/instructions/index.ts
+cms_deletePage: `BEFORE: cms_getPage to verify; cms_getNavigation to check if in menu
+AFTER: Confirm deletion
+NEXT: cms_removeNavigationItem if was in navigation
+GOTCHA: CASCADE deletes all sections. Requires confirmed:true.`,
 
-<!-- server/prompts/workflows/cms-posts.xml -->
-**Publish post** (follows confirmation-pattern):
-"Publish that post" →
-1. cms_publishPost("react-hooks-guide") → requiresConfirmation
-2. STOP, ask user
-3. On "yes" → cms_publishPost("react-hooks-guide", confirmed: true)
+cms_publishPost: `BEFORE: Post must exist as draft (verify with cms_getPost)
+AFTER: Confirm publication, offer preview at /posts/blog/{slug}
+NEXT: cms_getPost (show final state)
+GOTCHA: Requires confirmation flow - first call returns requiresConfirmation.`,
 
-<!-- server/prompts/workflows/cms-images.xml -->
-**Delete image** (follows confirmation-pattern):
-"Delete the sunset photo" →
-1. cms_deleteImage("sunset") → requiresConfirmation
-2. STOP, inform user
-3. On "yes" → cms_deleteImage("sunset", confirmed: true)
+cms_deleteImage: `BEFORE: Check image usage (may be in sections)
+AFTER: Confirm deletion
+NEXT: None
+GOTCHA: Requires confirmed:true. Check for usages first.`,
 ```
 
 ---

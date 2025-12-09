@@ -699,7 +699,8 @@ export function createAgentRoutes(services: ServiceContainer) {
 
 **📁 Key Files:**
 - `server/tools/all-tools.ts` - Tools with `confirmed` flag pattern
-- `server/prompts/core/base-rules.xml` - Confirmation behavior instructions
+- `server/prompts/core/agent.xml` - Confirmation behavior in operational-knowledge
+- `server/tools/instructions/index.ts` - Per-tool GOTCHA patterns for confirmations
 - `app/assistant/_stores/trace-store.ts` - Tracks confirmation-required entries
 - `app/assistant/_hooks/use-agent.ts` - Detects requiresConfirmation in tool results
 

@@ -306,7 +306,7 @@ const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
 The agent is instructed to signal completion:
 
 ```xml
-<!-- core/base-rules.xml -->
+<!-- core/agent.xml -->
 <react-pattern>
 **COMPLETION:**
 When the task is fully complete, prefix your final response with FINAL_ANSWER:
@@ -402,14 +402,10 @@ await sessionService.saveMessages(sessionId, [
 │                      Message Assembly                           │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. System Prompt (compiled from modular XML)                   │
-│     ├── core/base-rules.xml (identity, ReAct pattern)           │
-│     ├── workflows/cms-pages.xml                                 │
-│     ├── workflows/cms-images.xml                                │
-│     ├── workflows/cms-posts.xml                                 │
-│     ├── workflows/cms-navigation.xml                            │
-│     ├── workflows/web-research.xml                              │
-│     └── Working memory state ({{{workingMemory}}})              │
+│  1. System Prompt (compiled from agent.xml)                     │
+│     ├── core/agent.xml (identity, ReAct, tool discovery)        │
+│     ├── {{{workingMemory}}} - entity context                    │
+│     └── {{{activeProtocols}}} - per-tool instructions           │              │
 │                                                                 │
 │  2. Conversation History                                        │
 │     ├── Previous user messages                                  │

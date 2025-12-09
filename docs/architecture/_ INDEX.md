@@ -321,12 +321,11 @@ External:
 server/
 ├── agent/           # CMS Agent module (AI SDK 6)
 │   ├── cms-agent.ts     # ToolLoopAgent singleton
-│   └── system-prompt.ts # Modular prompt composition
+│   └── system-prompt.ts # Prompt compilation
 ├── db/              # Schema, migrations
 ├── middleware/      # Express middleware
-├── prompts/         # Modular XML prompts
-│   ├── core/            # base-rules.xml
-│   └── workflows/       # cms-pages.xml, cms-images.xml, etc.
+├── prompts/         # XML prompts
+│   └── core/            # agent.xml (~1400 tokens)
 ├── queues/          # BullMQ job definitions
 ├── routes/          # API endpoints
 ├── services/        # Business logic
@@ -335,7 +334,8 @@ server/
 │   ├── worker-events.service.ts    # Redis pub/sub
 │   └── ...
 ├── templates/       # Nunjucks templates
-├── tools/           # Agent tools (21 total)
+├── tools/           # Agent tools + instructions
+│   └── instructions/    # Per-tool protocols
 ├── utils/           # Shared utilities
 └── workers/         # Background processors
 

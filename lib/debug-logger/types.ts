@@ -171,12 +171,14 @@ export interface TraceLogger {
 	 * @param tokens Token count for prompt
 	 * @param historyTokens Token count for message history
 	 * @param messageCount Number of messages in history
+	 * @param messages Actual message history sent to LLM (for trimmed view)
 	 */
 	userPrompt(
 		prompt: string,
 		tokens: number,
 		historyTokens?: number,
-		messageCount?: number
+		messageCount?: number,
+		messages?: Array<{ role: string; content: unknown }>
 	): void;
 
 	/**

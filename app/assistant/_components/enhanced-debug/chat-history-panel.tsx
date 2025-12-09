@@ -23,8 +23,11 @@ import {
 	FileJson,
 	Copy,
 	Check,
+	Scissors,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 // Role icons and colors
 const ROLE_CONFIG: Record<
@@ -499,11 +502,23 @@ interface SystemPromptData {
 	timestamp: Date;
 }
 
+// Trimmed messages data (what was actually sent to LLM)
+interface TrimmedMessagesData {
+	messages: Message[];
+	systemPrompt: string | null;
+	timestamp: Date;
+	// Metadata from user-prompt event (if messages not available)
+	messageCount?: number;
+	messageHistoryTokens?: number;
+}
+
 export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 	const sessionId = useChatStore((state) => state.sessionId);
 	const isStreaming = useChatStore((state) => state.isStreaming);
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [systemPrompt, setSystemPrompt] = useState<SystemPromptData | null>(null);
+	const [trimmedData, setTrimmedData] = useState<TrimmedMessagesData | null>(null);
+	const [showTrimmed, setShowTrimmed] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [selectedItem, setSelectedItem] = useState<TreeDataItem | undefined>();
@@ -514,6 +529,7 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 		if (!sessionId) {
 			setMessages([]);
 			setSystemPrompt(null);
+			setTrimmedData(null);
 			return;
 		}
 
@@ -525,34 +541,104 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 			const session = await sessionsApi.get(sessionId);
 			setMessages(session.messages);
 
-			// Fetch conversation logs to get system prompt
-			const logs = (await sessionsApi.getLogs(sessionId)) as Array<{
-				entries?: Array<{
-					type: string;
-					input?: unknown;
-					output?: unknown;
-					timestamp: number;
+			// Fetch conversation logs to get system prompt and trimmed messages
+			const logsResponse = (await sessionsApi.getLogs(sessionId)) as {
+				data?: Array<{
+					entries?: Array<{
+						type: string;
+						input?: unknown;
+						output?: unknown;
+						timestamp: number;
+					}>;
 				}>;
-			}>;
+			};
+			const logs = logsResponse.data || [];
 
-			// Find the most recent system-prompt entry across all conversations
+			// Find the most recent system-prompt and prompt-sent entries
 			let latestSystemPrompt: SystemPromptData | null = null;
+			let latestTrimmedData: TrimmedMessagesData | null = null;
+
 			for (const log of logs) {
 				if (log.entries) {
 					for (const entry of log.entries) {
+						const timestamp = new Date(entry.timestamp);
+
+						// Extract system prompt
 						if (entry.type === "system-prompt") {
 							const content = entry.input || entry.output;
 							if (content && typeof content === "string") {
-								const timestamp = new Date(entry.timestamp);
 								if (!latestSystemPrompt || timestamp > latestSystemPrompt.timestamp) {
 									latestSystemPrompt = { content, timestamp };
+								}
+							}
+						}
+
+						// Extract trimmed messages from user-prompt (messages in output field)
+						if (entry.type === "user-prompt") {
+							const outputData = entry.output as {
+								messages?: Array<{ role: string; content: unknown }>;
+								messageCount?: number;
+								messageHistoryTokens?: number;
+							} | null;
+
+							if (outputData) {
+								// Check if we have actual messages array
+								if (Array.isArray(outputData.messages) && outputData.messages.length > 0) {
+									if (!latestTrimmedData || timestamp > latestTrimmedData.timestamp) {
+										// Convert to Message format with generated IDs
+										const messagesWithIds: Message[] = outputData.messages.map((m, i) => ({
+											id: `trimmed-${i}-${timestamp.getTime()}`,
+											role: m.role as "user" | "assistant" | "system" | "tool",
+											content: m.content,
+											createdAt: timestamp,
+										}));
+
+										latestTrimmedData = {
+											messages: messagesWithIds,
+											systemPrompt: null, // System prompt is emitted separately
+											timestamp,
+											messageCount: outputData.messageCount,
+											messageHistoryTokens: outputData.messageHistoryTokens,
+										};
+									}
+								} else if (typeof outputData.messageCount === "number") {
+									// Fallback: only metadata available (older format)
+									if (!latestTrimmedData || (!latestTrimmedData.messages.length && timestamp > latestTrimmedData.timestamp)) {
+										latestTrimmedData = {
+											messages: [],
+											systemPrompt: null,
+											timestamp,
+											messageCount: outputData.messageCount,
+											messageHistoryTokens: outputData.messageHistoryTokens,
+										};
+									}
+								}
+							}
+						}
+
+						// Also check legacy prompt-sent entry type (if ever implemented)
+						if (entry.type === "prompt-sent") {
+							const promptData = entry.input as {
+								messages?: Message[];
+								system?: string;
+							} | null;
+
+							if (promptData && Array.isArray(promptData.messages)) {
+								if (!latestTrimmedData || timestamp > latestTrimmedData.timestamp) {
+									latestTrimmedData = {
+										messages: promptData.messages,
+										systemPrompt: typeof promptData.system === "string" ? promptData.system : null,
+										timestamp,
+									};
 								}
 							}
 						}
 					}
 				}
 			}
+
 			setSystemPrompt(latestSystemPrompt);
+			setTrimmedData(latestTrimmedData);
 		} catch (e) {
 			console.error("Failed to fetch chat history:", e);
 			setError("Failed to load chat history");
@@ -574,16 +660,33 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 		prevStreamingRef.current = isStreaming;
 	}, [isStreaming, fetchMessages]);
 
+	// Check if we have actual trimmed messages or just metadata
+	const hasTrimmedMessages = trimmedData && trimmedData.messages.length > 0;
+	const hasTrimmedMetadataOnly = trimmedData && trimmedData.messages.length === 0 && typeof trimmedData.messageCount === "number";
+
+	// Get the active messages and system prompt based on toggle
+	const activeMessages = showTrimmed && hasTrimmedMessages ? trimmedData.messages : messages;
+	const activeSystemPrompt = showTrimmed && hasTrimmedMessages
+		? (trimmedData.systemPrompt ? { content: trimmedData.systemPrompt, timestamp: trimmedData.timestamp } : null)
+		: systemPrompt;
+
 	// Copy all chat history to clipboard
 	const copyAllHistory = useCallback(async () => {
 		const lines: string[] = [];
 
-		// Add system prompt if available
-		if (systemPrompt) {
-			lines.push("=== SYSTEM PROMPT ===");
-			lines.push(`Timestamp: ${systemPrompt.timestamp.toISOString()}`);
+		// Add header indicating which view
+		if (showTrimmed && trimmedData) {
+			lines.push("=== SENT TO LLM (TRIMMED) ===");
+			lines.push(`Captured: ${trimmedData.timestamp.toISOString()}`);
 			lines.push("");
-			lines.push(systemPrompt.content);
+		}
+
+		// Add system prompt if available
+		if (activeSystemPrompt) {
+			lines.push("=== SYSTEM PROMPT ===");
+			lines.push(`Timestamp: ${activeSystemPrompt.timestamp.toISOString()}`);
+			lines.push("");
+			lines.push(activeSystemPrompt.content);
 			lines.push("");
 			lines.push("");
 		}
@@ -592,11 +695,15 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 		lines.push("=== CHAT HISTORY ===");
 		lines.push("");
 
-		for (const msg of messages) {
+		for (const msg of activeMessages) {
 			const roleLabel = (ROLE_CONFIG[msg.role] || ROLE_CONFIG.user).label.toUpperCase();
 			lines.push(`--- ${roleLabel} ---`);
-			lines.push(`ID: ${msg.id}`);
-			lines.push(`Time: ${new Date(msg.createdAt).toISOString()}`);
+			if (msg.id) {
+				lines.push(`ID: ${msg.id}`);
+			}
+			if (msg.createdAt) {
+				lines.push(`Time: ${new Date(msg.createdAt).toISOString()}`);
+			}
 			lines.push("");
 
 			// Format content
@@ -614,28 +721,28 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 		await navigator.clipboard.writeText(text);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
-	}, [systemPrompt, messages]);
+	}, [activeSystemPrompt, activeMessages, showTrimmed, trimmedData]);
 
 	// Convert messages to tree structure, including system prompt at the top
 	const treeData = useMemo(() => {
 		const items: TreeDataItem[] = [];
 
 		// Add system prompt as first item if available
-		if (systemPrompt) {
+		if (activeSystemPrompt) {
 			items.push({
 				id: "system-prompt",
-				name: `[0] System Prompt (${systemPrompt.timestamp.toLocaleTimeString()})`,
+				name: `[0] System Prompt (${activeSystemPrompt.timestamp.toLocaleTimeString()})`,
 				icon: Settings,
 				className: "text-purple-500",
 				children: [
 					{
 						id: "system-prompt::content",
-						name: `content: "${truncate(systemPrompt.content, 50)}"`,
+						name: `content: "${truncate(activeSystemPrompt.content, 50)}"`,
 						icon: Type,
 					},
 					{
 						id: "system-prompt::timestamp",
-						name: `timestamp: "${systemPrompt.timestamp.toISOString()}"`,
+						name: `timestamp: "${activeSystemPrompt.timestamp.toISOString()}"`,
 						icon: Type,
 					},
 				],
@@ -643,8 +750,8 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 		}
 
 		// Add messages (offset index by 1 if system prompt exists)
-		const messageItems = messages.map((msg, index) => {
-			const adjusted = messageToTreeData(msg, systemPrompt ? index + 1 : index);
+		const messageItems = activeMessages.map((msg, index) => {
+			const adjusted = messageToTreeData(msg, activeSystemPrompt ? index + 1 : index);
 			// Update the name to reflect the new index
 			const config = ROLE_CONFIG[msg.role] || ROLE_CONFIG.user;
 			let summary = "";
@@ -659,13 +766,13 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 			}
 			return {
 				...adjusted,
-				name: `[${systemPrompt ? index + 1 : index}] ${config.label}: ${summary}`,
+				name: `[${activeSystemPrompt ? index + 1 : index}] ${config.label}: ${summary}`,
 			};
 		});
 
 		items.push(...messageItems);
 		return items;
-	}, [messages, systemPrompt]);
+	}, [activeMessages, activeSystemPrompt]);
 
 	// Find the raw value for the selected item (for detail panel)
 	const selectedValue = useMemo(() => {
@@ -673,28 +780,28 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 
 		// Handle system prompt selection
 		if (selectedItem.id === "system-prompt") {
-			return systemPrompt
+			return activeSystemPrompt
 				? {
 						role: "system",
-						content: systemPrompt.content,
-						timestamp: systemPrompt.timestamp.toISOString(),
+						content: activeSystemPrompt.content,
+						timestamp: activeSystemPrompt.timestamp.toISOString(),
 				  }
 				: null;
 		}
 		if (selectedItem.id === "system-prompt::content") {
-			return systemPrompt?.content || null;
+			return activeSystemPrompt?.content || null;
 		}
 		if (selectedItem.id === "system-prompt::timestamp") {
-			return systemPrompt?.timestamp.toISOString() || null;
+			return activeSystemPrompt?.timestamp.toISOString() || null;
 		}
 
 		// Parse the ID to find the path - split by PATH_SEP (::)
 		const parts = selectedItem.id.split(PATH_SEP);
 		if (parts.length === 0) return null;
 
-		// First part is the message ID (UUID)
+		// First part is the message ID (UUID) or index for trimmed messages
 		const msgId = parts[0];
-		const msg = messages.find((m) => m.id === msgId);
+		const msg = activeMessages.find((m) => m.id === msgId);
 		if (!msg) return null;
 
 		// If just the message ID, return the whole message
@@ -726,7 +833,7 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 		}
 
 		return current;
-	}, [selectedItem, messages, systemPrompt]);
+	}, [selectedItem, activeMessages, activeSystemPrompt]);
 
 	if (!sessionId) {
 		return (
@@ -781,10 +888,44 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 					<span className='text-sm font-medium'>Chat History</span>
 				</div>
 				<div className='flex items-center gap-2'>
-					<Badge variant='secondary' className='text-xs'>
-						{systemPrompt ? messages.length + 1 : messages.length} messages
+					{/* Trimmed toggle */}
+					<div className='flex items-center gap-1.5'>
+						<Switch
+							id='show-trimmed'
+							checked={showTrimmed}
+							onCheckedChange={setShowTrimmed}
+							disabled={!hasTrimmedMessages}
+							className='h-4 w-7'
+						/>
+						<Label
+							htmlFor='show-trimmed'
+							className={cn(
+								"text-xs cursor-pointer flex items-center gap-1",
+								showTrimmed && hasTrimmedMessages ? "text-amber-600" : "text-muted-foreground",
+								!hasTrimmedMessages && "opacity-50 cursor-not-allowed"
+							)}
+							title={
+								hasTrimmedMetadataOnly
+									? `Last LLM call used ${trimmedData?.messageCount} messages (${trimmedData?.messageHistoryTokens?.toLocaleString()} tokens) - full messages not logged`
+									: hasTrimmedMessages
+									? "Show messages sent to LLM"
+									: "No trimmed message data available"
+							}
+						>
+							<Scissors className='h-3 w-3' />
+							<span className='hidden sm:inline'>Trimmed</span>
+							{hasTrimmedMetadataOnly && (
+								<span className='text-[10px] text-muted-foreground'>({trimmedData?.messageCount})</span>
+							)}
+						</Label>
+					</div>
+
+					<div className='h-4 w-px bg-border' />
+
+					<Badge variant={showTrimmed && hasTrimmedMessages ? "default" : "secondary"} className={cn("text-xs", showTrimmed && hasTrimmedMessages && "bg-amber-500")}>
+						{activeSystemPrompt ? activeMessages.length + 1 : activeMessages.length} messages
 					</Badge>
-					{systemPrompt && (
+					{activeSystemPrompt && (
 						<Badge variant='outline' className='text-xs text-purple-500 border-purple-500/30'>
 							+ system
 						</Badge>

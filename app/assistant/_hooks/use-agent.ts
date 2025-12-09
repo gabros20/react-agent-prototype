@@ -170,7 +170,8 @@ export function useAgent() {
 					d.prompt as string,
 					(d.tokens as number) || 0,
 					d.messageHistoryTokens as number | undefined,
-					d.messageCount as number | undefined
+					d.messageCount as number | undefined,
+					d.messages as Array<{ role: string; content: unknown }> | undefined
 				);
 				break;
 			}

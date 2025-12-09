@@ -11,9 +11,33 @@
  *
  * These are kept separate from tool descriptions (which should be SHORT)
  * to enable token-efficient context injection.
+ *
+ * Hot-reload: In development mode, instructions are loaded from JSON file on each call.
+ * In production, the static TOOL_INSTRUCTIONS object is used for performance.
  */
 
-export const TOOL_INSTRUCTIONS: Record<string, string> = {
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const isDev = process.env.NODE_ENV !== "production";
+
+/**
+ * Load tool instructions from JSON file (for hot-reload in dev)
+ */
+function loadToolInstructionsFromFile(): Record<string, string> {
+	const jsonPath = path.join(__dirname, "tool-instructions.json");
+	const content = fs.readFileSync(jsonPath, "utf-8");
+	return JSON.parse(content);
+}
+
+/**
+ * Static tool instructions (used in production, fallback for dev)
+ */
+const STATIC_TOOL_INSTRUCTIONS: Record<string, string> = {
 	// ============================================================================
 	// Posts
 	// ============================================================================
@@ -287,17 +311,14 @@ GOTCHA: For complex multi-step tasks. Returns ordered steps with suggested tool 
 	// Core Tools (always available)
 	// ============================================================================
 
-	final_answer: `BEFORE: Questions → answer directly. CMS actions → complete with tools first.
-AFTER: None (ends conversation turn)
+	final_answer: `BEFORE: User asks to verify/check? → STOP, call verification tool (cms_getPost, cms_listPosts) FIRST, get result, THEN call final_answer. Complete all tool calls. Only report what tool results prove.
+AFTER: None (ends turn)
 NEXT: None
 GOTCHA:
-- For actions: only report what tool results prove
-- Missing tool for action? → tool_search first → use it → THEN final_answer
-- IMAGES: when showing images in responses, ALWAYS use relative paths starting with /uploads/...
-  - CORRECT: ![Alt](/uploads/images/2025/12/08/original/abc123.jpg)
-  - WRONG: ![Alt](https://yourwebsite.com/uploads/...) or ![Alt](https://pexels.com/...) ← BREAKS IMAGE!
-  - Use the url field from tool results (e.g., pexels_downloadPhoto returns /uploads/...).
-- Format final response with markdown for readability.`,
+- NEVER say 'I will check' - actually check first
+- NEVER repeat previous response - verify fresh and answer concisely
+- Follow-up questions get SHORT answers (e.g., 'Yes, published' not full details)
+- Images: use relative /uploads/... paths only`,
 
 	tool_search: `BEFORE: None required
 AFTER: USE the discovered tools to complete the task. Discovery alone does NOT fulfill user requests.
@@ -306,19 +327,54 @@ GOTCHA: tool_search only finds tools - you MUST then call those tools. Search by
 };
 
 /**
+ * Get tool instructions - hot-reloads from JSON in dev mode
+ */
+function getInstructions(): Record<string, string> {
+	if (isDev) {
+		try {
+			return loadToolInstructionsFromFile();
+		} catch (error) {
+			console.warn("[tool-instructions] Failed to load JSON, using static fallback:", error);
+			return STATIC_TOOL_INSTRUCTIONS;
+		}
+	}
+	return STATIC_TOOL_INSTRUCTIONS;
+}
+
+/**
+ * Exported for backwards compatibility (reads fresh in dev mode)
+ */
+export const TOOL_INSTRUCTIONS = new Proxy({} as Record<string, string>, {
+	get(_, prop: string) {
+		return getInstructions()[prop];
+	},
+	ownKeys() {
+		return Object.keys(getInstructions());
+	},
+	getOwnPropertyDescriptor(_, prop: string) {
+		const instructions = getInstructions();
+		if (prop in instructions) {
+			return { enumerable: true, configurable: true, value: instructions[prop] };
+		}
+		return undefined;
+	},
+});
+
+/**
  * Get instructions for a specific tool
  */
 export function getToolInstruction(toolName: string): string | undefined {
-	return TOOL_INSTRUCTIONS[toolName];
+	return getInstructions()[toolName];
 }
 
 /**
  * Get instructions for multiple tools, formatted for system prompt injection
  */
 export function getToolInstructions(toolNames: string[]): string {
+	const instructions = getInstructions();
 	return toolNames
 		.map((name) => {
-			const instruction = TOOL_INSTRUCTIONS[name];
+			const instruction = instructions[name];
 			return instruction ? `## ${name}\n${instruction}` : null;
 		})
 		.filter(Boolean)

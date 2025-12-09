@@ -251,7 +251,7 @@ case 'tool-result': {
 
 **Cause:** Prompt instructions not followed.
 
-**Fix:** Check `server/prompts/core/base-rules.xml` for proper `<confirmation-pattern>` section with examples.
+**Fix:** Check `server/prompts/core/agent.xml` for confirmation guidance and `server/tools/instructions/index.ts` for per-tool GOTCHA patterns.
 
 ### User Says "Yes" But Nothing Happens
 

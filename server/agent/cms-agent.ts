@@ -186,29 +186,6 @@ export const cmsAgent = new ToolLoopAgent({
 		};
 
 		// =====================================================================
-		// Stuck Detection: Detect repeated identical tool calls
-		// Append warning to system prompt (not as separate message to avoid breaking tool_call sequence)
-		// =====================================================================
-		let stuckWarning = "";
-		const recentCalls = steps.slice(-3).flatMap((step: any) =>
-			(step.toolCalls || []).map((tc: any) => ({
-				name: tc.toolName,
-				input: JSON.stringify(tc.input || {}),
-			}))
-		);
-
-		// Check for 2+ identical consecutive calls
-		if (recentCalls.length >= 2) {
-			const last = recentCalls[recentCalls.length - 1];
-			const secondLast = recentCalls[recentCalls.length - 2];
-
-			if (last.name === secondLast.name && last.input === secondLast.input) {
-				stuckWarning = `\n\n STUCK DETECTED: You called ${last.name} with identical parameters twice. STOP looping. Use the tools you already discovered (cms_listPages, etc.) or explain the issue to the user.`;
-				console.warn(`[prepareStep] Stuck detected: ${last.name} called twice with same params`);
-			}
-		}
-
-		// =====================================================================
 		// Per-Tool Protocol Injection: Inject <active-protocols> into system prompt
 		// ALWAYS include core tools (final_answer, tool_search) + any discovered tools
 		// =====================================================================
@@ -234,32 +211,21 @@ export const cmsAgent = new ToolLoopAgent({
 				};
 			}
 
-			if (toolInstructions || stuckWarning) {
+			if (toolInstructions) {
 				// Build updated system prompt from the base (stored in prepareCall)
-				// NOTE: messages[0] is NOT the system prompt - it's the first conversation message
-				// The system prompt comes from `instructions` field, stored in currentBaseSystemPrompt
 				let updatedContent = currentBaseSystemPrompt;
 
-				// Replace <active-protocols> content in-place (follows template pattern)
+				// Replace <active-protocols> content in-place
 				updatedContent = updatedContent.replace(
 					/<active-protocols>[\s\S]*?<\/active-protocols>/g,
-					`<active-protocols>\n${toolInstructions || ""}\n</active-protocols>`
+					`<active-protocols>\n${toolInstructions}\n</active-protocols>`
 				);
-
-				// Strip any existing stuck warnings and append fresh one if needed
-				updatedContent = updatedContent.replace(/\n\n STUCK DETECTED:[\s\S]*$/g, "");
-				if (stuckWarning) {
-					updatedContent += stuckWarning;
-					console.log(`[prepareStep] ⚠️ Stuck warning injected`);
-				}
 
 				// Store full updated system prompt for debug panel
 				if (lastInjectedInstructions) {
 					lastInjectedInstructions.updatedSystemPrompt = updatedContent;
 				}
 
-				// Return updated instructions for this step
-				// AI SDK will use this as the system prompt
 				return {
 					...result,
 					instructions: updatedContent,

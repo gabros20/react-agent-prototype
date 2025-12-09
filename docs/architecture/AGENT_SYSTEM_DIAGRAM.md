@@ -21,7 +21,7 @@ This diagram shows how all agent components connect. Use it as a map to understa
 -   System Prompt: `server/agent/system-prompt.ts` (modular composition)
 -   Routes: `server/routes/agent.ts`
 -   Tools: `server/tools/all-tools.ts`
--   Prompts: `server/prompts/core/` + `server/prompts/workflows/`
+-   Prompts: `server/prompts/core/agent.xml` + `server/tools/instructions/`
 -   Working Memory: `server/services/working-memory/`
 -   Client Hook: `app/assistant/_hooks/use-agent.ts`
 -   Stores: `app/assistant/_stores/`
@@ -71,7 +71,7 @@ flowchart TB
         end
 
         subgraph PromptCompilation["Prompt System - prompts/"]
-            PromptModules["Modular Prompts<br/>core/*.xml + workflows/*.xml"]
+            PromptModules["Core Prompt<br/>agent.xml + instructions/"]
             WorkingMemStr["workingMemory variable"]
             ToolsFormatted["toolsFormatted variable"]
             PromptCompose["Prompt Composition"]
@@ -271,7 +271,7 @@ flowchart TB
 
 **Context Assembly:** Backend builds `AgentContext` from `ServiceContainer` singleton - this is the "bag of dependencies" every tool receives
 
-**Prompt Compilation:** Modular prompts (`core/*.xml` + `workflows/*.xml`) + `workingMemory` + `toolsFormatted` → composed into final system prompt
+**Prompt Compilation:** Core prompt (`agent.xml`) + `workingMemory` + `activeProtocols` (per-tool instructions) → composed into final system prompt
 
 **ReAct Loop:** `ToolLoopAgent` singleton runs Think→Act→Observe cycle up to 15 steps or until `stopWhen()` returns true
 
@@ -525,17 +525,12 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    subgraph CorePrompts["📄 Core Prompts - core/"]
-        BaseRules[base-rules.xml<br/>Fundamental behavior]
-        ToolGuidance[tool-guidance.xml<br/>Tool usage patterns]
-        ErrorPatterns[error-patterns.xml<br/>Error handling]
+    subgraph CorePrompts["📄 Core Prompt - prompts/core/"]
+        AgentXml[agent.xml<br/>~1400 tokens]
     end
 
-    subgraph WorkflowPrompts["📄 Workflow Prompts - workflows/"]
-        CmsWorkflow[cms.xml<br/>CMS operations]
-        ImageWorkflow[images.xml<br/>Image management]
-        PostWorkflow[posts.xml<br/>Blog/post content]
-        NavWorkflow[navigation.xml<br/>Nav structure]
+    subgraph PerToolInstructions["📄 Per-Tool Instructions - tools/instructions/"]
+        ToolInstructions[TOOL_INSTRUCTIONS<br/>BEFORE/AFTER/NEXT/GOTCHA]
     end
 
     subgraph DynamicData["📊 Dynamic Data"]
@@ -906,7 +901,7 @@ sequenceDiagram
 | ToolLoopAgent     | `server/agent/cms-agent.ts`                  | [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)               |
 | ALL_TOOLS         | `server/tools/all-tools.ts`                  | [3.2 Tools](./LAYER_3.2_TOOLS.md)                         |
 | WorkingContext    | `server/services/working-memory/`            | [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       |
-| Prompts           | `server/prompts/core/` + `workflows/`        | [3.4 Prompts](./LAYER_3.4_PROMPTS.md)                     |
+| Prompts           | `server/prompts/core/` + `tools/instructions/` | [3.4 Prompts](./LAYER_3.4_PROMPTS.md)                   |
 | ConfirmationFlow  | `server/tools/all-tools.ts` (confirmed flag) | [3.5 HITL](./LAYER_3.5_HITL.md)                           |
 | Retry Logic       | `server/agent/cms-agent.ts`                  | [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       |
 | SSE Writer        | `server/routes/agent.ts`                     | [3.7 Streaming](./LAYER_3.7_STREAMING.md)                 |

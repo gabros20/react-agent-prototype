@@ -1,19 +1,15 @@
 # Layer 3.4: Prompt System
 
-> Modular system prompt composition with XML modules and Handlebars injection
+> Lean system prompt with dynamic per-tool instruction injection
 
 ## Overview
 
-The prompt system defines how the agent thinks and behaves. The implementation uses **modular XML files** that are composed at startup and compiled with Handlebars for dynamic injection. The prompt is regenerated for each agent call via the `prepareCall` hook.
+The prompt system defines how the agent thinks and behaves. The implementation uses a **minimal core prompt** (`agent.xml`) compiled with Handlebars for dynamic injection. Per-tool instructions are injected dynamically via `prepareStep` when tools are discovered.
 
 **Key Files:**
-- `server/agent/system-prompt.ts` - Prompt composition and compilation
-- `server/prompts/core/base-rules.xml` - Identity, ReAct pattern, working memory
-- `server/prompts/workflows/cms-pages.xml` - Page and section management
-- `server/prompts/workflows/cms-images.xml` - Image handling and display
-- `server/prompts/workflows/cms-posts.xml` - Blog post lifecycle
-- `server/prompts/workflows/cms-navigation.xml` - Navigation management
-- `server/prompts/workflows/web-research.xml` - Exa AI web research
+- `server/agent/system-prompt.ts` - Prompt compilation
+- `server/prompts/core/agent.xml` - Core agent identity, ReAct pattern, tool discovery
+- `server/tools/instructions/index.ts` - Per-tool instructions (BEFORE/AFTER/NEXT/GOTCHA patterns)
 
 ---
 
@@ -39,45 +35,33 @@ With a comprehensive prompt:
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│                       Modular Prompt System                       │
+│                   Dynamic Prompt Injection System                  │
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                   │
-│  server/prompts/                                                  │
-│  ├── core/                                                        │
-│  │   └── base-rules.xml          ← Identity, ReAct, Working Mem   │
-│  └── workflows/                                                   │
-│      ├── cms-pages.xml           ← Page/section CRUD              │
-│      ├── cms-images.xml          ← Image handling                 │
-│      ├── cms-posts.xml           ← Blog lifecycle                 │
-│      ├── cms-navigation.xml      ← Navigation                     │
-│      └── web-research.xml        ← Exa AI research                │
+│  server/prompts/core/agent.xml     ← Minimal core (~1400 tokens)  │
+│  server/tools/instructions/        ← Per-tool protocols           │
 │                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │               loadPromptModules() at startup                │  │
+│  │               getSystemPrompt() in prepareCall              │  │
 │  │                                                             │  │
-│  │   Reads all XML files in order, concatenates into:          │  │
-│  │   <agent>\n{module1}\n\n{module2}\n\n...\n</agent>          │  │
+│  │   Loads agent.xml, compiles with Handlebars:                │  │
+│  │   • {{{workingMemory}}} - entity context                    │  │
+│  │   • {{currentDate}} - current date                          │  │
+│  │   • {{{activeProtocols}}} - discovered tool instructions    │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                               │                                   │
 │                               ▼                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │              Handlebars.compile() - cached                  │  │
+│  │               getToolInstructions() in prepareStep          │  │
 │  │                                                             │  │
-│  │   compiledTemplate = Handlebars.compile(composedXML)        │  │
-│  │   (lazy-loaded once, reused across all calls)               │  │
+│  │   When tool_search discovers tools:                         │  │
+│  │   1. Get tool names from discovery result                   │  │
+│  │   2. Look up instructions in TOOL_INSTRUCTIONS              │  │
+│  │   3. Inject into {{{activeProtocols}}} section              │  │
+│  │                                                             │  │
+│  │   Pattern: BEFORE / AFTER / NEXT / GOTCHA                   │  │
 │  └─────────────────────────────────────────────────────────────┘  │
-│                               │                                   │
-│                               ▼                                   │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │           getSystemPrompt() in prepareCall                  │  │
-│  │                                                             │  │
-│  │   Context: {                                                │  │
-│  │     currentDate: "2025-01-15",                              │  │
-│  │     workingMemory: "[entities in context]"                  │  │
-│  │   }                                                         │  │
-│  │                                                             │  │
-│  │   Returns: compiled prompt with working memory injected     │  │
-│  └─────────────────────────────────────────────────────────────┘  │
+│                                                                   │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -85,60 +69,43 @@ With a comprehensive prompt:
 
 ## Prompt Structure
 
-### Module Composition
+### Core Prompt (agent.xml)
 
-```typescript
-// server/agent/system-prompt.ts
-const PROMPT_MODULES = [
-  "core/base-rules.xml",        // Identity, ReAct loop, confirmations
-  "workflows/cms-pages.xml",    // Page and section management
-  "workflows/cms-images.xml",   // Image handling and display
-  "workflows/cms-posts.xml",    // Blog post management
-  "workflows/cms-navigation.xml", // Navigation management
-  "workflows/web-research.xml",   // Exa AI web research
-] as const;
-
-function loadPromptModules(): string {
-  const promptsDir = path.join(__dirname, "../prompts");
-
-  const modules = PROMPT_MODULES.map((modulePath) => {
-    const fullPath = path.join(promptsDir, modulePath);
-    return fs.readFileSync(fullPath, "utf-8");
-  }).filter(Boolean);
-
-  return `<agent>\n${modules.join("\n\n")}\n</agent>`;
-}
-```
-
-### Composed Structure
+The core prompt is minimal (~1400 tokens) and focuses on:
+- Agent identity and ReAct pattern
+- Tool discovery via `tool_search`
+- Working memory injection point
+- Active protocols injection point
 
 ```xml
 <agent>
-  <!-- From core/base-rules.xml -->
-  <base-rules>
-    <identity>Role, expertise, personality</identity>
-    <working-memory>{{{workingMemory}}}</working-memory>
-    <react-pattern>Think → Act → Observe → Repeat</react-pattern>
-    <reasoning-rules>Critical rules</reasoning-rules>
-    <reference-resolution>Entity references</reference-resolution>
-    <confirmation-workflow>Destructive ops</confirmation-workflow>
-  </base-rules>
-
-  <!-- From workflows/cms-pages.xml -->
-  <cms-pages>Page CRUD patterns, section management</cms-pages>
-
-  <!-- From workflows/cms-images.xml -->
-  <cms-images>Image search, display rules, CRITICAL URL handling</cms-images>
-
-  <!-- From workflows/cms-posts.xml -->
-  <cms-posts>Blog lifecycle: draft → publish → archive</cms-posts>
-
-  <!-- From workflows/cms-navigation.xml -->
-  <cms-navigation>Menu structure management</cms-navigation>
-
-  <!-- From workflows/web-research.xml -->
-  <web-research>Exa AI web research patterns</web-research>
+  <identity>Autonomous AI assistant using ReAct pattern</identity>
+  <react>THINK → ACT → OBSERVE → REPEAT</react>
+  <tool-discovery>Search by CAPABILITY, not content topics</tool-discovery>
+  <operational-knowledge>References, confirmations, efficiency</operational-knowledge>
+  <working-memory>{{{workingMemory}}}</working-memory>
+  <current-datetime>{{currentDate}}</current-datetime>
+  <active-protocols>{{{activeProtocols}}}</active-protocols>
 </agent>
+```
+
+### Per-Tool Instructions
+
+Tool-specific workflows are defined in `server/tools/instructions/index.ts`:
+
+```typescript
+export const TOOL_INSTRUCTIONS: Record<string, string> = {
+  cms_createPost: `BEFORE: cms_listPosts to check for duplicate titles
+AFTER: Ask if user wants cover image; ask if ready to publish
+NEXT: pexels_searchPhotos (cover image), cms_publishPost
+GOTCHA: Creates DRAFT only. Set BOTH featuredImage AND content.cover.`,
+
+  cms_deletePage: `BEFORE: cms_getPage to verify; cms_getNavigation to check if in menu
+AFTER: Confirm deletion
+NEXT: cms_removeNavigationItem if was in navigation
+GOTCHA: CASCADE deletes all sections. Requires confirmed:true.`,
+  // ... 40+ more tools
+};
 ```
 
 ---
@@ -663,85 +630,32 @@ Multi-step workflow demonstrations:
 
 ---
 
-## Module Files
+## Per-Tool Instruction Pattern
 
-### core/base-rules.xml
+Each tool has instructions following BEFORE/AFTER/NEXT/GOTCHA:
 
-Contains fundamental agent behavior:
+```typescript
+// server/tools/instructions/index.ts
+cms_searchImages: `BEFORE: None required
+AFTER: Show results with local URLs, ask which to use
+NEXT: cms_updateSectionImage (attach to section)
+GOTCHA: EXPAND short queries: "AI" -> "artificial intelligence robot technology".`,
 
-```xml
-<base-rules>
-  <identity>
-    You are an autonomous AI assistant using the ReAct pattern.
-    Your expertise: Content management, data modeling, multi-step workflows
-    Your personality: Confident, transparent, careful with destructive ops
-  </identity>
-
-  <CRITICAL-IMAGE-RULE>
-    Image URLs from tools start with `/uploads/...` - LOCAL PATHS!
-    YOU MUST USE THE PATH EXACTLY AS RETURNED. DO NOT ADD ANYTHING.
-    ✅ CORRECT: `![Alt](/uploads/images/2025/12/01/original/abc.jpg)`
-    ❌ WRONG: `![Alt](https://uploads/images/...)` ← BREAKS IMAGE!
-  </CRITICAL-IMAGE-RULE>
-
-  <working-memory>
-    {{{workingMemory}}}
-  </working-memory>
-
-  <react-pattern>
-    **THE REACT LOOP: Think → Act → Observe → Repeat**
-    COMPLETION: Prefix final response with FINAL_ANSWER:
-  </react-pattern>
-
-  <confirmation-workflow>
-    Destructive tools have `confirmed` parameter
-    First call returns requiresConfirmation: true
-    Ask user, then call with confirmed: true
-  </confirmation-workflow>
-</base-rules>
+pexels_downloadPhoto: `BEFORE: pexels_searchPhotos to get photoId
+AFTER: Confirm download, show LOCAL url from response
+NEXT: cms_updateSectionImage (attach), cms_updatePost (set cover)
+GOTCHA: Use LOCAL url from response (/uploads/...). NEVER use pexels.com URLs.`,
 ```
 
-### workflows/cms-images.xml
+### Tool Instruction Categories
 
-Critical image handling rules:
-
-```xml
-<cms-images>
-  <CRITICAL-IMAGE-RULE>
-    Local paths ONLY. Never add https:// to /uploads/ paths.
-  </CRITICAL-IMAGE-RULE>
-
-  <image-display>
-    **{filename}**
-    ![{description}]({url})   ← EXACT url from tool
-    {description}
-    Tags: {tags}
-  </image-display>
-
-  <semantic-search>
-    Lower scores = better matches
-    -0.3 or better = strong match
-  </semantic-search>
-</cms-images>
-```
-
-### workflows/cms-posts.xml
-
-Blog post lifecycle:
-
-```xml
-<cms-posts>
-  <states>
-    DRAFT → PUBLISHED → ARCHIVED → DELETED
-  </states>
-
-  <transitions>
-    Draft → Published: cms_publishPost
-    Published → Archived: cms_archivePost
-    Any → Deleted: cms_deletePost (confirmed: true)
-  </transitions>
-</cms-posts>
-```
+| Category | Tools | Key Instructions |
+|----------|-------|------------------|
+| Posts | cms_createPost, cms_publishPost, etc. | Draft workflow, cover images, confirmation |
+| Pages | cms_createPage, cms_deletePage, etc. | Slug uniqueness, cascade deletes |
+| Sections | cms_updateSectionContent, etc. | Field names from schema, merge behavior |
+| Images | cms_searchImages, pexels_downloadPhoto | Local URLs, semantic search scoring |
+| Navigation | cms_addNavigationItem, etc. | URL format, location options |
 
 ---
 
@@ -829,18 +743,18 @@ Repeat critical rules:
 
 ## Design Decisions
 
-### Why Modular Structure?
+### Why Per-Tool Instructions?
 
 | Approach | Tradeoff |
 |----------|----------|
-| Single file (`react.xml`) | Hard to maintain, conflicts on merge |
-| Modular XML files | Easy to update individual workflows |
+| All instructions in system prompt | Large context, wasted tokens |
+| Per-tool instructions (current) | ~1400 token base, inject only what's needed |
 
 Benefits:
-1. **Separation of concerns** - Each workflow is self-contained
-2. **Easier updates** - Change images.xml without touching posts.xml
-3. **Team collaboration** - Less merge conflicts
-4. **Testability** - Can test individual modules
+1. **Token efficiency** - Only inject instructions for discovered tools
+2. **Scalability** - Add tools without bloating system prompt
+3. **Maintainability** - Each tool's instructions are colocated
+4. **Dynamic** - Instructions appear after tool discovery via `prepareStep`
 
 ### Why Lazy Compilation?
 
@@ -889,18 +803,15 @@ Approximate token counts:
 
 | Section | Tokens |
 |---------|--------|
-| Identity | ~200 |
-| Core Loop | ~300 |
+| Core agent.xml (identity, ReAct, tool-discovery) | ~1400 |
 | Working Memory (empty) | ~50 |
 | Working Memory (10 entities) | ~200 |
-| Tool Guide | ~400 |
-| Domain Guides (all) | ~800 |
-| Error Handling | ~300 |
-| Confirmation | ~200 |
-| Examples | ~400 |
-| **Total** | **~2800** |
+| Active Protocols (5 tools) | ~400 |
+| Active Protocols (10 tools) | ~800 |
+| **Base Total** | **~1400** |
+| **With 10 tools + memory** | **~2400** |
 
-With 4096 max output tokens and 128K context, this leaves plenty of room for conversation history.
+Key improvement: Base prompt is ~50% smaller than previous architecture. Tool instructions are injected only when needed.
 
 ---
 
@@ -917,46 +828,30 @@ With 4096 max output tokens and 128K context, this leaves plenty of room for con
 
 ## Modifying the Prompt
 
-### Adding a New Domain Guide
+### Adding a New Tool Instruction
 
-1. Add section to `react.xml`:
-```xml
-<new_feature_guide>
-  **FEATURE OVERVIEW**
-  ...
-  **WORKFLOW**
-  ...
-  **EXAMPLES**
-  ...
-</new_feature_guide>
-```
-
-2. Add examples showing the workflow
-3. Test with representative queries
-
-### Adding Dynamic Injection
-
-1. Add variable to compilation context:
+1. Add entry to `TOOL_INSTRUCTIONS` in `server/tools/instructions/index.ts`:
 ```typescript
-return compiled({
-  // existing...
-  newVariable: context.newValue
-});
+my_new_tool: `BEFORE: Prerequisites
+AFTER: Follow-up actions
+NEXT: Suggested tools
+GOTCHA: Edge cases and critical rules`,
 ```
 
-2. Add injection point in template:
-```xml
-{{newVariable}}
-<!-- or for multi-line: -->
-{{{newVariable}}}
-```
+2. The instruction is automatically injected when the tool is discovered
+
+### Modifying Core Prompt
+
+1. Edit `server/prompts/core/agent.xml`
+2. Keep it minimal - detailed workflows go in per-tool instructions
+3. Test with diverse queries
 
 ### Testing Prompt Changes
 
 1. Make change
-2. Test with diverse queries
+2. Test with tool discovery flow
 3. Check for regressions in existing behavior
-4. Verify token count is reasonable
+4. Verify token count is reasonable (~1400 base)
 
 ---
 

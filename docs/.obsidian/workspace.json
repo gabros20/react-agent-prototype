@@ -189,6 +189,7 @@
   },
   "active": "78c6c50f5cf8c074",
   "lastOpenFiles": [
+    "plans/AGENT_MODULE_REORGANIZATION_PLAN.md",
     "architecture/_ INDEX.md",
     "architecture/AGENT_SYSTEM_DIAGRAM.md",
     "knowledge-base/0-foundations/0.1.2-training-vs-inference.md",
@@ -215,7 +216,6 @@
     "architecture/LAYER_6.6_TRACE_OBSERVABILITY.md",
     "development/DEBUG_LOGGING_SYSTEM.md",
     "ENHANCED_DEBUG_PANEL_PLAN.md",
-    "development/IMPLEMENTATION_SPRINTS.md",
     "architecture",
     "C - Brease Assistant.canvas",
     "C - Brease Assistant - IMAGE 20251109.png",

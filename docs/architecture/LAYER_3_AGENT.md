@@ -13,10 +13,10 @@ The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v
 
 **Key Files:**
 - `server/agent/cms-agent.ts` - ToolLoopAgent singleton definition
-- `server/agent/system-prompt.ts` - Modular prompt compilation
+- `server/agent/system-prompt.ts` - Prompt compilation with Handlebars
 - `server/routes/agent.ts` - Streaming route handler
-- `server/prompts/core/` - Base rules XML module
-- `server/prompts/workflows/` - Workflow-specific XML modules
+- `server/prompts/core/agent.xml` - Core agent prompt (~1400 tokens)
+- `server/tools/instructions/index.ts` - Per-tool instructions
 - `server/tools/` - Tool definitions
 
 ---
@@ -79,8 +79,8 @@ The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v
 | `server/routes/agent.ts`                | Stream/generate route handlers   |
 | `server/tools/all-tools.ts`             | Tool registry                    |
 | `server/tools/*.ts`                     | Individual tool definitions      |
-| `server/prompts/core/base-rules.xml`    | Identity, ReAct, working memory  |
-| `server/prompts/workflows/*.xml`        | Workflow-specific prompts        |
+| `server/prompts/core/agent.xml`         | Core agent prompt (~1400 tokens) |
+| `server/tools/instructions/index.ts`    | Per-tool instructions            |
 | `server/services/working-memory/`       | Entity extraction                |
 | `lib/tokenizer.ts`                      | Token counting (tiktoken)        |
 | `server/services/openrouter-pricing.ts` | Cost calculation                 |
@@ -432,7 +432,7 @@ cms_deletePage: tool({
 
 ## System Prompt
 
-The prompt is compiled from modular XML files using Handlebars:
+The prompt is compiled from a single core XML file using Handlebars, with per-tool instructions injected dynamically:
 
 ```typescript
 // server/agent/system-prompt.ts
@@ -443,74 +443,51 @@ import path from "node:path";
 export interface SystemPromptContext {
   currentDate: string;
   workingMemory?: string;
+  activeProtocols?: string;
 }
-
-// Modular prompt structure
-const PROMPT_MODULES = [
-  "core/base-rules.xml",       // Identity, ReAct loop, confirmations
-  "workflows/cms-pages.xml",   // Page and section management
-  "workflows/cms-images.xml",  // Image handling and display
-  "workflows/cms-posts.xml",   // Blog post management
-  "workflows/cms-navigation.xml", // Navigation management
-  "workflows/web-research.xml",   // Exa AI web research
-] as const;
 
 let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
 
-function loadPromptModules(): string {
-  const promptsDir = path.join(__dirname, "../prompts");
-
-  const modules = PROMPT_MODULES.map((modulePath) => {
-    const fullPath = path.join(promptsDir, modulePath);
-    try {
-      return fs.readFileSync(fullPath, "utf-8");
-    } catch (error) {
-      console.warn(`Warning: Could not load prompt module: ${modulePath}`);
-      return "";
-    }
-  }).filter(Boolean);
-
-  // Compose into single agent prompt
-  return `<agent>\n${modules.join("\n\n")}\n</agent>`;
+function loadAgentPrompt(): string {
+  const agentPath = path.join(__dirname, "../prompts/core/agent.xml");
+  return fs.readFileSync(agentPath, "utf-8");
 }
 
 export function getSystemPrompt(context: SystemPromptContext): string {
   if (!compiledTemplate) {
-    const template = loadPromptModules();
+    const template = loadAgentPrompt();
     compiledTemplate = Handlebars.compile(template);
   }
 
   return compiledTemplate({
     ...context,
     workingMemory: context.workingMemory || "",
+    activeProtocols: context.activeProtocols || "",
   });
 }
 ```
 
-### Prompt Module Structure
+### Prompt Structure
 
 ```
 server/prompts/
-├── core/
-│   └── base-rules.xml       # Identity, ReAct pattern, working memory
-└── workflows/
-    ├── cms-pages.xml        # Page/section CRUD patterns
-    ├── cms-images.xml       # Image search and display rules
-    ├── cms-posts.xml        # Blog post management
-    ├── cms-navigation.xml   # Navigation editing
-    └── web-research.xml     # Exa AI research patterns
+└── core/
+    └── agent.xml            # Core prompt (~1400 tokens)
+
+server/tools/
+└── instructions/
+    └── index.ts             # Per-tool instructions (40+ tools)
 ```
 
-### Working Memory Injection
-
-The `{{{workingMemory}}}` Handlebars triple-stash injects entity context:
+### Dynamic Injection Points
 
 ```xml
-<!-- core/base-rules.xml -->
-<working-memory>
-{{{workingMemory}}}
-</working-memory>
+<!-- agent.xml -->
+<working-memory>{{{workingMemory}}}</working-memory>
+<active-protocols>{{{activeProtocols}}}</active-protocols>
 ```
+
+Per-tool instructions are injected into `activeProtocols` via `prepareStep` after `tool_search` discovers tools.
 
 ---
 

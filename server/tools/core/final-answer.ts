@@ -12,7 +12,7 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const finalAnswerTool = tool({
-	description: `Present final results to user. Call this when all requested actions are complete and you are ready to respond.`,
+	description: `Present final results to user. ONLY call when all tool calls are complete and you have data to report. NEVER call if user asked to verify/check something - call the verification tool FIRST, then final_answer with the result.`,
 
 	inputSchema: z.object({
 		summary: z
