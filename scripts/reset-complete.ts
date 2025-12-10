@@ -161,22 +161,9 @@ async function resetComplete() {
     }
 
     // ========================================================================
-    // PHASE 6: Seed CMS Data
+    // PHASE 6: Download Images (MUST run BEFORE seed for path resolution)
     // ========================================================================
-    console.log("6️⃣  Seeding CMS data...");
-    try {
-      const { stdout } = await execAsync("pnpm seed");
-      // Don't print full output, just confirmation
-      console.log("   ✅ CMS data seeded\n");
-    } catch (error) {
-      console.error("   ❌ Seed failed:", error);
-      process.exit(1);
-    }
-
-    // ========================================================================
-    // PHASE 7: Download and Process Images
-    // ========================================================================
-    console.log("7️⃣  Downloading and processing images...");
+    console.log("6️⃣  Downloading images...");
 
     // Start worker in background
     console.log("   🔧 Starting worker...");
@@ -188,11 +175,11 @@ async function resetComplete() {
     // Wait a moment for worker to initialize
     await sleep(2000);
 
-    // Run seed-images
+    // Run seed-images first - creates image records with file paths
     console.log("   ⬇️  Downloading images...");
     try {
       await execAsync("pnpm seed:images");
-      console.log("   ✅ Images queued for processing");
+      console.log("   ✅ Images downloaded and queued for processing");
     } catch (error) {
       console.error("   ❌ Image seeding failed:", error);
       workerProc.kill("SIGTERM");
@@ -241,6 +228,19 @@ async function resetComplete() {
     } else {
       console.log("   ⚠️  Timeout waiting for image processing\n");
       console.log("   Run 'pnpm check:images' to verify status\n");
+    }
+
+    // ========================================================================
+    // PHASE 7: Seed CMS Data (runs AFTER images so paths can be resolved)
+    // ========================================================================
+    console.log("7️⃣  Seeding CMS data...");
+    try {
+      const { stdout } = await execAsync("pnpm seed");
+      // Don't print full output, just confirmation
+      console.log("   ✅ CMS data seeded\n");
+    } catch (error) {
+      console.error("   ❌ Seed failed:", error);
+      process.exit(1);
     }
 
     // ========================================================================

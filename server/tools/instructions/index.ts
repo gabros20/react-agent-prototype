@@ -12,21 +12,20 @@
  * These are kept separate from tool descriptions (which should be SHORT)
  * to enable token-efficient context injection.
  *
- * Hot-reload: In development mode, instructions are loaded from JSON file on each call.
- * In production, the static TOOL_INSTRUCTIONS object is used for performance.
+ * Hot-reload: Instructions are always loaded from JSON file on each access,
+ * enabling live updates without restarting the server in both dev and production.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizePromptText } from "../../utils/prompt-normalizer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const isDev = process.env.NODE_ENV !== "production";
-
 /**
- * Load tool instructions from JSON file (for hot-reload in dev)
+ * Load tool instructions from JSON file (hot-reload enabled)
  */
 function loadToolInstructionsFromFile(): Record<string, string> {
 	const jsonPath = path.join(__dirname, "tool-instructions.json");
@@ -35,7 +34,8 @@ function loadToolInstructionsFromFile(): Record<string, string> {
 }
 
 /**
- * Static tool instructions (used in production, fallback for dev)
+ * Static tool instructions (fallback only - used if JSON file fails to load)
+ * Keep in sync with tool-instructions.json as backup
  */
 const STATIC_TOOL_INSTRUCTIONS: Record<string, string> = {
 	// ============================================================================
@@ -203,7 +203,7 @@ AFTER: Show results with previews, ask which to download
 NEXT: pexels_downloadPhoto
 GOTCHA: Use SPECIFIC queries: "monstera deliciosa leaf close-up" not "plant". Evaluate alt text before downloading.`,
 
-	pexels_downloadPhoto: `BEFORE: pexels_searchPhotos to get photoId
+	pexels_downloadPhoto: `BEFORE: MUST use pexels_searchPhotos first to get photoId
 AFTER: Confirm download, show LOCAL url from response
 NEXT: cms_updateSectionImage (attach), cms_updatePost (set cover)
 GOTCHA: Use LOCAL url from response (/uploads/...). NEVER use pexels.com URLs or https://yourdomain.com/... - only relative paths starting with /uploads/. Include photographer credit.`,
@@ -324,25 +324,33 @@ GOTCHA:
 AFTER: USE the discovered tools to complete the task. Discovery alone does NOT fulfill user requests.
 NEXT: Call discovered tools (e.g., cms_listPages, cms_createPost, etc.)
 GOTCHA: tool_search only finds tools - you MUST then call those tools. Search by CAPABILITY keywords ("create post", "list pages") not content.`,
+
+	acknowledge: `BEFORE: None required - call FIRST before any other tools
+AFTER: Proceed with tool_search or discovered tools to fulfill the request
+NEXT: tool_search (discover capabilities), or discovered CMS tools
+GOTCHA: Vary your acknowledgments naturally. Match tone to request complexity:
+- Quick asks: "Sure!", "On it.", "One sec..."
+- Listing: "Let me pull that up.", "Checking..."
+- Creating: "I'll set that up.", "Working on it."
+- Complex: "Good idea, let me work through this."
+NEVER use the same "I'll check the X for you" pattern repeatedly.`,
 };
 
 /**
- * Get tool instructions - hot-reloads from JSON in dev mode
+ * Get tool instructions - always loads from JSON file (hot-reload enabled)
+ * Falls back to static instructions only if JSON file cannot be loaded
  */
 function getInstructions(): Record<string, string> {
-	if (isDev) {
-		try {
-			return loadToolInstructionsFromFile();
-		} catch (error) {
-			console.warn("[tool-instructions] Failed to load JSON, using static fallback:", error);
-			return STATIC_TOOL_INSTRUCTIONS;
-		}
+	try {
+		return loadToolInstructionsFromFile();
+	} catch (error) {
+		console.warn("[tool-instructions] Failed to load JSON, using static fallback:", error);
+		return STATIC_TOOL_INSTRUCTIONS;
 	}
-	return STATIC_TOOL_INSTRUCTIONS;
 }
 
 /**
- * Exported for backwards compatibility (reads fresh in dev mode)
+ * Exported for backwards compatibility (always reads fresh from JSON file)
  */
 export const TOOL_INSTRUCTIONS = new Proxy({} as Record<string, string>, {
 	get(_, prop: string) {
@@ -372,11 +380,21 @@ export function getToolInstruction(toolName: string): string | undefined {
  */
 export function getToolInstructions(toolNames: string[]): string {
 	const instructions = getInstructions();
-	return toolNames
+	const raw = toolNames
 		.map((name) => {
 			const instruction = instructions[name];
-			return instruction ? `## ${name}\n${instruction}` : null;
+			if (!instruction) return null;
+			// Wrap each tool's protocol in an XML-like tag so it slots cleanly into
+			// <tool-usage-instructions> ... </tool-usage-instructions> in agent.xml.
+			// Example:
+			// <tool_search>
+			// BEFORE: ...
+			// ...
+			// </tool_search>
+			return `<${name}>\n${instruction}\n</${name}>`;
 		})
 		.filter(Boolean)
 		.join("\n\n");
+
+	return normalizePromptText(raw);
 }

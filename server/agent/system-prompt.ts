@@ -15,6 +15,7 @@ import Handlebars from "handlebars";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizePromptText } from "../utils/prompt-normalizer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,11 +51,12 @@ export function getSystemPrompt(context: SystemPromptContext): string {
 	if (isDev) {
 		const template = loadAgentPrompt();
 		const compiled = Handlebars.compile(template);
-		return compiled({
+		const prompt = compiled({
 			...context,
 			workingMemory: context.workingMemory || "",
 			activeProtocols: context.activeProtocols || "",
 		});
+		return normalizePromptText(prompt);
 	}
 
 	// Production: use cached template
@@ -63,11 +65,13 @@ export function getSystemPrompt(context: SystemPromptContext): string {
 		compiledTemplate = Handlebars.compile(template);
 	}
 
-	return compiledTemplate({
-		...context,
-		workingMemory: context.workingMemory || "",
-		activeProtocols: context.activeProtocols || "",
-	});
+	return normalizePromptText(
+		compiledTemplate({
+			...context,
+			workingMemory: context.workingMemory || "",
+			activeProtocols: context.activeProtocols || "",
+		})
+	);
 }
 
 // Alias for clarity

@@ -21,11 +21,16 @@ export function useAgent() {
 	// Store selectors
 	const messages = useChatStore((state) => state.messages);
 	const sessionId = useChatStore((state) => state.sessionId);
+	const streamingMessage = useChatStore((state) => state.streamingMessage);
 	const addMessage = useChatStore((state) => state.addMessage);
 	const setIsStreaming = useChatStore((state) => state.setIsStreaming);
 	const setSessionId = useChatStore((state) => state.setSessionId);
 	const setCurrentTraceId = useChatStore((state) => state.setCurrentTraceId);
 	const setAgentStatus = useChatStore((state) => state.setAgentStatus);
+	const startStreamingMessage = useChatStore((state) => state.startStreamingMessage);
+	const appendToStreamingMessage = useChatStore((state) => state.appendToStreamingMessage);
+	const finalizeStreamingMessage = useChatStore((state) => state.finalizeStreamingMessage);
+	const clearStreamingMessage = useChatStore((state) => state.clearStreamingMessage);
 	const loadSessions = useSessionStore((state) => state.loadSessions);
 	const getCurrentSessionModel = useSessionStore((state) => state.getCurrentSessionModel);
 
@@ -89,7 +94,7 @@ export function useAgent() {
 				setAgentStatus(null);
 			}
 		},
-		[sessionId, addMessage, setIsStreaming, setSessionId, setCurrentTraceId, setAgentStatus, loadSessions, getCurrentSessionModel]
+		[sessionId, addMessage, setIsStreaming, setSessionId, setCurrentTraceId, setAgentStatus, clearStreamingMessage, loadSessions, getCurrentSessionModel]
 	);
 
 	// Helper to ensure trace is initialized
@@ -149,11 +154,26 @@ export function useAgent() {
 				break;
 			}
 
+			case "message-start": {
+				// Start a new streaming message for UI display
+				const messageId = (d.messageId as string) || crypto.randomUUID();
+				startStreamingMessage(messageId);
+				break;
+			}
+
 			case "text-delta": {
 				const delta = (d.delta as string) || (d.text as string) || "";
 				streamingTextRef.current += delta;
+				// Update streaming message for real-time UI display
+				appendToStreamingMessage(delta);
 				traceRef.current?.textDelta(delta);
 				return { text: state.assistantText + delta };
+			}
+
+			case "message-complete": {
+				// Finalize the streaming message - move to messages array
+				finalizeStreamingMessage();
+				break;
 			}
 
 			case "system-prompt": {
@@ -292,15 +312,11 @@ export function useAgent() {
 					setSessionId(d.sessionId as string);
 				}
 
-				if (text.trim()) {
-					const assistantMessage: ChatMessage = {
-						id: crypto.randomUUID(),
-						role: "assistant",
-						content: text,
-						createdAt: new Date(),
-					};
-					addMessage(assistantMessage as unknown as Parameters<typeof addMessage>[0]);
-				}
+				// Clear any remaining streaming message (shouldn't happen, but safety net)
+				clearStreamingMessage();
+
+				// NOTE: We no longer add assistant message here
+				// message-complete events handle adding messages during streaming
 
 				const usage = d.usage as { promptTokens?: number; completionTokens?: number; inputTokens?: number; outputTokens?: number } | undefined;
 				const inputTokens = usage?.promptTokens || usage?.inputTokens || 0;
@@ -369,6 +385,7 @@ export function useAgent() {
 
 	return {
 		messages,
+		streamingMessage,
 		sendMessage,
 		isStreaming: useChatStore((state) => state.isStreaming),
 		error,

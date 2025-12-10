@@ -39,6 +39,15 @@ export const TOOL_INDEX: Record<string, ToolMetadata> = {
 		extraction: null, // Core tool - no entity extraction
 	},
 
+	acknowledge: {
+		name: "acknowledge",
+		phrases: ["acknowledge", "confirm", "understood", "got it", "I'll check", "let me look", "working on it"],
+		relatedTools: ["tool_search"],
+		riskLevel: "safe",
+		requiresConfirmation: false,
+		extraction: null, // Core tool - no entity extraction
+	},
+
 	// ==========================================================================
 	// Pages (6 tools)
 	// ==========================================================================

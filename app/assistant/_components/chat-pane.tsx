@@ -7,7 +7,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { PromptInput, PromptInputBody, PromptInputTextarea, PromptInputFooter, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { useAgent } from "../_hooks/use-agent";
-import { useChatStore, type ChatMessage } from "../_stores/chat-store";
+import { useChatStore, type ChatMessage, type StreamingMessage } from "../_stores/chat-store";
 import { useSessionStore } from "../_stores/session-store";
 import { Button } from "@/components/ui/button";
 import { Trash2, MessageSquare } from "lucide-react";
@@ -26,19 +26,33 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // Inner component that handles auto-scroll when messages change
-function MessageList({ messages }: { messages: ChatMessage[] }) {
+function MessageList({ messages, streamingMessage }: { messages: ChatMessage[]; streamingMessage: StreamingMessage | null }) {
 	const { scrollToBottom } = useStickToBottomContext();
 	const prevMessagesLength = useRef(messages.length);
+	const prevStreamingContent = useRef<string | null>(null);
 
 	useEffect(() => {
-		// Only scroll when new messages are added
+		// Scroll when new messages are added
 		if (messages.length > prevMessagesLength.current) {
 			scrollToBottom({ animation: "smooth" });
 		}
 		prevMessagesLength.current = messages.length;
 	}, [messages.length, scrollToBottom]);
 
-	if (messages.length === 0) {
+	// Also scroll when streaming message content changes significantly
+	useEffect(() => {
+		if (streamingMessage?.content && streamingMessage.content !== prevStreamingContent.current) {
+			// Only scroll if this is a new streaming message or significant content addition
+			if (!prevStreamingContent.current || streamingMessage.content.length > prevStreamingContent.current.length + 50) {
+				scrollToBottom({ animation: "smooth" });
+			}
+			prevStreamingContent.current = streamingMessage.content;
+		} else if (!streamingMessage) {
+			prevStreamingContent.current = null;
+		}
+	}, [streamingMessage?.content, scrollToBottom]);
+
+	if (messages.length === 0 && !streamingMessage) {
 		return (
 			<div className='flex items-center justify-center h-full text-muted-foreground p-4'>
 				<div className='text-center'>
@@ -58,6 +72,21 @@ function MessageList({ messages }: { messages: ChatMessage[] }) {
 					</MessageContent>
 				</Message>
 			))}
+
+			{/* Streaming message - real-time display during agent execution */}
+			{streamingMessage && streamingMessage.content && (
+				<Message from="assistant" key={streamingMessage.id}>
+					<MessageContent>
+						<div className="flex items-end gap-0.5">
+							<Response className='text-xs sm:text-sm'>
+								{streamingMessage.content}
+							</Response>
+							<span className="inline-block w-2 h-4 bg-current animate-pulse shrink-0" />
+						</div>
+					</MessageContent>
+				</Message>
+			)}
+
 			{/* Status indicator at end of messages during streaming */}
 			<AgentStatusIndicator />
 		</>
@@ -65,11 +94,11 @@ function MessageList({ messages }: { messages: ChatMessage[] }) {
 }
 
 // Memoized conversation area - won't re-render when input changes
-const ConversationArea = memo(function ConversationArea({ messages }: { messages: ChatMessage[] }) {
+const ConversationArea = memo(function ConversationArea({ messages, streamingMessage }: { messages: ChatMessage[]; streamingMessage: StreamingMessage | null }) {
 	return (
 		<Conversation className='h-full'>
 			<ConversationContent>
-				<MessageList messages={messages} />
+				<MessageList messages={messages} streamingMessage={streamingMessage} />
 			</ConversationContent>
 			<ConversationScrollButton />
 		</Conversation>
@@ -110,7 +139,7 @@ function ChatInput({ onSendMessage, isStreaming }: { onSendMessage: (text: strin
 }
 
 export function ChatPane() {
-	const { sendMessage, isStreaming } = useAgent();
+	const { sendMessage, isStreaming, streamingMessage } = useAgent();
 
 	// Use selectors to avoid subscribing to entire store
 	const messages = useChatStore((state) => state.messages);
@@ -169,7 +198,7 @@ export function ChatPane() {
 
 			{/* Messages - Flex-1 with overflow */}
 			<div className='flex-1 min-h-0 overflow-hidden'>
-				<ConversationArea messages={messages} />
+				<ConversationArea messages={messages} streamingMessage={streamingMessage} />
 			</div>
 
 			{/* Input - Fixed (isolated component to prevent re-renders) */}

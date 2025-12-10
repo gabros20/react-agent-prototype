@@ -33,7 +33,7 @@
 
 	"cms_getSectionContent": "BEFORE: cms_getPageSections to get pageSectionId\nAFTER: Show content to user\nNEXT: cms_updateSectionContent (edit), cms_updateSectionImage (change image)\nGOTCHA: Returns full content for ONE section. More efficient than fetching entire page.",
 
-	"cms_addSectionToPage": "BEFORE: cms_getPage (get pageId), cms_listSectionTemplates (get sectionDefId)\nAFTER: Show new pageSectionId, suggest adding content\nNEXT: cms_updateSectionContent, cms_updateSectionImage\nGOTCHA: Returns pageSectionId - use this for content updates, not sectionDefId.",
+	"cms_addSectionToPage": "BEFORE: cms_getPage (get the actual pageId UUID; if you only know the slug, use cms_findResource or cms_listPages to retrieve the pageId), cms_listSectionTemplates (get sectionDefId)\nAFTER: Show new pageSectionId, suggest adding content\nNEXT: cms_updateSectionContent, cms_updateSectionImage\nGOTCHA: Returns pageSectionId - use this for content updates, not sectionDefId. Passing slug/label instead of pageId will fail.",
 
 	"cms_updateSectionContent": "BEFORE: cms_getSectionFields to know field names\nAFTER: Verify update with cms_getSectionContent if needed\nNEXT: cms_updateSectionImage (for images)\nGOTCHA: MERGES with existing - only send fields you want to change. Don't resend all fields.",
 
@@ -49,7 +49,7 @@
 
 	"cms_addImageToSection": "BEFORE: cms_getSectionFields to know image field names\nAFTER: Verify with cms_getSectionContent\nNEXT: None (operation complete)\nGOTCHA: Deprecated - use cms_updateSectionImage instead.",
 
-	"cms_updateSectionImage": "BEFORE: cms_getSectionFields (get field names), cms_searchImages (get imageId)\nAFTER: Confirm image attached\nNEXT: cms_getSectionContent (verify)\nGOTCHA: imageField must match section schema (e.g., \"backgroundImage\", \"image\", \"cover\").",
+	"cms_updateSectionImage": "BEFORE: 1) Get the pageId (UUID) via cms_getPage or cms_listPages/cms_findResource when you only know the slug; never pass slug/name. 2) Fetch cms_getPageSections for that pageId, locate the target section by key/name (e.g., hero), and use its pageSectionId (do NOT fabricate strings like 'hero', 'Meet-Our-Team', 'Meet-Our-Team-hero', or any sectionDefId). 3) Get field names via cms_getSectionFields if needed. 4) Find/confirm image via cms_searchImages/cms_findImage (or download first). \nAFTER: Confirm image attached\nNEXT: cms_getSectionContent (verify)\nGOTCHA: imageField must match section schema (e.g., \"backgroundImage\", \"image\", \"cover\"); only the pageSectionId from cms_getPageSections is valid—sectionDefId/key/slug/name will fail.",
 
 	"cms_replaceImage": "BEFORE: cms_searchImages to find both old and new image IDs\nAFTER: Confirm replacement\nNEXT: cms_getSectionContent (verify)\nGOTCHA: Replaces image across all usages. Use for site-wide image updates.",
 
@@ -57,7 +57,7 @@
 
 	"pexels_searchPhotos": "BEFORE: cms_searchImages to check if we already have similar images\nAFTER: Show results with previews, ask which to download\nNEXT: pexels_downloadPhoto\nGOTCHA: Use SPECIFIC queries: \"monstera deliciosa leaf close-up\" not \"plant\". Evaluate alt text before downloading.",
 
-	"pexels_downloadPhoto": "BEFORE: pexels_searchPhotos to get photoId\nAFTER: Confirm download, show LOCAL url from response\nNEXT: cms_updateSectionImage (attach), cms_updatePost (set cover)\nGOTCHA: Use LOCAL url from response (/uploads/...). NEVER use pexels.com URLs or https://yourdomain.com/... - only relative paths starting with /uploads/. Include photographer credit.",
+	"pexels_downloadPhoto": "BEFORE: MUST use pexels_searchPhotos first to get photoId\nAFTER: Confirm download, show LOCAL url from response\nNEXT: cms_updateSectionImage (attach), cms_updatePost (set cover)\nGOTCHA: Use LOCAL url from response (/uploads/...). NEVER use pexels.com URLs or https://yourdomain.com/... - only relative paths starting with /uploads/. Include photographer credit.",
 
 	"cms_getNavigation": "BEFORE: None required\nAFTER: Show menu items to user\nNEXT: cms_addNavigationItem, cms_toggleNavigationItem\nGOTCHA: Shows header/footer navigation items with enabled status.",
 
@@ -91,5 +91,7 @@
 
 	"final_answer": "BEFORE: User asks to verify/check? → STOP, call verification tool (cms_getPost, cms_listPosts) FIRST, get result, THEN call final_answer. Complete all tool calls. Only report what tool results prove.\nAFTER: None (ends turn)\nNEXT: None\nGOTCHA:\n- NEVER say 'I will check' - actually check first\n- NEVER repeat previous response - verify fresh and answer concisely\n- Follow-up questions get SHORT answers (e.g., 'Yes, published' not full details)\n- Images: use relative /uploads/... paths only",
 
-	"tool_search": "BEFORE: None required\nAFTER: USE the discovered tools to complete the task. Discovery alone does NOT fulfill user requests.\nNEXT: Call discovered tools (e.g., cms_listPages, cms_createPost, etc.)\nGOTCHA: tool_search only finds tools - you MUST then call those tools. Search by CAPABILITY keywords (\"create post\", \"list pages\") not content."
+	"tool_search": "BEFORE: None required\nAFTER: USE the discovered tools to complete the task. Discovery alone does NOT fulfill user requests.\nNEXT: Call discovered tools (e.g., cms_listPages, cms_createPost, etc.)\nGOTCHA: tool_search only finds tools - you MUST then call those tools. Search by CAPABILITY keywords (\"create post\", \"list pages\") not content.",
+
+	"acknowledge": "BEFORE: None required - call FIRST before any other tools\nAFTER: Proceed with tool_search or discovered tools to fulfill the request\nNEXT: tool_search (discover capabilities), or discovered CMS tools\nGOTCHA: Vary your acknowledgments naturally. Match tone to request complexity:\n- Quick asks: \"Sure!\", \"On it.\", \"One sec...\"\n- Listing: \"Let me pull that up.\", \"Checking...\"\n- Creating: \"I'll set that up.\", \"Working on it.\"\n- Complex: \"Good idea, let me work through this.\"\nNEVER use the same \"I'll check the X for you\" pattern repeatedly."
 }

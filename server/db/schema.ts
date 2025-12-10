@@ -373,7 +373,8 @@ export const messages = sqliteTable("messages", {
     .notNull()
     .references(() => sessions.id, { onDelete: "cascade" }),
   role: text("role", { enum: ["system", "user", "assistant", "tool"] }).notNull(),
-  content: text("content", { mode: "json" }).notNull(),
+  content: text("content", { mode: "json" }).notNull(), // AI SDK format for LLM context
+  displayContent: text("display_content"), // Plain text for UI rendering (nullable for tool messages)
   toolName: text("tool_name"),
   stepIdx: integer("step_idx"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

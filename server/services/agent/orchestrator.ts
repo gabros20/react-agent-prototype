@@ -23,13 +23,7 @@ import { getSiteAndEnv } from "../../utils/get-context";
 import { getModelPricing } from "../openrouter-pricing";
 import { countTokens, countChatTokens } from "../../../lib/tokenizer";
 import type { AgentLogger, StreamWriter } from "../../tools/types";
-import type {
-	ExecuteOptions,
-	ResolvedExecuteOptions,
-	OrchestratorDependencies,
-	OrchestratorResult,
-	StreamEvent,
-} from "./types";
+import type { ExecuteOptions, ResolvedExecuteOptions, OrchestratorDependencies, OrchestratorResult, StreamEvent } from "./types";
 
 // ============================================================================
 // Orchestrator Class
@@ -54,10 +48,7 @@ export class AgentOrchestrator {
 	 * Execute agent with streaming response
 	 * Yields SSE events as async iterable
 	 */
-	async *executeStream(
-		options: ExecuteOptions,
-		writeSSE: (event: string, data: unknown) => void
-	): AsyncGenerator<void, void, unknown> {
+	async *executeStream(options: ExecuteOptions, writeSSE: (event: string, data: unknown) => void): AsyncGenerator<void, void, unknown> {
 		const resolved = await this.resolveOptions(options);
 		const logger = this.createSSELogger(resolved.traceId, writeSSE);
 
@@ -66,9 +57,7 @@ export class AgentOrchestrator {
 			await this.deps.sessionService.ensureSession(resolved.sessionId);
 
 			// Load working context
-			const workingContext = await this.deps.sessionService.loadWorkingContext(
-				resolved.sessionId
-			);
+			const workingContext = await this.deps.sessionService.loadWorkingContext(resolved.sessionId);
 
 			// Emit system prompt info
 			await this.emitSystemPromptInfo(resolved, workingContext, writeSSE);
@@ -77,19 +66,13 @@ export class AgentOrchestrator {
 			await this.emitModelInfo(resolved, writeSSE);
 
 			// Load previous messages
-			const previousMessages = await this.loadPreviousMessages(
-				options.sessionId,
-				logger
-			);
+			const previousMessages = await this.loadPreviousMessages(options.sessionId, logger);
 
 			// Emit user prompt info
 			this.emitUserPromptInfo(resolved, previousMessages, writeSSE);
 
 			// Build messages array
-			const messages: ModelMessage[] = [
-				...previousMessages,
-				{ role: "user", content: resolved.prompt },
-			];
+			const messages: ModelMessage[] = [...previousMessages, { role: "user", content: resolved.prompt }];
 
 			// Progressive context cleanup - trim messages and remove unused tools
 			const trimResult = this.contextManager.trimContext(messages, workingContext);
@@ -155,13 +138,12 @@ export class AgentOrchestrator {
 			});
 
 			// Process stream
-			const { toolCalls, toolResults, finalText, finishReason, usage } =
-				await this.processStream(
-					streamResult,
-					workingContext,
-					logger,
-					writeSSE
-				);
+			const { toolCalls, toolResults, finalText, finishReason, usage, displayTexts } = await this.processStream(
+				streamResult,
+				workingContext,
+				logger,
+				writeSSE
+			);
 
 			// Get response messages
 			const responseData = await streamResult.response;
@@ -170,7 +152,12 @@ export class AgentOrchestrator {
 				traceId: resolved.traceId,
 				toolCallsCount: toolCalls.length,
 				finishReason,
+				displayTextsCount: displayTexts.length,
 			});
+
+			// Combine all display texts for persistence
+			// This includes preflight text + intermediate thoughts + final answer
+			const combinedDisplayContent = displayTexts.join("\n\n").trim() || finalText;
 
 			// Save conversation and working context
 			await this.saveSessionData(
@@ -179,7 +166,8 @@ export class AgentOrchestrator {
 				resolved.prompt,
 				responseData.messages,
 				workingContext,
-				logger
+				logger,
+				combinedDisplayContent
 			);
 
 			// Send final result
@@ -220,9 +208,7 @@ export class AgentOrchestrator {
 		await this.deps.sessionService.ensureSession(resolved.sessionId);
 
 		// Load working context
-		const workingContext = await this.deps.sessionService.loadWorkingContext(
-			resolved.sessionId
-		);
+		const workingContext = await this.deps.sessionService.loadWorkingContext(resolved.sessionId);
 
 		logger.info("Starting agent execution (non-streaming)", {
 			traceId: resolved.traceId,
@@ -231,16 +217,10 @@ export class AgentOrchestrator {
 		});
 
 		// Load previous messages
-		const previousMessages = await this.loadPreviousMessages(
-			options.sessionId,
-			logger
-		);
+		const previousMessages = await this.loadPreviousMessages(options.sessionId, logger);
 
 		// Build messages array
-		const messages: ModelMessage[] = [
-			...previousMessages,
-			{ role: "user", content: resolved.prompt },
-		];
+		const messages: ModelMessage[] = [...previousMessages, { role: "user", content: resolved.prompt }];
 
 		// Progressive context cleanup - trim messages and remove unused tools
 		const trimResult = this.contextManager.trimContext(messages, workingContext);
@@ -269,14 +249,7 @@ export class AgentOrchestrator {
 		});
 
 		// Save conversation and working context
-		await this.saveSessionData(
-			resolved.sessionId,
-			previousMessages,
-			resolved.prompt,
-			result.response.messages,
-			workingContext,
-			logger
-		);
+		await this.saveSessionData(resolved.sessionId, previousMessages, resolved.prompt, result.response.messages, workingContext, logger);
 
 		return {
 			traceId: resolved.traceId,
@@ -306,9 +279,7 @@ export class AgentOrchestrator {
 		};
 	}
 
-	private async resolveCmsTarget(
-		target?: { siteId?: string; environmentId?: string }
-	): Promise<{ siteId: string; environmentId: string }> {
+	private async resolveCmsTarget(target?: { siteId?: string; environmentId?: string }): Promise<{ siteId: string; environmentId: string }> {
 		try {
 			// Use provided IDs if they look like UUIDs
 			if (target?.siteId && target.siteId.includes("-")) {
@@ -337,10 +308,7 @@ export class AgentOrchestrator {
 	// Private Methods - Logger Creation
 	// ==========================================================================
 
-	private createSSELogger(
-		traceId: string,
-		writeSSE: (event: string, data: unknown) => void
-	): AgentLogger {
+	private createSSELogger(traceId: string, writeSSE: (event: string, data: unknown) => void): AgentLogger {
 		return {
 			info: (msg, meta) => {
 				const message = typeof msg === "string" ? msg : JSON.stringify(msg);
@@ -426,10 +394,7 @@ export class AgentOrchestrator {
 		});
 	}
 
-	private async emitModelInfo(
-		resolved: ResolvedExecuteOptions,
-		writeSSE: (event: string, data: unknown) => void
-	): Promise<void> {
+	private async emitModelInfo(resolved: ResolvedExecuteOptions, writeSSE: (event: string, data: unknown) => void): Promise<void> {
 		const modelPricing = await getModelPricing(resolved.modelId);
 		writeSSE("model-info", {
 			type: "model-info",
@@ -508,10 +473,7 @@ export class AgentOrchestrator {
 	// Private Methods - Message Loading
 	// ==========================================================================
 
-	private async loadPreviousMessages(
-		sessionId: string | undefined,
-		logger: AgentLogger
-	): Promise<ModelMessage[]> {
+	private async loadPreviousMessages(sessionId: string | undefined, logger: AgentLogger): Promise<ModelMessage[]> {
 		if (!sessionId) return [];
 
 		try {
@@ -545,6 +507,7 @@ export class AgentOrchestrator {
 		finalText: string;
 		finishReason: string;
 		usage: Record<string, unknown>;
+		displayTexts: string[]; // All text segments for UI display
 	}> {
 		const toolCalls: Array<{ toolName: string; toolCallId: string; args: unknown }> = [];
 		const toolResults: Array<{ toolCallId: string; toolName: string; result: unknown }> = [];
@@ -554,18 +517,51 @@ export class AgentOrchestrator {
 		let currentStep = 0;
 		let stepStartTime = Date.now();
 
+		// Track streaming messages for UI display
+		let currentMessageId = randomUUID();
+		let currentMessageText = "";
+		let messageStarted = false;
+		const displayTexts: string[] = []; // Collect all text segments
+
 		for await (const chunk of streamResult.fullStream) {
 			switch (chunk.type) {
 				case "text-delta":
+					// Start a new streaming message if not already started
+					if (!messageStarted) {
+						messageStarted = true;
+						writeSSE("message-start", {
+							type: "message-start",
+							messageId: currentMessageId,
+							timestamp: new Date().toISOString(),
+						});
+					}
+
 					finalText += chunk.text;
+					currentMessageText += chunk.text;
 					writeSSE("text-delta", {
 						type: "text-delta",
+						messageId: currentMessageId,
 						delta: chunk.text,
 						timestamp: new Date().toISOString(),
 					});
 					break;
 
 				case "tool-call":
+					// Finalize any pending streaming message before tool execution
+					if (messageStarted && currentMessageText.trim()) {
+						displayTexts.push(currentMessageText);
+						writeSSE("message-complete", {
+							type: "message-complete",
+							messageId: currentMessageId,
+							content: currentMessageText,
+							timestamp: new Date().toISOString(),
+						});
+						// Reset for next potential message
+						currentMessageId = randomUUID();
+						currentMessageText = "";
+						messageStarted = false;
+					}
+
 					logger.info("Tool called", {
 						toolName: chunk.toolName,
 						toolCallId: chunk.toolCallId,
@@ -602,16 +598,61 @@ export class AgentOrchestrator {
 					// Use content if available, otherwise fall back to summary
 					if (chunk.toolName === "final_answer" && chunk.output) {
 						const finalAnswerResult = chunk.output as { content?: string; summary?: string };
-						const responseText = finalAnswerResult.content?.trim()
-							? finalAnswerResult.content
-							: finalAnswerResult.summary || "";
+						const responseText = finalAnswerResult.content?.trim() ? finalAnswerResult.content : finalAnswerResult.summary || "";
 						if (responseText) {
 							finalText = responseText;
+
+							// Emit as a proper streaming message for UI
+							const answerMessageId = randomUUID();
+							writeSSE("message-start", {
+								type: "message-start",
+								messageId: answerMessageId,
+								timestamp: new Date().toISOString(),
+							});
 							writeSSE("text-delta", {
 								type: "text-delta",
+								messageId: answerMessageId,
 								delta: responseText,
 								timestamp: new Date().toISOString(),
 							});
+							writeSSE("message-complete", {
+								type: "message-complete",
+								messageId: answerMessageId,
+								content: responseText,
+								timestamp: new Date().toISOString(),
+							});
+
+							// Track for persistence
+							displayTexts.push(responseText);
+						}
+					}
+
+					// Special handling for acknowledge tool - emit as streaming message
+					// This creates the "preflight response" that users see before tools execute
+					if (chunk.toolName === "acknowledge" && chunk.output) {
+						const ackResult = chunk.output as { message?: string };
+						if (ackResult.message) {
+							const ackMessageId = randomUUID();
+							writeSSE("message-start", {
+								type: "message-start",
+								messageId: ackMessageId,
+								timestamp: new Date().toISOString(),
+							});
+							writeSSE("text-delta", {
+								type: "text-delta",
+								messageId: ackMessageId,
+								delta: ackResult.message,
+								timestamp: new Date().toISOString(),
+							});
+							writeSSE("message-complete", {
+								type: "message-complete",
+								messageId: ackMessageId,
+								content: ackResult.message,
+								timestamp: new Date().toISOString(),
+							});
+
+							// Track for persistence (acknowledgment is part of display)
+							displayTexts.push(ackResult.message);
 						}
 					}
 
@@ -671,6 +712,17 @@ export class AgentOrchestrator {
 					break;
 
 				case "finish":
+					// Finalize any remaining streaming message
+					if (messageStarted && currentMessageText.trim()) {
+						displayTexts.push(currentMessageText);
+						writeSSE("message-complete", {
+							type: "message-complete",
+							messageId: currentMessageId,
+							content: currentMessageText,
+							timestamp: new Date().toISOString(),
+						});
+					}
+
 					finishReason = chunk.finishReason;
 					usage = chunk.totalUsage || {};
 
@@ -678,6 +730,7 @@ export class AgentOrchestrator {
 						finishReason,
 						usage,
 						toolCalls: toolCalls.length,
+						displayTexts: displayTexts.length,
 					});
 
 					writeSSE("finish", {
@@ -760,7 +813,7 @@ export class AgentOrchestrator {
 			}
 		}
 
-		return { toolCalls, toolResults, finalText, finishReason, usage };
+		return { toolCalls, toolResults, finalText, finishReason, usage, displayTexts };
 	}
 
 	// ==========================================================================
@@ -773,13 +826,29 @@ export class AgentOrchestrator {
 		userPrompt: string,
 		responseMessages: ModelMessage[],
 		workingContext: WorkingContext,
-		logger: AgentLogger
+		logger: AgentLogger,
+		displayContent?: string // Combined display text for UI
 	): Promise<void> {
 		try {
-			const updatedMessages: ModelMessage[] = [
+			// Find the last assistant message to attach displayContent
+			// (AI SDK returns multiple messages: assistant with tool_calls, tool results, etc.)
+			let lastAssistantIndex = -1;
+			for (let i = responseMessages.length - 1; i >= 0; i--) {
+				if (responseMessages[i].role === "assistant") {
+					lastAssistantIndex = i;
+					break;
+				}
+			}
+
+			// Build messages with displayContent for UI rendering
+			const updatedMessages = [
 				...previousMessages,
-				{ role: "user", content: userPrompt },
-				...responseMessages,
+				{ role: "user" as const, content: userPrompt, displayContent: userPrompt },
+				...responseMessages.map((msg, index) => ({
+					...msg,
+					// Attach displayContent to the last assistant message
+					displayContent: index === lastAssistantIndex ? displayContent : undefined,
+				})),
 			];
 
 			await this.deps.sessionService.saveMessages(sessionId, updatedMessages);

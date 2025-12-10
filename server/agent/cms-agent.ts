@@ -14,6 +14,7 @@ import { z } from "zod";
 import { ALL_TOOLS } from "../tools/all-tools";
 import { getAgentSystemPrompt } from "./system-prompt";
 import { getToolInstructions } from "../tools/instructions";
+import { normalizePromptText } from "../utils/prompt-normalizer";
 import type { AgentContext, AgentLogger, StreamWriter } from "../tools/types";
 import type { DrizzleDB } from "../db/client";
 import type { ServiceContainer } from "../services/service-container";
@@ -133,7 +134,7 @@ export const cmsAgent = new ToolLoopAgent({
 			instructions: dynamicInstructions,
 			maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
 			// Start with core tools - others added via prepareStep
-			activeTools: ["tool_search", "final_answer"] as (keyof typeof ALL_TOOLS)[],
+			activeTools: ["tool_search", "final_answer", "acknowledge"] as (keyof typeof ALL_TOOLS)[],
 			// experimental_context is how tools access runtime services
 			experimental_context: {
 				db: options.db,
@@ -166,18 +167,55 @@ export const cmsAgent = new ToolLoopAgent({
 
 		// Debug log
 		if (discoveredTools.length > 0 || fromCurrentSteps.length > 0) {
-			console.log(`[prepareStep] Step ${stepNumber} | Tools: persisted=${persistedDiscoveredTools.length}, current=${fromCurrentSteps.length}, total=${discoveredTools.length}`);
+			console.log(
+				`[prepareStep] Step ${stepNumber} | Tools: persisted=${persistedDiscoveredTools.length}, current=${fromCurrentSteps.length}, total=${discoveredTools.length}`
+			);
 		}
 
 		// Core tools always available
-		const coreTools: ToolName[] = ["tool_search", "final_answer"];
+		const coreTools: ToolName[] = ["tool_search", "final_answer", "acknowledge"];
 
-		// Phase 1: Discovery (step 0, no tools discovered yet)
-		// Use 'auto' - agent decides whether to call tool_search or answer directly
-		if (stepNumber === 0 && discoveredTools.length === 0) {
+		// Build tool instructions for all core + discovered tools up-front so every step (including 0/1)
+		// has the protocols injected. This keeps the image URL rule and other gotchas always in context.
+		const toolsNeedingProtocols = [...new Set([...coreTools, ...discoveredTools])];
+		const toolInstructions = getToolInstructions(toolsNeedingProtocols);
+
+		// Replace the tool-calling instructions placeholder in the base system prompt
+		const updatedContent = toolInstructions
+			? currentBaseSystemPrompt.replace(
+					/<tool-usage-instructions>[\s\S]*?<\/tool-usage-instructions>/g,
+					`<tool-usage-instructions>\n${toolInstructions}\n</tool-usage-instructions>`
+			  )
+			: currentBaseSystemPrompt;
+
+		const normalizedContent = normalizePromptText(updatedContent);
+
+		// Store for SSE emission (debug panel)
+		if (toolInstructions) {
+			lastInjectedInstructions = {
+				instructions: toolInstructions,
+				tools: toolsNeedingProtocols,
+				updatedSystemPrompt: normalizedContent,
+			};
+		}
+
+		// Step 0: Force acknowledge tool to create conversational preflight response
+		// This ensures the user sees acknowledgment before any action is taken
+		if (stepNumber === 0) {
+			return {
+				activeTools: coreTools,
+				toolChoice: { type: "tool" as const, toolName: "acknowledge" as const },
+				instructions: normalizedContent,
+			};
+		}
+
+		// Step 1 with no tools discovered: Discovery phase
+		// Agent can use tool_search to find capabilities
+		if (stepNumber === 1 && discoveredTools.length === 0) {
 			return {
 				activeTools: coreTools,
 				toolChoice: "auto" as const,
+				instructions: normalizedContent,
 			};
 		}
 
@@ -188,31 +226,8 @@ export const cmsAgent = new ToolLoopAgent({
 		const result = {
 			activeTools,
 			toolChoice: "auto" as const,
+			instructions: normalizedContent,
 		};
-
-		// Inject tool instructions into <active-protocols> section of system prompt
-		const toolsNeedingProtocols = [...new Set(["final_answer", "tool_search", ...discoveredTools])];
-		const toolInstructions = getToolInstructions(toolsNeedingProtocols);
-
-		if (toolInstructions) {
-			// Replace <active-protocols> placeholder with actual instructions
-			const updatedContent = currentBaseSystemPrompt.replace(
-				/<active-protocols>[\s\S]*?<\/active-protocols>/g,
-				`<active-protocols>\n${toolInstructions}\n</active-protocols>`
-			);
-
-			// Store for SSE emission (debug panel)
-			lastInjectedInstructions = {
-				instructions: toolInstructions,
-				tools: toolsNeedingProtocols,
-				updatedSystemPrompt: updatedContent,
-			};
-
-			return {
-				...result,
-				instructions: updatedContent,
-			};
-		}
 
 		// Note: Message trimming is now handled by ContextManager in orchestrator
 		// for coordinated cleanup of messages AND discovered tools

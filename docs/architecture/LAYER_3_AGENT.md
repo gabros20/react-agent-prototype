@@ -5,19 +5,21 @@
 ## Overview
 
 The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v6 `ToolLoopAgent` class**. Since the migration to AI SDK 6 (commit `1e1963e`), the agent uses a centralized module-level singleton with:
-- **`ToolLoopAgent`** class with `.stream()` and `.generate()` methods
-- **`callOptionsSchema`** for type-safe runtime options via Zod
-- **`prepareCall`** hook for dynamic system prompt injection
-- **`stopWhen`** conditions (step count + FINAL_ANSWER detection)
-- **`prepareStep`** for context window management
+
+-   **`ToolLoopAgent`** class with `.stream()` and `.generate()` methods
+-   **`callOptionsSchema`** for type-safe runtime options via Zod
+-   **`prepareCall`** hook for dynamic system prompt injection
+-   **`stopWhen`** conditions (step count + FINAL_ANSWER detection)
+-   **`prepareStep`** for context window management
 
 **Key Files:**
-- `server/agent/cms-agent.ts` - ToolLoopAgent singleton definition
-- `server/agent/system-prompt.ts` - Prompt compilation with Handlebars
-- `server/routes/agent.ts` - Streaming route handler
-- `server/prompts/core/agent.xml` - Core agent prompt (~1400 tokens)
-- `server/tools/instructions/index.ts` - Per-tool instructions
-- `server/tools/` - Tool definitions
+
+-   `server/agent/cms-agent.ts` - ToolLoopAgent singleton definition
+-   `server/agent/system-prompt.ts` - Prompt compilation with Handlebars
+-   `server/routes/agent.ts` - Streaming route handler
+-   `server/prompts/core/agent.xml` - Core agent prompt (~1400 tokens)
+-   `server/tools/instructions/index.ts` - Per-tool instructions
+-   `server/tools/` - Tool definitions
 
 ---
 
@@ -101,91 +103,91 @@ import { getSystemPrompt } from "./system-prompt";
 import type { AgentContext } from "../tools/types";
 
 const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
+	apiKey: process.env.OPENROUTER_API_KEY,
 });
 
 export const AGENT_CONFIG = {
-  maxSteps: 15,
-  modelId: "openai/gpt-4o-mini",
-  maxOutputTokens: 4096,
+	maxSteps: 15,
+	modelId: "openai/gpt-4o-mini",
+	maxOutputTokens: 4096,
 } as const;
 
 // Type-safe call options via Zod schema
 export const AgentCallOptionsSchema = z.object({
-  sessionId: z.string(),
-  traceId: z.string(),
-  workingMemory: z.string().optional(),
-  cmsTarget: z.object({
-    siteId: z.string(),
-    environmentId: z.string(),
-  }),
-  // Runtime-injected services
-  db: z.custom<any>(),
-  services: z.custom<any>(),
-  sessionService: z.custom<any>(),
-  vectorIndex: z.custom<any>(),
-  logger: z.custom<any>(),
-  stream: z.custom<any>().optional(),
+	sessionId: z.string(),
+	traceId: z.string(),
+	workingMemory: z.string().optional(),
+	cmsTarget: z.object({
+		siteId: z.string(),
+		environmentId: z.string(),
+	}),
+	// Runtime-injected services
+	db: z.custom<any>(),
+	services: z.custom<any>(),
+	sessionService: z.custom<any>(),
+	vectorIndex: z.custom<any>(),
+	logger: z.custom<any>(),
+	stream: z.custom<any>().optional(),
 });
 
 export type AgentCallOptions = z.infer<typeof AgentCallOptionsSchema>;
 
 // Custom stop condition: FINAL_ANSWER detection
 const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
-  const lastStep = steps[steps.length - 1];
-  return lastStep?.text?.includes("FINAL_ANSWER:") || false;
+	const lastStep = steps[steps.length - 1];
+	return lastStep?.text?.includes("FINAL_ANSWER:") || false;
 };
 
 // Module-level singleton agent
 export const cmsAgent = new ToolLoopAgent({
-  model: openrouter.languageModel(AGENT_CONFIG.modelId),
+	model: openrouter.languageModel(AGENT_CONFIG.modelId),
 
-  // Placeholder - replaced dynamically in prepareCall
-  instructions: "CMS Agent - Instructions will be dynamically generated",
+	// Placeholder - replaced dynamically in prepareCall
+	instructions: "CMS Agent - Instructions will be dynamically generated",
 
-  tools: ALL_TOOLS,
-  callOptionsSchema: AgentCallOptionsSchema,
+	tools: ALL_TOOLS,
+	callOptionsSchema: AgentCallOptionsSchema,
 
-  // Dynamic instruction injection + context setup
-  prepareCall: ({ options, ...settings }) => {
-    const dynamicInstructions = getSystemPrompt({
-      currentDate: new Date().toISOString().split("T")[0],
-      workingMemory: options.workingMemory || "",
-    });
+	// Dynamic instruction injection + context setup
+	prepareCall: ({ options, ...settings }) => {
+		const dynamicInstructions = getSystemPrompt({
+			currentDate: new Date().toISOString().split("T")[0],
+			workingMemory: options.workingMemory || "",
+		});
 
-    return {
-      ...settings,
-      instructions: dynamicInstructions,
-      maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
-      experimental_context: {
-        db: options.db,
-        services: options.services,
-        sessionService: options.sessionService,
-        vectorIndex: options.vectorIndex,
-        logger: options.logger,
-        stream: options.stream,
-        traceId: options.traceId,
-        sessionId: options.sessionId,
-        cmsTarget: options.cmsTarget,
-      } as AgentContext,
-    };
-  },
+		return {
+			...settings,
+			instructions: dynamicInstructions,
+			maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
+			experimental_context: {
+				db: options.db,
+				services: options.services,
+				sessionService: options.sessionService,
+				vectorIndex: options.vectorIndex,
+				logger: options.logger,
+				stream: options.stream,
+				traceId: options.traceId,
+				sessionId: options.sessionId,
+				cmsTarget: options.cmsTarget,
+			} as AgentContext,
+		};
+	},
 
-  // Stop conditions (OR logic)
-  stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
+	// Stop conditions (OR logic)
+	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
 
-  // Context window management
-  prepareStep: async ({ messages }: { messages: any[] }) => {
-    if (messages.length > 20) {
-      return {
-        messages: [
-          messages[0], // Keep system prompt
-          ...messages.slice(-10), // Keep last 10
-        ],
-      };
-    }
-    return {};
-  },
+	// Context window management
+	prepareStep: async ({ messages }: { messages: any[] }) => {
+		if (messages.length > 20) {
+			return {
+				messages: [
+					messages[0], // Keep system prompt
+					...messages.slice(-10), // Keep last 10
+				],
+			};
+		}
+		return {};
+	},
 });
 ```
 
@@ -194,45 +196,45 @@ export const cmsAgent = new ToolLoopAgent({
 ```typescript
 // Streaming
 const streamResult = await cmsAgent.stream({
-  messages,
-  options: agentOptions, // Type-checked via callOptionsSchema
+	messages,
+	options: agentOptions, // Type-checked via callOptionsSchema
 });
 
 // Non-streaming
 const result = await cmsAgent.generate({
-  messages,
-  options: agentOptions,
+	messages,
+	options: agentOptions,
 });
 ```
 
 ### Key Changes from Migration
 
-| Before (Custom Orchestrator) | After (ToolLoopAgent) |
-|------------------------------|-------------------------|
-| `generateText` function | `ToolLoopAgent` class |
-| Custom while loop + retry | SDK handles internally |
-| Custom step tracking | `stopWhen` conditions |
-| Checkpoint every 3 steps | Messages saved at end only |
-| `ApprovalQueue` service | Conversational confirmed flag pattern |
-| Untyped options | `callOptionsSchema` with Zod |
-| Static system prompt | `prepareCall` dynamic injection |
-| Routes 600+ lines | Routes ~100 lines (thin controllers) |
-| Business logic in routes | AgentOrchestrator service |
+| Before (Custom Orchestrator) | After (ToolLoopAgent)                 |
+| ---------------------------- | ------------------------------------- |
+| `generateText` function      | `ToolLoopAgent` class                 |
+| Custom while loop + retry    | SDK handles internally                |
+| Custom step tracking         | `stopWhen` conditions                 |
+| Checkpoint every 3 steps     | Messages saved at end only            |
+| `ApprovalQueue` service      | Conversational confirmed flag pattern |
+| Untyped options              | `callOptionsSchema` with Zod          |
+| Static system prompt         | `prepareCall` dynamic injection       |
+| Routes 600+ lines            | Routes ~100 lines (thin controllers)  |
+| Business logic in routes     | AgentOrchestrator service             |
 
 ---
 
 ## Event Types
 
-| Event               | Description                    |
-| ------------------- | ------------------------------ |
-| `text-delta`        | Streaming text chunks          |
-| `tool-call`         | Tool invocation started        |
-| `tool-result`       | Tool execution completed       |
+| Event                       | Description                 |
+| --------------------------- | --------------------------- |
+| `text-delta`                | Streaming text chunks       |
+| `tool-call`                 | Tool invocation started     |
+| `tool-result`               | Tool execution completed    |
 | `tool-call-streaming-start` | Tool call begins (AI SDK 6) |
-| `step-start`        | Step boundary                  |
-| `step-finish`       | Step completed with usage      |
-| `finish`            | Agent completed                |
-| `error`             | Execution failed               |
+| `step-start`                | Step boundary               |
+| `step-finish`               | Step completed with usage   |
+| `finish`                    | Agent completed             |
+| `error`                     | Execution failed            |
 
 ---
 
@@ -243,65 +245,65 @@ All 45 tools are defined with Zod schemas. Destructive operations use the `confi
 ```typescript
 // server/tools/all-tools.ts
 export const ALL_TOOLS = {
-  // Page tools (read)
-  cms_getPage: tool({
-    description: 'Get a page by slug or ID',
-    inputSchema: z.object({
-      slug: z.string().optional(),
-      id: z.string().optional(),
-      includeContent: z.boolean().optional().default(false),
-    }),
-    execute: async (input, { experimental_context }) => {
-      const ctx = experimental_context as AgentContext;
-      const page = await ctx.services.pageService.getPageBySlug(input.slug!);
-      return { page };
-    },
-  }),
+	// Page tools (read)
+	cms_getPage: tool({
+		description: "Get a page by slug or ID",
+		inputSchema: z.object({
+			slug: z.string().optional(),
+			id: z.string().optional(),
+			includeContent: z.boolean().optional().default(false),
+		}),
+		execute: async (input, { experimental_context }) => {
+			const ctx = experimental_context as AgentContext;
+			const page = await ctx.services.pageService.getPageBySlug(input.slug!);
+			return { page };
+		},
+	}),
 
-  // Page tools (destructive) - uses confirmed flag pattern
-  cms_deletePage: tool({
-    description: 'Delete a page permanently. Requires confirmed: true.',
-    inputSchema: z.object({
-      slug: z.string().optional(),
-      id: z.string().optional(),
-      confirmed: z.boolean().optional().describe('Must be true to delete'),
-    }),
-    execute: async (input, { experimental_context }) => {
-      const ctx = experimental_context as AgentContext;
+	// Page tools (destructive) - uses confirmed flag pattern
+	cms_deletePage: tool({
+		description: "Delete a page permanently. Requires confirmed: true.",
+		inputSchema: z.object({
+			slug: z.string().optional(),
+			id: z.string().optional(),
+			confirmed: z.boolean().optional().describe("Must be true to delete"),
+		}),
+		execute: async (input, { experimental_context }) => {
+			const ctx = experimental_context as AgentContext;
 
-      // First call: return confirmation request
-      if (!input.confirmed) {
-        return {
-          requiresConfirmation: true,
-          message: `Are you sure you want to delete this page?`,
-        };
-      }
+			// First call: return confirmation request
+			if (!input.confirmed) {
+				return {
+					requiresConfirmation: true,
+					message: `Are you sure you want to delete this page?`,
+				};
+			}
 
-      // Second call with confirmed: true
-      await ctx.services.pageService.deletePage(input.id!);
-      return { success: true };
-    },
-  }),
+			// Second call with confirmed: true
+			await ctx.services.pageService.deletePage(input.id!);
+			return { success: true };
+		},
+	}),
 
-  // ... 43 more tools
+	// ... 43 more tools
 };
 ```
 
 ### Tool Categories
 
-| Category       | Count | Tools                                                                                           | Purpose                |
-| -------------- | ----- | ----------------------------------------------------------------------------------------------- | ---------------------- |
-| Page           | 6     | getPage, createPage, createPageWithContent, updatePage, deletePage, listPages                   | Page CRUD              |
-| Section        | 8     | listSectionTemplates, getSectionFields, addSectionToPage, updateSectionContent, deletePageSection, deletePageSections, getPageSections, getSectionContent | Section management |
-| Entry          | 2     | getCollectionEntries, getEntryContent                                                           | Collection entries     |
-| Search         | 2     | searchVector, findResource                                                                      | Semantic search        |
-| Image          | 7     | findImage, searchImages, listAllImages, addImageToSection, updateSectionImage, replaceImage, deleteImage | Media management |
-| Navigation     | 5     | getNavigation, addNavigationItem, updateNavigationItem, removeNavigationItem, toggleNavigationItem | Menu structure |
-| Post           | 7     | createPost, updatePost, publishPost, archivePost, deletePost, listPosts, getPost                | Blog content           |
-| HTTP           | 2     | httpGet, httpPost                                                                               | External APIs          |
-| Planning       | 1     | planAnalyzeTask                                                                                 | Task analysis          |
-| Web Research   | 3     | webQuickSearch, webDeepResearch, webFetchContent                                                | Exa AI research        |
-| Stock Photos   | 2     | pexelsSearchPhotos, pexelsDownloadPhoto                                                         | Pexels integration     |
+| Category     | Count | Tools                                                                                                                                                     | Purpose            |
+| ------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Page         | 6     | getPage, createPage, createPageWithContent, updatePage, deletePage, listPages                                                                             | Page CRUD          |
+| Section      | 8     | listSectionTemplates, getSectionFields, addSectionToPage, updateSectionContent, deletePageSection, deletePageSections, getPageSections, getSectionContent | Section management |
+| Entry        | 2     | getCollectionEntries, getEntryContent                                                                                                                     | Collection entries |
+| Search       | 2     | searchVector, findResource                                                                                                                                | Semantic search    |
+| Image        | 7     | findImage, searchImages, listAllImages, addImageToSection, updateSectionImage, replaceImage, deleteImage                                                  | Media management   |
+| Navigation   | 5     | getNavigation, addNavigationItem, updateNavigationItem, removeNavigationItem, toggleNavigationItem                                                        | Menu structure     |
+| Post         | 7     | createPost, updatePost, publishPost, archivePost, deletePost, listPosts, getPost                                                                          | Blog content       |
+| HTTP         | 2     | httpGet, httpPost                                                                                                                                         | External APIs      |
+| Planning     | 1     | planAnalyzeTask                                                                                                                                           | Task analysis      |
+| Web Research | 3     | webQuickSearch, webDeepResearch, webFetchContent                                                                                                          | Exa AI research    |
+| Stock Photos | 2     | pexelsSearchPhotos, pexelsDownloadPhoto                                                                                                                   | Pexels integration |
 
 ---
 
@@ -311,40 +313,40 @@ Tools receive context via `experimental_context`:
 
 ```typescript
 interface AgentContext {
-  // Database
-  db: DrizzleDB;
+	// Database
+	db: DrizzleDB;
 
-  // Services
-  services: {
-    pageService: PageService;
-    sectionService: SectionService;
-    entryService: EntryService;
-    imageService: ImageService;
-    postService: PostService;
-    navigationService: NavigationService;
-    siteSettingsService: SiteSettingsService;
-  };
+	// Services
+	services: {
+		pageService: PageService;
+		sectionService: SectionService;
+		entryService: EntryService;
+		imageService: ImageService;
+		postService: PostService;
+		navigationService: NavigationService;
+		siteSettingsService: SiteSettingsService;
+	};
 
-  // Session & Vector
-  sessionService: SessionService;
-  vectorIndex: VectorIndexService;
+	// Session & Vector
+	sessionService: SessionService;
+	vectorIndex: VectorIndexService;
 
-  // Logging
-  logger: {
-    info: (msg: string, meta?: object) => void;
-    warn: (msg: string, meta?: object) => void;
-    error: (msg: string, meta?: object) => void;
-  };
+	// Logging
+	logger: {
+		info: (msg: string, meta?: object) => void;
+		warn: (msg: string, meta?: object) => void;
+		error: (msg: string, meta?: object) => void;
+	};
 
-  // Identity
-  traceId: string;
-  sessionId: string;
+	// Identity
+	traceId: string;
+	sessionId: string;
 
-  // Multi-tenant targeting
-  cmsTarget: {
-    siteId: string;
-    environmentId: string;
-  };
+	// Multi-tenant targeting
+	cmsTarget: {
+		siteId: string;
+		environmentId: string;
+	};
 }
 ```
 
@@ -357,15 +359,15 @@ Tracks entities mentioned across conversation turns:
 ```typescript
 // server/services/working-memory/index.ts
 interface WorkingMemoryState {
-  entities: Map<string, Entity>;
-  references: Map<string, string>; // "the page" → pageId
+	entities: Map<string, Entity>;
+	references: Map<string, string>; // "the page" → pageId
 }
 
 interface Entity {
-  type: 'page' | 'section' | 'image' | 'post';
-  id: string;
-  name: string;
-  lastMentioned: number; // step number
+	type: "page" | "section" | "image" | "post";
+	id: string;
+	name: string;
+	lastMentioned: number; // step number
 }
 ```
 
@@ -375,9 +377,9 @@ After each tool result, entities are extracted and stored:
 ```typescript
 // After createPage returns { page: { id: 'abc', title: 'Home' } }
 workingContext.add({
-  type: 'page',
-  id: 'abc',
-  name: 'Home',
+	type: "page",
+	id: "abc",
+	name: "Home",
 });
 ```
 
@@ -419,6 +421,7 @@ cms_deletePage: tool({
 ```
 
 **Confirmation Flow:**
+
 1. User requests deletion (e.g., "delete the about page")
 2. Tool called without `confirmed` flag
 3. Tool returns `{ requiresConfirmation: true, message: "..." }`
@@ -441,29 +444,29 @@ import fs from "node:fs";
 import path from "node:path";
 
 export interface SystemPromptContext {
-  currentDate: string;
-  workingMemory?: string;
-  activeProtocols?: string;
+	currentDate: string;
+	workingMemory?: string;
+	activeProtocols?: string;
 }
 
 let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
 
 function loadAgentPrompt(): string {
-  const agentPath = path.join(__dirname, "../prompts/core/agent.xml");
-  return fs.readFileSync(agentPath, "utf-8");
+	const agentPath = path.join(__dirname, "../prompts/core/agent.xml");
+	return fs.readFileSync(agentPath, "utf-8");
 }
 
 export function getSystemPrompt(context: SystemPromptContext): string {
-  if (!compiledTemplate) {
-    const template = loadAgentPrompt();
-    compiledTemplate = Handlebars.compile(template);
-  }
+	if (!compiledTemplate) {
+		const template = loadAgentPrompt();
+		compiledTemplate = Handlebars.compile(template);
+	}
 
-  return compiledTemplate({
-    ...context,
-    workingMemory: context.workingMemory || "",
-    activeProtocols: context.activeProtocols || "",
-  });
+	return compiledTemplate({
+		...context,
+		workingMemory: context.workingMemory || "",
+		activeProtocols: context.activeProtocols || "",
+	});
 }
 ```
 
@@ -484,7 +487,7 @@ server/tools/
 ```xml
 <!-- agent.xml -->
 <working-memory>{{{workingMemory}}}</working-memory>
-<active-protocols>{{{activeProtocols}}}</active-protocols>
+<tool-usage-instructions>{{{activeProtocols}}}</tool-usage-instructions>
 ```
 
 Per-tool instructions are injected into `activeProtocols` via `prepareStep` after `tool_search` discovers tools.
@@ -497,39 +500,33 @@ New in AI SDK 6 migration - token counting and cost calculation:
 
 ```typescript
 // lib/tokenizer.ts
-import { encodingForModel } from 'js-tiktoken';
+import { encodingForModel } from "js-tiktoken";
 
-export function countTokens(text: string, model = 'gpt-4o-mini'): number {
-  const encoding = encodingForModel(model as any);
-  return encoding.encode(text).length;
+export function countTokens(text: string, model = "gpt-4o-mini"): number {
+	const encoding = encodingForModel(model as any);
+	return encoding.encode(text).length;
 }
 
 // server/services/openrouter-pricing.ts
-export function calculateCost(
-  inputTokens: number,
-  outputTokens: number,
-  model: string
-): number {
-  const pricing = MODEL_PRICING[model] || MODEL_PRICING['default'];
-  return (
-    (inputTokens * pricing.input) / 1_000_000 +
-    (outputTokens * pricing.output) / 1_000_000
-  );
+export function calculateCost(inputTokens: number, outputTokens: number, model: string): number {
+	const pricing = MODEL_PRICING[model] || MODEL_PRICING["default"];
+	return (inputTokens * pricing.input) / 1_000_000 + (outputTokens * pricing.output) / 1_000_000;
 }
 ```
 
 **Usage in Route:**
+
 ```typescript
 // After generateText completes
 const { usage } = result;
 const cost = calculateCost(usage.promptTokens, usage.completionTokens, model);
 
 // Emit to frontend
-writeSSE('usage', {
-  promptTokens: usage.promptTokens,
-  completionTokens: usage.completionTokens,
-  totalTokens: usage.totalTokens,
-  estimatedCost: cost,
+writeSSE("usage", {
+	promptTokens: usage.promptTokens,
+	completionTokens: usage.completionTokens,
+	totalTokens: usage.totalTokens,
+	estimatedCost: cost,
 });
 ```
 
@@ -541,15 +538,16 @@ AI SDK 6 handles retries natively:
 
 ```typescript
 const result = await generateText({
-  // ...
-  maxRetries: 2,  // Default: 2, handles 429/5xx automatically
+	// ...
+	maxRetries: 2, // Default: 2, handles 429/5xx automatically
 });
 ```
 
 **Retry Behavior:**
-- Rate limits (429) → automatic exponential backoff
-- Server errors (5xx) → retry with backoff
-- Client errors (4xx except 429) → no retry, surface immediately
+
+-   Rate limits (429) → automatic exponential backoff
+-   Server errors (5xx) → retry with backoff
+-   Client errors (4xx except 429) → no retry, surface immediately
 
 ---
 
@@ -562,11 +560,7 @@ Messages saved at end of agent execution (no mid-step checkpointing):
 const result = await runAgent(messages, options);
 
 // Save after completion
-await sessionService.saveMessages(sessionId, [
-  ...previousMessages,
-  { role: 'user', content: prompt },
-  ...result.responseMessages,
-]);
+await sessionService.saveMessages(sessionId, [...previousMessages, { role: "user", content: prompt }, ...result.responseMessages]);
 ```
 
 **Note**: Checkpoint system removed in AI SDK 6 migration (was dead code).
@@ -575,22 +569,22 @@ await sessionService.saveMessages(sessionId, [
 
 ## Integration Points
 
-| Connects To        | How                              |
-| ------------------ | -------------------------------- |
-| Layer 1 (Server)   | `/api/agent` route               |
-| Layer 2 (Database) | Via services in context          |
-| Layer 4 (Services) | Tools call services              |
-| Layer 6 (Client)   | AI SDK UI stream protocol        |
+| Connects To        | How                       |
+| ------------------ | ------------------------- |
+| Layer 1 (Server)   | `/api/agent` route        |
+| Layer 2 (Database) | Via services in context   |
+| Layer 4 (Services) | Tools call services       |
+| Layer 6 (Client)   | AI SDK UI stream protocol |
 
 ---
 
 ## Deep Dive Topics
 
-- [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Loop implementation details
-- [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool anatomy and patterns
-- [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Entity tracking
-- [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - Prompt structure
-- [3.5 HITL](./LAYER_3.5_HITL.md) - Approval flow
-- [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Retry and degradation
-- [3.7 Streaming](./LAYER_3.7_STREAMING.md) - SSE events
-- [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) - How tools get services
+-   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Loop implementation details
+-   [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool anatomy and patterns
+-   [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Entity tracking
+-   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - Prompt structure
+-   [3.5 HITL](./LAYER_3.5_HITL.md) - Approval flow
+-   [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Retry and degradation
+-   [3.7 Streaming](./LAYER_3.7_STREAMING.md) - SSE events
+-   [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) - How tools get services

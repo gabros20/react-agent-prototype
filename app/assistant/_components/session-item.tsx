@@ -26,17 +26,39 @@ import { useChatStore } from '../_stores/chat-store';
 import { useTraceStore } from '../_stores/trace-store';
 
 /**
- * Extract readable text content from AI SDK message format.
- * Handles both plain strings and AI SDK content parts array.
+ * Extract readable text content from a message.
+ * Prefers displayContent (plain text for UI) when available.
+ * Falls back to parsing AI SDK content format if displayContent is not set.
  *
- * AI SDK message content can be:
- * - Plain string (user messages)
- * - Array of parts: [{ type: 'text', text: '...' }, { type: 'tool-call', ... }]
- * - Stored as JSON string in database, needs parsing
+ * Message format:
+ * - displayContent: Plain text for UI display (new pattern)
+ * - content: AI SDK format for LLM context (may be string or array of parts)
  *
  * Returns empty string for tool-only messages (they shouldn't be displayed).
  */
-export function extractMessageContent(content: unknown): string {
+export function extractMessageContent(message: { displayContent?: string | null; content?: unknown } | unknown): string {
+  // Handle the full message object case (new pattern)
+  if (message && typeof message === 'object' && 'displayContent' in message) {
+    const msg = message as { displayContent?: string | null; content?: unknown };
+
+    // Prefer displayContent if available
+    if (msg.displayContent && typeof msg.displayContent === 'string') {
+      return msg.displayContent;
+    }
+
+    // Fall back to extracting from content
+    return extractFromContent(msg.content);
+  }
+
+  // Legacy: direct content value (for backward compatibility)
+  return extractFromContent(message);
+}
+
+/**
+ * Extract text from AI SDK content format.
+ * This is the legacy extraction logic for messages without displayContent.
+ */
+function extractFromContent(content: unknown): string {
   // Handle null/undefined
   if (content == null) return '';
 
@@ -48,7 +70,7 @@ export function extractMessageContent(content: unknown): string {
       try {
         const parsed = JSON.parse(trimmed);
         // Recurse with parsed content
-        return extractMessageContent(parsed);
+        return extractFromContent(parsed);
       } catch {
         // Not valid JSON, return as-is (plain text message)
       }
@@ -89,8 +111,7 @@ export function extractMessageContent(content: unknown): string {
     }
   }
 
-  // Fallback: only stringify if it's truly unknown content
-  // (shouldn't happen with proper message handling)
+  // Fallback: return empty string
   return '';
 }
 
@@ -127,12 +148,13 @@ export function SessionItem({ session, isActive, onSessionLoad }: SessionItemPro
         // Convert messages to ChatMessage format, filtering out tool-only messages
         // (messages with empty content after extraction are tool calls/results that
         // shouldn't be displayed in the chat UI)
+        // Pass full message object to extractMessageContent so it can use displayContent
         const chatMessages = loadedSession.messages
           .filter((msg) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
           .map((msg) => ({
             id: msg.id,
             role: msg.role as 'user' | 'assistant' | 'system',
-            content: extractMessageContent(msg.content),
+            content: extractMessageContent(msg), // Pass full message object
             createdAt: msg.createdAt,
           }))
           .filter((msg) => msg.content.trim() !== ''); // Remove messages with no displayable content
@@ -178,7 +200,7 @@ export function SessionItem({ session, isActive, onSessionLoad }: SessionItemPro
               .map((msg) => ({
                 id: msg.id,
                 role: msg.role as 'user' | 'assistant' | 'system',
-                content: extractMessageContent(msg.content),
+                content: extractMessageContent(msg), // Pass full message object
                 createdAt: msg.createdAt,
               }))
               .filter((msg) => msg.content.trim() !== '');

@@ -45,13 +45,33 @@ export default function AssistantPage() {
             console.error('Failed to create initial session:', error);
           }
         } else {
-          // Sessions exist but none selected - select the first one
-          setSessionId(loadedSessions[0].id);
-          useSessionStore.getState().setCurrentSessionId(loadedSessions[0].id);
+          // Sessions exist but none selected - select the first one and load its messages
+          const firstSession = loadedSessions[0];
+          setSessionId(firstSession.id);
+          useSessionStore.getState().setCurrentSessionId(firstSession.id);
+
+          // Load messages from the first session
+          const { sessionsApi } = await import('@/lib/api');
+          const { extractMessageContent } = await import('./_components/session-item');
+          try {
+            const session = await sessionsApi.get(firstSession.id);
+            const chatMessages = session.messages
+              .filter((msg: { role: string }) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+              .map((msg: { id: string; role: string; content: unknown; displayContent?: string | null; createdAt: Date }) => ({
+                id: msg.id,
+                role: msg.role as 'user' | 'assistant' | 'system',
+                content: extractMessageContent(msg),
+                createdAt: msg.createdAt,
+              }))
+              .filter((msg: { content: string }) => msg.content.trim() !== '');
+            useChatStore.getState().setMessages(chatMessages);
+          } catch (error) {
+            console.error('Failed to load initial session messages:', error);
+          }
         }
       } else {
-        // Session ID exists (from localStorage) - verify it still exists and reload messages
-        // This handles page refresh where localStorage may have stale/malformed message content
+        // Session ID exists in memory - verify it still exists in DB and reload messages
+        // (This branch won't be reached on fresh page load since sessionId is not persisted)
         const sessionExists = loadedSessions.some(s => s.id === currentSessionId);
         if (sessionExists) {
           // Reload the session to get fresh messages from API
@@ -60,12 +80,13 @@ export default function AssistantPage() {
           try {
             const session = await sessionsApi.get(currentSessionId);
             // Convert messages to ChatMessage format, filtering out tool-only messages
+            // Pass full message object to extractMessageContent so it can use displayContent
             const chatMessages = session.messages
               .filter((msg: { role: string }) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
-              .map((msg: { id: string; role: string; content: unknown; createdAt: Date }) => ({
+              .map((msg: { id: string; role: string; content: unknown; displayContent?: string | null; createdAt: Date }) => ({
                 id: msg.id,
                 role: msg.role as 'user' | 'assistant' | 'system',
-                content: extractMessageContent(msg.content),
+                content: extractMessageContent(msg), // Pass full message object
                 createdAt: msg.createdAt,
               }))
               .filter((msg: { content: string }) => msg.content.trim() !== '');

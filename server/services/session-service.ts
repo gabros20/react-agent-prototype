@@ -16,7 +16,8 @@ export interface UpdateSessionInput {
 
 export interface CreateMessageInput {
   role: "system" | "user" | "assistant" | "tool";
-  content: any; // JSON content
+  content: any; // JSON content (AI SDK format for LLM context)
+  displayContent?: string; // Plain text for UI rendering
   toolName?: string;
   stepIdx?: number;
 }
@@ -205,6 +206,7 @@ export class SessionService {
       sessionId,
       role: input.role,
       content: serializedContent,
+      displayContent: input.displayContent || null, // Plain text for UI rendering
       toolName: input.toolName || null,
       stepIdx: input.stepIdx || null,
       createdAt: new Date(),
@@ -317,6 +319,7 @@ export class SessionService {
       await this.addMessage(sessionId, {
         role: msg.role,
         content: msg.content,
+        displayContent: msg.displayContent, // Pass through display text
         toolName: undefined,
         stepIdx: undefined
       });

@@ -7,7 +7,7 @@
  *
  * Per-Tool Instruction Architecture:
  * - Returns just tool names (lightweight)
- * - Protocols injected via prepareStep into <active-protocols> section
+ * - Protocols injected via prepareStep into <tool-usage-instructions> section
  * - No domain rules bundling - per-tool granularity
  */
 
@@ -67,15 +67,7 @@ Examples:
 
 		// Run hybrid search with related tools expansion
 		// This ensures related tools (e.g. cms_publishPost with cms_createPost) are included
-		const {
-			tools: searchResults,
-			confidence,
-			source,
-		} = await smartToolSearchWithConfidence(
-			query,
-			limit,
-			{ expandRelated: true }
-		);
+		const { tools: searchResults, confidence, source } = await smartToolSearchWithConfidence(query, limit, { expandRelated: true });
 
 		console.log(`[tool_search] Search: confidence=${confidence.toFixed(2)}, source=${source}`);
 
@@ -94,7 +86,7 @@ Examples:
 
 		return {
 			tools,
-			message: `Found ${tools.length} tools. They are now active. Check <active-protocols> for usage instructions.`,
+			message: `Found ${tools.length} tools. They are now active. Check <tool-usage-instructions> for usage instructions.`,
 		};
 	},
 });

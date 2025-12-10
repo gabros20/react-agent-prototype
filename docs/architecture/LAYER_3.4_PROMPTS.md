@@ -7,27 +7,30 @@
 The prompt system defines how the agent thinks and behaves. The implementation uses a **minimal core prompt** (`agent.xml`) compiled with Handlebars for dynamic injection. Per-tool instructions are injected dynamically via `prepareStep` when tools are discovered.
 
 **Key Files:**
-- `server/agent/system-prompt.ts` - Prompt compilation
-- `server/prompts/core/agent.xml` - Core agent identity, ReAct pattern, tool discovery
-- `server/tools/instructions/index.ts` - Per-tool instructions (BEFORE/AFTER/NEXT/GOTCHA patterns)
+
+-   `server/agent/system-prompt.ts` - Prompt compilation
+-   `server/prompts/core/agent.xml` - Core agent identity, ReAct pattern, tool discovery
+-   `server/tools/instructions/index.ts` - Per-tool instructions (BEFORE/AFTER/NEXT/GOTCHA patterns)
 
 ---
 
 ## The Problem
 
 Without a well-structured prompt:
-- Agent doesn't know its capabilities
-- Tool usage is inconsistent
-- Domain-specific patterns aren't followed
-- Error handling is ad-hoc
-- User experience suffers
+
+-   Agent doesn't know its capabilities
+-   Tool usage is inconsistent
+-   Domain-specific patterns aren't followed
+-   Error handling is ad-hoc
+-   User experience suffers
 
 With a comprehensive prompt:
-- Agent has clear identity and purpose
-- Tools are used appropriately
-- Domain workflows are followed (CMS, images, blog)
-- Errors are handled gracefully
-- Consistent, professional user experience
+
+-   Agent has clear identity and purpose
+-   Tools are used appropriately
+-   Domain workflows are followed (CMS, images, blog)
+-   Errors are handled gracefully
+-   Consistent, professional user experience
 
 ---
 
@@ -72,10 +75,11 @@ With a comprehensive prompt:
 ### Core Prompt (agent.xml)
 
 The core prompt is minimal (~1400 tokens) and focuses on:
-- Agent identity and ReAct pattern
-- Tool discovery via `tool_search`
-- Working memory injection point
-- Active protocols injection point
+
+-   Agent identity and ReAct pattern
+-   Tool discovery via `tool_search`
+-   Working memory injection point
+-   Active protocols injection point
 
 ```xml
 <agent>
@@ -85,7 +89,7 @@ The core prompt is minimal (~1400 tokens) and focuses on:
   <operational-knowledge>References, confirmations, efficiency</operational-knowledge>
   <working-memory>{{{workingMemory}}}</working-memory>
   <current-datetime>{{currentDate}}</current-datetime>
-  <active-protocols>{{{activeProtocols}}}</active-protocols>
+  <tool-usage-instructions>{{{activeProtocols}}}</tool-usage-instructions>
 </agent>
 ```
 
@@ -95,16 +99,16 @@ Tool-specific workflows are defined in `server/tools/instructions/index.ts`:
 
 ```typescript
 export const TOOL_INSTRUCTIONS: Record<string, string> = {
-  cms_createPost: `BEFORE: cms_listPosts to check for duplicate titles
+	cms_createPost: `BEFORE: cms_listPosts to check for duplicate titles
 AFTER: Ask if user wants cover image; ask if ready to publish
 NEXT: pexels_searchPhotos (cover image), cms_publishPost
 GOTCHA: Creates DRAFT only. Set BOTH featuredImage AND content.cover.`,
 
-  cms_deletePage: `BEFORE: cms_getPage to verify; cms_getNavigation to check if in menu
+	cms_deletePage: `BEFORE: cms_getPage to verify; cms_getNavigation to check if in menu
 AFTER: Confirm deletion
 NEXT: cms_removeNavigationItem if was in navigation
 GOTCHA: CASCADE deletes all sections. Requires confirmed:true.`,
-  // ... 40+ more tools
+	// ... 40+ more tools
 };
 ```
 
@@ -114,10 +118,10 @@ GOTCHA: CASCADE deletes all sections. Requires confirmed:true.`,
 
 ### Handlebars Variables
 
-| Variable | Source | Purpose |
-|----------|--------|---------|
+| Variable              | Source                           | Purpose               |
+| --------------------- | -------------------------------- | --------------------- |
 | `{{{workingMemory}}}` | WorkingContext.toContextString() | Current entity memory |
-| `{{currentDate}}` | new Date() | Current date (ISO) |
+| `{{currentDate}}`     | new Date()                       | Current date (ISO)    |
 
 ### Triple Braces `{{{...}}}`
 
@@ -142,23 +146,23 @@ pages:
 import Handlebars from "handlebars";
 
 export interface SystemPromptContext {
-  currentDate: string;
-  workingMemory?: string;
+	currentDate: string;
+	workingMemory?: string;
 }
 
 let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
 
 export function getSystemPrompt(context: SystemPromptContext): string {
-  // Lazy load and compile template once
-  if (!compiledTemplate) {
-    const template = loadPromptModules();
-    compiledTemplate = Handlebars.compile(template);
-  }
+	// Lazy load and compile template once
+	if (!compiledTemplate) {
+		const template = loadPromptModules();
+		compiledTemplate = Handlebars.compile(template);
+	}
 
-  return compiledTemplate({
-    ...context,
-    workingMemory: context.workingMemory || "",
-  });
+	return compiledTemplate({
+		...context,
+		workingMemory: context.workingMemory || "",
+	});
 }
 ```
 
@@ -649,13 +653,13 @@ GOTCHA: Use LOCAL url from response (/uploads/...). NEVER use pexels.com URLs.`,
 
 ### Tool Instruction Categories
 
-| Category | Tools | Key Instructions |
-|----------|-------|------------------|
-| Posts | cms_createPost, cms_publishPost, etc. | Draft workflow, cover images, confirmation |
-| Pages | cms_createPage, cms_deletePage, etc. | Slug uniqueness, cascade deletes |
-| Sections | cms_updateSectionContent, etc. | Field names from schema, merge behavior |
-| Images | cms_searchImages, pexels_downloadPhoto | Local URLs, semantic search scoring |
-| Navigation | cms_addNavigationItem, etc. | URL format, location options |
+| Category   | Tools                                  | Key Instructions                           |
+| ---------- | -------------------------------------- | ------------------------------------------ |
+| Posts      | cms_createPost, cms_publishPost, etc.  | Draft workflow, cover images, confirmation |
+| Pages      | cms_createPage, cms_deletePage, etc.   | Slug uniqueness, cascade deletes           |
+| Sections   | cms_updateSectionContent, etc.         | Field names from schema, merge behavior    |
+| Images     | cms_searchImages, pexels_downloadPhoto | Local URLs, semantic search scoring        |
+| Navigation | cms_addNavigationItem, etc.            | URL format, location options               |
 
 ---
 
@@ -745,12 +749,13 @@ Repeat critical rules:
 
 ### Why Per-Tool Instructions?
 
-| Approach | Tradeoff |
-|----------|----------|
-| All instructions in system prompt | Large context, wasted tokens |
-| Per-tool instructions (current) | ~1400 token base, inject only what's needed |
+| Approach                          | Tradeoff                                    |
+| --------------------------------- | ------------------------------------------- |
+| All instructions in system prompt | Large context, wasted tokens                |
+| Per-tool instructions (current)   | ~1400 token base, inject only what's needed |
 
 Benefits:
+
 1. **Token efficiency** - Only inject instructions for discovered tools
 2. **Scalability** - Add tools without bloating system prompt
 3. **Maintainability** - Each tool's instructions are colocated
@@ -762,11 +767,11 @@ Benefits:
 let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
 
 export function getSystemPrompt(context: SystemPromptContext): string {
-  if (!compiledTemplate) {
-    const template = loadPromptModules();
-    compiledTemplate = Handlebars.compile(template);
-  }
-  return compiledTemplate(context);
+	if (!compiledTemplate) {
+		const template = loadPromptModules();
+		compiledTemplate = Handlebars.compile(template);
+	}
+	return compiledTemplate(context);
 }
 ```
 
@@ -776,24 +781,26 @@ export function getSystemPrompt(context: SystemPromptContext): string {
 
 ### Why Handlebars?
 
-| Alternative | Issue |
-|-------------|-------|
-| String interpolation | Hard to read, no helpers |
-| Template literals | Can't iterate, limited |
-| Jinja2 | Python ecosystem |
-| Handlebars | JS native, simple, sufficient |
+| Alternative          | Issue                         |
+| -------------------- | ----------------------------- |
+| String interpolation | Hard to read, no helpers      |
+| Template literals    | Can't iterate, limited        |
+| Jinja2               | Python ecosystem              |
+| Handlebars           | JS native, simple, sufficient |
 
 ### Why prepareCall for Injection?
 
 The `ToolLoopAgent` is a module-level singleton. At construction time:
-- No working memory exists yet
-- No session context
-- Date would be fixed to server start
+
+-   No working memory exists yet
+-   No session context
+-   Date would be fixed to server start
 
 `prepareCall` runs per-call, allowing dynamic injection of:
-- Working memory entities
-- Current date
-- Any call-specific context
+
+-   Working memory entities
+-   Current date
+-   Any call-specific context
 
 ---
 
@@ -801,15 +808,15 @@ The `ToolLoopAgent` is a module-level singleton. At construction time:
 
 Approximate token counts:
 
-| Section | Tokens |
-|---------|--------|
-| Core agent.xml (identity, ReAct, tool-discovery) | ~1400 |
-| Working Memory (empty) | ~50 |
-| Working Memory (10 entities) | ~200 |
-| Active Protocols (5 tools) | ~400 |
-| Active Protocols (10 tools) | ~800 |
-| **Base Total** | **~1400** |
-| **With 10 tools + memory** | **~2400** |
+| Section                                          | Tokens    |
+| ------------------------------------------------ | --------- |
+| Core agent.xml (identity, ReAct, tool-discovery) | ~1400     |
+| Working Memory (empty)                           | ~50       |
+| Working Memory (10 entities)                     | ~200      |
+| Active Protocols (5 tools)                       | ~400      |
+| Active Protocols (10 tools)                      | ~800      |
+| **Base Total**                                   | **~1400** |
+| **With 10 tools + memory**                       | **~2400** |
 
 Key improvement: Base prompt is ~50% smaller than previous architecture. Tool instructions are injected only when needed.
 
@@ -817,12 +824,12 @@ Key improvement: Base prompt is ~50% smaller than previous architecture. Tool in
 
 ## Integration Points
 
-| Connects To | How |
-|-------------|-----|
-| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | Compiled prompt passed to agent |
+| Connects To                                         | How                                       |
+| --------------------------------------------------- | ----------------------------------------- |
+| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)         | Compiled prompt passed to agent           |
 | [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Memory injected via `{{{workingMemory}}}` |
-| [3.2 Tools](./LAYER_3.2_TOOLS.md) | Tool list and usage guidance |
-| [3.5 HITL](./LAYER_3.5_HITL.md) | Confirmation patterns defined |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | Tool list and usage guidance              |
+| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Confirmation patterns defined             |
 
 ---
 
@@ -831,6 +838,7 @@ Key improvement: Base prompt is ~50% smaller than previous architecture. Tool in
 ### Adding a New Tool Instruction
 
 1. Add entry to `TOOL_INSTRUCTIONS` in `server/tools/instructions/index.ts`:
+
 ```typescript
 my_new_tool: `BEFORE: Prerequisites
 AFTER: Follow-up actions
@@ -857,6 +865,6 @@ GOTCHA: Edge cases and critical rules`,
 
 ## Further Reading
 
-- [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - How prompt is used
-- [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Memory injection details
-- [3.5 HITL](./LAYER_3.5_HITL.md) - Confirmation flow implementation
+-   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - How prompt is used
+-   [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Memory injection details
+-   [3.5 HITL](./LAYER_3.5_HITL.md) - Confirmation flow implementation

@@ -12,6 +12,7 @@ import type { AgentContext } from './types'
 // Core tool imports (must be at top to avoid circular init issues)
 import { toolSearchTool } from './discovery/tool-search'
 import { finalAnswerTool } from './core/final-answer'
+import { acknowledgeTool } from './core/acknowledge'
 import {
   findImageTool,
   searchImagesTool,
@@ -844,6 +845,7 @@ export const ALL_TOOLS = {
   // Core tools (always available)
   'tool_search': toolSearchTool,
   'final_answer': finalAnswerTool,
+  'acknowledge': acknowledgeTool,
 
   // Pages
   'cms_getPage': cmsGetPage,

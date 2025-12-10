@@ -15,12 +15,8 @@ export const finalAnswerTool = tool({
 	description: `Present final results to user. ONLY call when all tool calls are complete and you have data to report. NEVER call if user asked to verify/check something - call the verification tool FIRST, then final_answer with the result.`,
 
 	inputSchema: z.object({
-		summary: z
-			.string()
-			.describe("Brief summary of what was accomplished (1-2 sentences)"),
-		content: z
-			.string()
-			.describe("Formatted response in markdown with full details"),
+		summary: z.string().describe("Brief summary of what was accomplished (1-2 sentences)"),
+		content: z.string().describe("Formatted response in markdown with full details"),
 	}),
 
 	execute: async ({ summary, content }) => {
