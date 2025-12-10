@@ -42,9 +42,10 @@ interface ToolSearchResult {
  * Extract discovered tools from working memory in system message.
  * Working memory contains tools from PREVIOUS conversation turns.
  *
- * Working memory format in system prompt:
+ * Working memory format in system prompt (from WorkingContext.toContextString):
  * ```
- * **Available Tools:** discoveredTools: ["cms_getPage", "cms_updatePage", ...]
+ * [DISCOVERED TOOLS]
+ * cms_getPage, cms_updatePage, cms_listPosts
  * ```
  */
 export function extractToolsFromWorkingMemory(
@@ -72,17 +73,17 @@ export function extractToolsFromWorkingMemory(
 		return [];
 	}
 
-	// Match discoveredTools array in working memory
-	// Format: discoveredTools: ["tool1", "tool2", ...]
-	const match = content.match(/discoveredTools:\s*\[([^\]]*)\]/);
+	// Match [DISCOVERED TOOLS] section followed by comma-separated tool names
+	// Format: [DISCOVERED TOOLS]\ncms_getPage, cms_updatePage, ...
+	const match = content.match(/\[DISCOVERED TOOLS\]\s*\n([^\n\[]+)/);
 	if (!match) {
 		return [];
 	}
 
-	// Parse the array contents
+	// Parse comma-separated tool names
 	return match[1]
 		.split(",")
-		.map((s: string) => s.trim().replace(/['"]/g, ""))
+		.map((s: string) => s.trim())
 		.filter(Boolean);
 }
 

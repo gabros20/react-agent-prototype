@@ -67,7 +67,6 @@ export function initBM25Index(tools?: ToolMetadata[]): void {
 		fldWeights: {
 			name: 3,        // Tool name is most important
 			phrases: 2,     // Search phrases are key for discovery
-			category: 1,    // Category helps with grouping
 		},
 	});
 
@@ -81,7 +80,6 @@ export function initBM25Index(tools?: ToolMetadata[]): void {
 		const doc = {
 			name: tool.name.replace(/_/g, " "), // cms_getPage -> cms get page
 			phrases: tool.phrases.join(" "),
-			category: tool.category,
 		};
 
 		// BM25 engine converts numeric IDs to strings internally
@@ -145,7 +143,6 @@ export function bm25Search(
 
 			return {
 				name: metadata.name,
-				category: metadata.category,
 				score: normalizeScore(score, results),
 				relatedTools:
 					metadata.relatedTools.length > 0

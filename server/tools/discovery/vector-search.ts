@@ -69,7 +69,6 @@ function buildSearchableText(tool: ToolMetadata): string {
 	return [
 		tool.name.replace(/_/g, " "),
 		tool.phrases.join(" "),
-		tool.category,
 	].join(" ");
 }
 
@@ -173,7 +172,6 @@ export async function vectorSearch(
 		const metadata = TOOL_INDEX[name];
 		return {
 			name: metadata.name,
-			category: metadata.category,
 			score,
 			relatedTools:
 				metadata.relatedTools.length > 0

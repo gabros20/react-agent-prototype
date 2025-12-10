@@ -434,6 +434,8 @@ export class AgentOrchestrator {
 			traceId: resolved.traceId,
 			modelId: resolved.modelId,
 			workingMemory: workingContext.toContextString(),
+			// Pass discovered tools directly from WorkingContext (avoids fragile regex parsing)
+			discoveredTools: workingContext.getDiscoveredTools(),
 			cmsTarget: resolved.cmsTarget,
 			db: this.deps.db,
 			services: this.deps.services,

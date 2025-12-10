@@ -67,7 +67,7 @@ export const cmsCreatePost = tool({
 })
 
 export const cmsUpdatePost = tool({
-  description: 'Update post metadata (title, author, excerpt, category, etc.) or content',
+  description: 'Update post metadata (title, author, excerpt, category, status, etc.) or content',
   inputSchema: z.object({
     postSlug: z.string().describe('Post slug to update'),
     updates: z.object({
@@ -76,6 +76,7 @@ export const cmsUpdatePost = tool({
       excerpt: z.string().optional().describe('New excerpt'),
       featuredImage: z.string().optional().describe('New featured image URL'),
       category: z.string().optional().describe('New category'),
+      status: z.enum(['draft', 'published', 'archived']).optional().describe('New status (draft, published, archived)'),
       content: z.object({
         body: z.string().optional(),
         cover: z.object({
@@ -103,15 +104,16 @@ export const cmsUpdatePost = tool({
       featuredImageToUpdate = input.updates.content.cover.url
     }
 
-    // Update metadata if provided
+    // Update metadata if provided (including status)
     if (input.updates.title || input.updates.author || input.updates.excerpt ||
-        featuredImageToUpdate || input.updates.category) {
+        featuredImageToUpdate || input.updates.category || input.updates.status) {
       await ctx.services.entryService.updateEntryMetadata(entry.id, {
         title: input.updates.title,
         author: input.updates.author,
         excerpt: input.updates.excerpt,
         featuredImage: featuredImageToUpdate,
-        category: input.updates.category
+        category: input.updates.category,
+        status: input.updates.status
       })
     }
 
@@ -130,12 +132,16 @@ export const cmsUpdatePost = tool({
       })
     }
 
+    // Get updated post to return current status
+    const updated = await ctx.services.entryService.getEntryBySlug(input.postSlug, input.localeCode || 'en')
+
     return {
       success: true,
       post: {
         id: entry.id,
         slug: entry.slug,
         title: input.updates.title || entry.title,
+        status: updated?.status || entry.status,
         message: 'Post updated successfully'
       }
     }

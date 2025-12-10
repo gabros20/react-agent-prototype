@@ -22,7 +22,6 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { ALL_TOOLS } from "../tools/all-tools";
 import { getAgentSystemPrompt } from "./system-prompt";
-import { getAllDiscoveredTools } from "../tools/discovery";
 import { getToolInstructions } from "../tools/instructions";
 import type { AgentContext, AgentLogger, StreamWriter } from "../tools/types";
 import type { DrizzleDB } from "../db/client";
@@ -39,6 +38,10 @@ let lastInjectedInstructions: {
 
 // Store the base system prompt from prepareCall so prepareStep can build updated version
 let currentBaseSystemPrompt: string = "";
+
+// Store discovered tools from working memory (loaded at turn start)
+// This avoids fragile regex parsing from system prompt text
+let persistedDiscoveredTools: string[] = [];
 
 export function getLastInjectedInstructions() {
 	const result = lastInjectedInstructions;
@@ -78,6 +81,10 @@ export const AgentCallOptionsSchema = z.object({
 
 	// Working memory context (injected into system prompt)
 	workingMemory: z.string().optional(),
+
+	// Discovered tools from previous turns (from WorkingContext)
+	// Passed directly to avoid fragile regex parsing from system prompt
+	discoveredTools: z.array(z.string()).optional(),
 
 	// CMS target (site/environment)
 	cmsTarget: z.object({
@@ -121,6 +128,9 @@ export const cmsAgent = new ToolLoopAgent({
 		// Store for prepareStep to build updated version with injected instructions
 		currentBaseSystemPrompt = dynamicInstructions;
 
+		// Store discovered tools from previous turns (passed directly from WorkingContext)
+		persistedDiscoveredTools = options.discoveredTools || [];
+
 		// Dynamic model selection: use requested model or fall back to default
 		const model = options.modelId ? openrouter.languageModel(options.modelId) : openrouter.languageModel(AGENT_CONFIG.modelId);
 
@@ -157,8 +167,23 @@ export const cmsAgent = new ToolLoopAgent({
 	prepareStep: async ({ stepNumber, steps, messages }: { stepNumber: number; steps: any[]; messages: CoreMessage[] }) => {
 		type ToolName = keyof typeof ALL_TOOLS;
 
-		// Extract tools discovered from working memory (previous turns) + current steps
-		const discoveredTools = getAllDiscoveredTools(messages, steps) as ToolName[];
+		// Get tools from current execution steps
+		const { extractToolsFromSteps } = await import("../tools/discovery");
+		const fromCurrentSteps = extractToolsFromSteps(steps);
+
+		// Combine: persisted tools (previous turns) + current step discoveries
+		// persistedDiscoveredTools is set in prepareCall from WorkingContext directly
+		const discoveredTools = [...new Set([...persistedDiscoveredTools, ...fromCurrentSteps])] as ToolName[];
+
+		// Debug: trace cross-turn tool sources
+		console.log(`[prepareStep] Step ${stepNumber} | Tool sources:`);
+		console.log(`  - Persisted (previous turns): [${persistedDiscoveredTools.join(", ") || "none"}]`);
+		console.log(`  - Current steps: [${fromCurrentSteps.join(", ") || "none"}]`);
+		console.log(`  - Combined: [${discoveredTools.join(", ") || "none"}]`);
+
+		// Log what LLM actually receives in tools array
+		const toolsForLLM = ["tool_search", "final_answer", ...discoveredTools];
+		console.log(`  - Tools sent to LLM API (${toolsForLLM.length}): [${toolsForLLM.join(", ")}]`);
 
 		// Core tools always available
 		const coreTools: ToolName[] = ["tool_search", "final_answer"];
@@ -194,12 +219,9 @@ export const cmsAgent = new ToolLoopAgent({
 			const toolsNeedingProtocols = [...new Set(["final_answer", "tool_search", ...discoveredTools])];
 			const toolInstructions = getToolInstructions(toolsNeedingProtocols);
 
-			// Log protocol injection for debugging
-			console.log(`[prepareStep] Step ${stepNumber} | Active tools: [${activeTools.join(", ")}]`);
-			if (discoveredTools.length > 0) {
-				console.log(`[prepareStep] Discovered tools: [${discoveredTools.join(", ")}]`);
-			}
-			console.log(`[prepareStep] Instructions injected for: [${toolsNeedingProtocols.join(", ")}]`);
+			// Log final activeTools and instructions (after cross-turn sync debug above)
+			console.log(`  - Final activeTools: [${activeTools.join(", ")}]`);
+			console.log(`  - Instructions for: [${toolsNeedingProtocols.join(", ")}]`);
 
 			// Store for SSE emission (read by orchestrator)
 			// Include the full updated system prompt so debug panel can show what agent actually sees

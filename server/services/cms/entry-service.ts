@@ -38,6 +38,7 @@ export interface UpdateEntryMetadataInput {
   excerpt?: string;
   featuredImage?: string;
   category?: string;
+  status?: 'draft' | 'published' | 'archived';
 }
 
 export class EntryService {
@@ -502,6 +503,15 @@ export class EntryService {
     if (metadata.excerpt !== undefined) updateData.excerpt = metadata.excerpt;
     if (metadata.featuredImage !== undefined) updateData.featuredImage = metadata.featuredImage;
     if (metadata.category !== undefined) updateData.category = metadata.category;
+    if (metadata.status !== undefined) {
+      updateData.status = metadata.status;
+      // Clear publishedAt if reverting to draft, set it if publishing
+      if (metadata.status === 'draft') {
+        updateData.publishedAt = null;
+      } else if (metadata.status === 'published' && !entry.publishedAt) {
+        updateData.publishedAt = new Date();
+      }
+    }
 
     await this.db
       .update(schema.collectionEntries)

@@ -47,6 +47,10 @@ import {
   pexelsDownloadPhotoTool
 } from './pexels-tools'
 import {
+  unsplashSearchPhotosTool,
+  unsplashDownloadPhotoTool
+} from './unsplash-tools'
+import {
   generateHeroContent,
   generateMetadata,
   generateSlug
@@ -906,7 +910,11 @@ export const ALL_TOOLS = {
 
   // Stock Photos (Pexels)
   'pexels_searchPhotos': pexelsSearchPhotosTool,
-  'pexels_downloadPhoto': pexelsDownloadPhotoTool
+  'pexels_downloadPhoto': pexelsDownloadPhotoTool,
+
+  // Stock Photos (Unsplash)
+  'unsplash_searchPhotos': unsplashSearchPhotosTool,
+  'unsplash_downloadPhoto': unsplashDownloadPhotoTool
 }
 
 // ============================================================================

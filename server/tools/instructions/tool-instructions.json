@@ -5,7 +5,7 @@
 
 	"cms_createPost": "BEFORE: cms_listPosts to check for duplicate titles\nAFTER: Ask if user wants cover image; ask if ready to publish\nNEXT: pexels_searchPhotos (cover image), cms_publishPost\nGOTCHA: Creates DRAFT only. Set BOTH featuredImage AND content.cover for covers. Blog posts should be substantial (500+ words for guides).",
 
-	"cms_updatePost": "BEFORE: cms_getPost to verify post exists and get current state\nAFTER: Confirm changes made\nNEXT: cms_publishPost if ready to go live\nGOTCHA: For covers, set BOTH featuredImage AND content.cover in same call. Content MERGES with existing.",
+	"cms_updatePost": "BEFORE: cms_getPost to verify post exists and get current state\nAFTER: Confirm changes made, show new status\nNEXT: cms_getPost (verify changes)\nGOTCHA: For covers, set BOTH featuredImage AND content.cover. Content MERGES with existing.",
 
 	"cms_publishPost": "BEFORE: Post must exist as draft (verify with cms_getPost)\nAFTER: Confirm publication, offer preview at /posts/blog/{slug}\nNEXT: cms_getPost (show final state)\nGOTCHA: Requires confirmation flow - first call returns requiresConfirmation, ask user, then call with confirmed:true.",
 

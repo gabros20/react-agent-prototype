@@ -7,27 +7,6 @@
 
 import { z } from "zod";
 
-// ============================================================================
-// Tool Categories
-// ============================================================================
-
-export const ToolCategorySchema = z.enum([
-	"pages",
-	"sections",
-	"images",
-	"posts",
-	"navigation",
-	"entries",
-	"search",
-	"research",
-	"pexels",
-	"http",
-	"site-settings",
-	"planning",
-	"final-answer", // Core tool for presenting final results to user
-]);
-
-export type ToolCategory = z.infer<typeof ToolCategorySchema>;
 
 // ============================================================================
 // Extraction Schema (for working memory entity extraction)
@@ -49,8 +28,6 @@ export type ExtractionSchema = z.infer<typeof ExtractionSchemaZ>;
 
 export const ToolMetadataSchema = z.object({
 	name: z.string(),
-	// description removed - now in tool definitions only (Per-Tool Instruction Architecture)
-	category: ToolCategorySchema,
 	phrases: z.array(z.string()), // Search phrases: "find image", "create page"
 	relatedTools: z.array(z.string()), // Often used together
 	riskLevel: z.enum(["safe", "moderate", "destructive"]),
@@ -83,7 +60,6 @@ export type CustomExtractFn = (result: unknown) => Entity[];
 
 export interface ToolSearchResult {
 	name: string;
-	category: ToolCategory;
 	score: number;
 	relatedTools?: string[];
 }

@@ -146,7 +146,6 @@ export function expandWithRelatedTools(
 			// Add with discounted score
 			expanded.push({
 				name: relatedMeta.name,
-				category: relatedMeta.category,
 				score: tool.score * CONFIG.RELATED_TOOL_SCORE_DISCOUNT,
 				relatedTools:
 					relatedMeta.relatedTools.length > 0
