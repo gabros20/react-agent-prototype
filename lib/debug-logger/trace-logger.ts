@@ -398,6 +398,45 @@ export function createTraceLogger(traceId: string): TraceLogger {
 		},
 
 		// =========================================================================
+		// Context Management
+		// =========================================================================
+
+		llmContext(
+			messages: Array<{ role: string; content: unknown }>,
+			messageCount: number,
+			tokens: number
+		) {
+			getStore().addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "llm-context",
+				level: "info",
+				summary: `Sent to LLM: ${messageCount} messages (${formatTokenCount(tokens)} tokens)`,
+				output: { messages, messageCount, tokens },
+			});
+		},
+
+		contextCleanup(
+			messagesRemoved: number,
+			removedTools: string[],
+			activeTools: string[]
+		) {
+			if (messagesRemoved === 0 && removedTools.length === 0) return;
+
+			getStore().addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "context-cleanup",
+				level: removedTools.length > 0 ? "warn" : "info",
+				summary: removedTools.length > 0
+					? `Cleanup: -${messagesRemoved} msgs, -${removedTools.length} tools`
+					: `Cleanup: -${messagesRemoved} msgs`,
+				input: { messagesRemoved, removedTools },
+				output: { activeTools, activeToolCount: activeTools.length },
+			});
+		},
+
+		// =========================================================================
 		// Working Memory
 		// =========================================================================
 

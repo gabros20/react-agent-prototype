@@ -1,23 +1,14 @@
 /**
- * CMS Agent - Centralized AI SDK v6 ToolLoopAgent
+ * CMS Agent - AI SDK v6 ToolLoopAgent
  *
- * Single-file agent definition following AI SDK v6 best practices:
- * - Module-level singleton agent
- * - Type-safe call options with callOptionsSchema
- * - Dynamic instructions via prepareCall
- * - Dynamic tool availability via prepareStep (Phase 7)
- * - Native stop conditions
- * - Working memory via system prompt injection
- *
- * Dynamic Tool Injection Architecture:
- * - Agent starts with only tool_search
- * - Agent discovers tools via tool_search calls
- * - Discovered tools become available via activeTools in prepareStep
- * - Rules are injected alongside discovered tools
+ * Singleton agent with dynamic tool injection:
+ * - Starts with tool_search and final_answer only
+ * - Discovers tools via tool_search calls
+ * - Discovered tools + their instructions injected via prepareStep
+ * - Cross-turn persistence via WorkingContext (handled by ContextManager)
  */
 
 import { ToolLoopAgent, stepCountIs, hasToolCall, NoSuchToolError, InvalidToolInputError } from "ai";
-import type { CoreMessage } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { ALL_TOOLS } from "../tools/all-tools";
@@ -163,8 +154,7 @@ export const cmsAgent = new ToolLoopAgent({
 	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasToolCall("final_answer")],
 
 	// Dynamic tool availability via prepareStep
-	// Implements Per-Tool Instruction Architecture from PER_TOOL_INSTRUCTION_ARCHITECTURE.md
-	prepareStep: async ({ stepNumber, steps, messages }: { stepNumber: number; steps: any[]; messages: CoreMessage[] }) => {
+	prepareStep: async ({ stepNumber, steps }: { stepNumber: number; steps: any[] }) => {
 		type ToolName = keyof typeof ALL_TOOLS;
 
 		// Get tools from current execution steps
@@ -172,18 +162,12 @@ export const cmsAgent = new ToolLoopAgent({
 		const fromCurrentSteps = extractToolsFromSteps(steps);
 
 		// Combine: persisted tools (previous turns) + current step discoveries
-		// persistedDiscoveredTools is set in prepareCall from WorkingContext directly
 		const discoveredTools = [...new Set([...persistedDiscoveredTools, ...fromCurrentSteps])] as ToolName[];
 
-		// Debug: trace cross-turn tool sources
-		console.log(`[prepareStep] Step ${stepNumber} | Tool sources:`);
-		console.log(`  - Persisted (previous turns): [${persistedDiscoveredTools.join(", ") || "none"}]`);
-		console.log(`  - Current steps: [${fromCurrentSteps.join(", ") || "none"}]`);
-		console.log(`  - Combined: [${discoveredTools.join(", ") || "none"}]`);
-
-		// Log what LLM actually receives in tools array
-		const toolsForLLM = ["tool_search", "final_answer", ...discoveredTools];
-		console.log(`  - Tools sent to LLM API (${toolsForLLM.length}): [${toolsForLLM.join(", ")}]`);
+		// Debug log
+		if (discoveredTools.length > 0 || fromCurrentSteps.length > 0) {
+			console.log(`[prepareStep] Step ${stepNumber} | Tools: persisted=${persistedDiscoveredTools.length}, current=${fromCurrentSteps.length}, total=${discoveredTools.length}`);
+		}
 
 		// Core tools always available
 		const coreTools: ToolName[] = ["tool_search", "final_answer"];
@@ -201,67 +185,37 @@ export const cmsAgent = new ToolLoopAgent({
 		// All discovered tools available, plus core tools
 		const activeTools = [...coreTools, ...discoveredTools] as ToolName[];
 
-		const result: {
-			activeTools: ToolName[];
-			toolChoice: "auto";
-			messages?: CoreMessage[];
-		} = {
+		const result = {
 			activeTools,
 			toolChoice: "auto" as const,
 		};
 
-		// =====================================================================
-		// Per-Tool Protocol Injection: Inject <active-protocols> into system prompt
-		// ALWAYS include core tools (final_answer, tool_search) + any discovered tools
-		// =====================================================================
-		{
-			// Get all tools that need protocols (core tools ALWAYS + discovered)
-			const toolsNeedingProtocols = [...new Set(["final_answer", "tool_search", ...discoveredTools])];
-			const toolInstructions = getToolInstructions(toolsNeedingProtocols);
+		// Inject tool instructions into <active-protocols> section of system prompt
+		const toolsNeedingProtocols = [...new Set(["final_answer", "tool_search", ...discoveredTools])];
+		const toolInstructions = getToolInstructions(toolsNeedingProtocols);
 
-			// Log final activeTools and instructions (after cross-turn sync debug above)
-			console.log(`  - Final activeTools: [${activeTools.join(", ")}]`);
-			console.log(`  - Instructions for: [${toolsNeedingProtocols.join(", ")}]`);
+		if (toolInstructions) {
+			// Replace <active-protocols> placeholder with actual instructions
+			const updatedContent = currentBaseSystemPrompt.replace(
+				/<active-protocols>[\s\S]*?<\/active-protocols>/g,
+				`<active-protocols>\n${toolInstructions}\n</active-protocols>`
+			);
 
-			// Store for SSE emission (read by orchestrator)
-			// Include the full updated system prompt so debug panel can show what agent actually sees
-			if (toolInstructions) {
-				lastInjectedInstructions = {
-					instructions: toolInstructions,
-					tools: toolsNeedingProtocols,
-					updatedSystemPrompt: null, // Will be set below if we update the prompt
-				};
-			}
+			// Store for SSE emission (debug panel)
+			lastInjectedInstructions = {
+				instructions: toolInstructions,
+				tools: toolsNeedingProtocols,
+				updatedSystemPrompt: updatedContent,
+			};
 
-			if (toolInstructions) {
-				// Build updated system prompt from the base (stored in prepareCall)
-				let updatedContent = currentBaseSystemPrompt;
-
-				// Replace <active-protocols> content in-place
-				updatedContent = updatedContent.replace(
-					/<active-protocols>[\s\S]*?<\/active-protocols>/g,
-					`<active-protocols>\n${toolInstructions}\n</active-protocols>`
-				);
-
-				// Store full updated system prompt for debug panel
-				if (lastInjectedInstructions) {
-					lastInjectedInstructions.updatedSystemPrompt = updatedContent;
-				}
-
-				return {
-					...result,
-					instructions: updatedContent,
-				};
-			}
+			return {
+				...result,
+				instructions: updatedContent,
+			};
 		}
 
-		// Message trimming for long conversations (prevent token overflow)
-		if (!result.messages && messages.length > 30) {
-			result.messages = [
-				messages[0], // Keep system prompt
-				...messages.slice(-15), // Keep last 15 messages for long-horizon tasks
-			];
-		}
+		// Note: Message trimming is now handled by ContextManager in orchestrator
+		// for coordinated cleanup of messages AND discovered tools
 
 		return result;
 	},

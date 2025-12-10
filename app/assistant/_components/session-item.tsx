@@ -28,42 +28,70 @@ import { useTraceStore } from '../_stores/trace-store';
 /**
  * Extract readable text content from AI SDK message format.
  * Handles both plain strings and AI SDK content parts array.
+ *
+ * AI SDK message content can be:
+ * - Plain string (user messages)
+ * - Array of parts: [{ type: 'text', text: '...' }, { type: 'tool-call', ... }]
+ * - Stored as JSON string in database, needs parsing
+ *
+ * Returns empty string for tool-only messages (they shouldn't be displayed).
  */
-function extractMessageContent(content: any): string {
-  // Already a plain string
+export function extractMessageContent(content: unknown): string {
+  // Handle null/undefined
+  if (content == null) return '';
+
+  // Already a plain string - check if it needs JSON parsing
   if (typeof content === 'string') {
-    // Check if it's a JSON array string (AI SDK format)
-    if (content.startsWith('[') && content.includes('"type"')) {
+    // Check if it's a JSON string that needs parsing
+    const trimmed = content.trim();
+    if ((trimmed.startsWith('[') || trimmed.startsWith('{')) && trimmed.includes('"type"')) {
       try {
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) {
-          return parsed
-            .filter((part: any) => part.type === 'text')
-            .map((part: any) => part.text)
-            .join('\n');
-        }
+        const parsed = JSON.parse(trimmed);
+        // Recurse with parsed content
+        return extractMessageContent(parsed);
       } catch {
-        // Not valid JSON, return as-is
+        // Not valid JSON, return as-is (plain text message)
       }
     }
+    // Plain string content
     return content;
   }
 
   // Array of content parts (AI SDK format)
   if (Array.isArray(content)) {
-    return content
-      .filter((part: any) => part.type === 'text')
-      .map((part: any) => part.text)
-      .join('\n');
+    const textParts = content
+      .filter((part): part is { type: 'text'; text: string } =>
+        part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string'
+      )
+      .map(part => part.text);
+
+    // Return joined text parts, or empty string if no text (tool-only message)
+    return textParts.join('\n');
   }
 
-  // Object with text property
-  if (content && typeof content === 'object' && content.text) {
-    return content.text;
+  // Single object - check if it's a text part
+  if (content && typeof content === 'object') {
+    const obj = content as Record<string, unknown>;
+
+    // AI SDK text part: { type: 'text', text: '...' }
+    if (obj.type === 'text' && typeof obj.text === 'string') {
+      return obj.text;
+    }
+
+    // Tool call or tool result - don't display as text
+    if (obj.type === 'tool-call' || obj.type === 'tool-result') {
+      return '';
+    }
+
+    // Object with text property
+    if ('text' in obj && typeof obj.text === 'string') {
+      return obj.text;
+    }
   }
 
-  // Fallback: stringify
-  return JSON.stringify(content);
+  // Fallback: only stringify if it's truly unknown content
+  // (shouldn't happen with proper message handling)
+  return '';
 }
 
 interface SessionItemProps {
@@ -96,13 +124,18 @@ export function SessionItem({ session, isActive, onSessionLoad }: SessionItemPro
         clearAllTraces();
 
         setSessionId(loadedSession.id);
-        // Convert messages to ChatMessage format
-        const chatMessages = loadedSession.messages.map((msg) => ({
-          id: msg.id,
-          role: msg.role as 'user' | 'assistant' | 'system',
-          content: extractMessageContent(msg.content),
-          createdAt: msg.createdAt,
-        }));
+        // Convert messages to ChatMessage format, filtering out tool-only messages
+        // (messages with empty content after extraction are tool calls/results that
+        // shouldn't be displayed in the chat UI)
+        const chatMessages = loadedSession.messages
+          .filter((msg) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+          .map((msg) => ({
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant' | 'system',
+            content: extractMessageContent(msg.content),
+            createdAt: msg.createdAt,
+          }))
+          .filter((msg) => msg.content.trim() !== ''); // Remove messages with no displayable content
         setMessages(chatMessages);
 
         // Invalidate the query so TanStack refetches logs for new session
@@ -140,12 +173,15 @@ export function SessionItem({ session, isActive, onSessionLoad }: SessionItemPro
           const newSession = await loadSession(newSessionId);
           if (newSession) {
             setSessionId(newSession.id);
-            const chatMessages = newSession.messages.map((msg) => ({
-              id: msg.id,
-              role: msg.role as 'user' | 'assistant' | 'system',
-              content: extractMessageContent(msg.content),
-              createdAt: msg.createdAt,
-            }));
+            const chatMessages = newSession.messages
+              .filter((msg) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+              .map((msg) => ({
+                id: msg.id,
+                role: msg.role as 'user' | 'assistant' | 'system',
+                content: extractMessageContent(msg.content),
+                createdAt: msg.createdAt,
+              }))
+              .filter((msg) => msg.content.trim() !== '');
             setMessages(chatMessages);
           } else {
             // Fallback: new session with no messages

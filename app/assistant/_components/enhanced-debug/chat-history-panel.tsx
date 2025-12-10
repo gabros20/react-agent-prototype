@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "../../_stores/chat-store";
+import { useTraceStore } from "../../_stores/trace-store";
 import { sessionsApi, type Message } from "@/lib/api/sessions";
 import {
 	MessageSquare,
@@ -512,9 +513,78 @@ interface TrimmedMessagesData {
 	messageHistoryTokens?: number;
 }
 
+// Helper to extract data from trace entries (either from saved logs or real-time store)
+function extractFromTraceEntries(
+	entries: Array<{ type: string; input?: unknown; output?: unknown; timestamp: number }>,
+	latestSystemPrompt: SystemPromptData | null,
+	latestTrimmedData: TrimmedMessagesData | null
+): { systemPrompt: SystemPromptData | null; trimmedData: TrimmedMessagesData | null } {
+	for (const entry of entries) {
+		if (!entry || !entry.type) continue;
+		const timestamp = new Date(entry.timestamp);
+		if (isNaN(timestamp.getTime())) continue;
+
+		// Extract system prompt
+		if (entry.type === "system-prompt") {
+			let content: string | null = null;
+			if (typeof entry.input === "string") {
+				content = entry.input;
+			} else if (entry.input && typeof (entry.input as { prompt?: string }).prompt === "string") {
+				content = (entry.input as { prompt: string }).prompt;
+			} else if (typeof entry.output === "string") {
+				content = entry.output;
+			} else if (entry.output && typeof (entry.output as { prompt?: string }).prompt === "string") {
+				content = (entry.output as { prompt: string }).prompt;
+			}
+
+			if (content) {
+				if (!latestSystemPrompt || timestamp > latestSystemPrompt.timestamp) {
+					latestSystemPrompt = { content, timestamp };
+				}
+			}
+		}
+
+		// Extract trimmed messages from llm-context event
+		if (entry.type === "llm-context") {
+			const outputData = entry.output as {
+				messages?: Array<{ role: string; content: unknown }>;
+				messageCount?: number;
+				tokens?: number;
+			} | null;
+
+			if (outputData && Array.isArray(outputData.messages) && outputData.messages.length > 0) {
+				if (!latestTrimmedData || timestamp > latestTrimmedData.timestamp) {
+					const messagesWithIds: Message[] = outputData.messages.map((m, i) => ({
+						id: `llm-${i}-${timestamp.getTime()}`,
+						role: m.role as "user" | "assistant" | "system" | "tool",
+						content: m.content,
+						createdAt: timestamp,
+					}));
+
+					latestTrimmedData = {
+						messages: messagesWithIds,
+						systemPrompt: null,
+						timestamp,
+						messageCount: outputData.messageCount,
+						messageHistoryTokens: outputData.tokens,
+					};
+				}
+			}
+		}
+	}
+
+	return { systemPrompt: latestSystemPrompt, trimmedData: latestTrimmedData };
+}
+
 export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 	const sessionId = useChatStore((state) => state.sessionId);
 	const isStreaming = useChatStore((state) => state.isStreaming);
+
+	// Get real-time trace entries from the store
+	const activeTraceId = useTraceStore((state) => state.activeTraceId);
+	const entriesByTrace = useTraceStore((state) => state.entriesByTrace);
+	const activeTraceEntries = activeTraceId ? entriesByTrace[activeTraceId] || [] : [];
+
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [systemPrompt, setSystemPrompt] = useState<SystemPromptData | null>(null);
 	const [trimmedData, setTrimmedData] = useState<TrimmedMessagesData | null>(null);
@@ -524,6 +594,42 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 	const [selectedItem, setSelectedItem] = useState<TreeDataItem | undefined>();
 	const [copied, setCopied] = useState(false);
 	const prevStreamingRef = useRef(isStreaming);
+
+	// Compute real-time system prompt and trimmed data from current trace
+	const realtimeData = useMemo(() => {
+		if (activeTraceEntries.length === 0) {
+			return { systemPrompt: null, trimmedData: null };
+		}
+		return extractFromTraceEntries(
+			activeTraceEntries.map(e => ({
+				type: e.type,
+				input: e.input,
+				output: e.output,
+				timestamp: e.timestamp,
+			})),
+			null,
+			null
+		);
+	}, [activeTraceEntries]);
+
+	// Merge real-time data with persisted data (real-time takes priority if newer)
+	const effectiveSystemPrompt = useMemo(() => {
+		if (realtimeData.systemPrompt && systemPrompt) {
+			return realtimeData.systemPrompt.timestamp > systemPrompt.timestamp
+				? realtimeData.systemPrompt
+				: systemPrompt;
+		}
+		return realtimeData.systemPrompt || systemPrompt;
+	}, [realtimeData.systemPrompt, systemPrompt]);
+
+	const effectiveTrimmedData = useMemo(() => {
+		if (realtimeData.trimmedData && trimmedData) {
+			return realtimeData.trimmedData.timestamp > trimmedData.timestamp
+				? realtimeData.trimmedData
+				: trimmedData;
+		}
+		return realtimeData.trimmedData || trimmedData;
+	}, [realtimeData.trimmedData, trimmedData]);
 
 	const fetchMessages = useCallback(async () => {
 		if (!sessionId) {
@@ -542,39 +648,83 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 			setMessages(session.messages);
 
 			// Fetch conversation logs to get system prompt and trimmed messages
-			const logsResponse = (await sessionsApi.getLogs(sessionId)) as {
-				data?: Array<{
-					entries?: Array<{
-						type: string;
-						input?: unknown;
-						output?: unknown;
-						timestamp: number;
-					}>;
+			// Note: API client returns data directly, not wrapped in { data: ... }
+			const logsRaw = await sessionsApi.getLogs(sessionId);
+			const logs = (Array.isArray(logsRaw) ? logsRaw : []) as Array<{
+				entries?: Array<{
+					type: string;
+					input?: unknown;
+					output?: unknown;
+					timestamp: number;
 				}>;
-			};
-			const logs = logsResponse.data || [];
+			}>;
 
-			// Find the most recent system-prompt and prompt-sent entries
+			// Find the most recent system-prompt and llm-context entries
+			// Note: The system-prompt entry is updated in-place when instructions are injected,
+			// so it already contains the full prompt with tool instructions
 			let latestSystemPrompt: SystemPromptData | null = null;
 			let latestTrimmedData: TrimmedMessagesData | null = null;
 
 			for (const log of logs) {
-				if (log.entries) {
+				if (log.entries && Array.isArray(log.entries)) {
 					for (const entry of log.entries) {
+						if (!entry || !entry.type) continue;
 						const timestamp = new Date(entry.timestamp);
+						// Skip if timestamp is invalid
+						if (isNaN(timestamp.getTime())) continue;
 
 						// Extract system prompt
 						if (entry.type === "system-prompt") {
-							const content = entry.input || entry.output;
-							if (content && typeof content === "string") {
+							// The prompt can be in entry.input (string) or entry.output.prompt (object)
+							let content: string | null = null;
+							if (typeof entry.input === "string") {
+								content = entry.input;
+							} else if (entry.input && typeof (entry.input as { prompt?: string }).prompt === "string") {
+								content = (entry.input as { prompt: string }).prompt;
+							} else if (typeof entry.output === "string") {
+								content = entry.output;
+							} else if (entry.output && typeof (entry.output as { prompt?: string }).prompt === "string") {
+								content = (entry.output as { prompt: string }).prompt;
+							}
+
+							if (content) {
 								if (!latestSystemPrompt || timestamp > latestSystemPrompt.timestamp) {
 									latestSystemPrompt = { content, timestamp };
 								}
 							}
 						}
 
-						// Extract trimmed messages from user-prompt (messages in output field)
-						if (entry.type === "user-prompt") {
+						// Extract trimmed messages from llm-context event (what was actually sent to LLM)
+						if (entry.type === "llm-context") {
+							const outputData = entry.output as {
+								messages?: Array<{ role: string; content: unknown }>;
+								messageCount?: number;
+								tokens?: number;
+							} | null;
+
+							if (outputData && Array.isArray(outputData.messages) && outputData.messages.length > 0) {
+								if (!latestTrimmedData || timestamp > latestTrimmedData.timestamp) {
+									// Convert to Message format with generated IDs
+									const messagesWithIds: Message[] = outputData.messages.map((m, i) => ({
+										id: `llm-${i}-${timestamp.getTime()}`,
+										role: m.role as "user" | "assistant" | "system" | "tool",
+										content: m.content,
+										createdAt: timestamp,
+									}));
+
+									latestTrimmedData = {
+										messages: messagesWithIds,
+										systemPrompt: null, // System prompt is emitted separately
+										timestamp,
+										messageCount: outputData.messageCount,
+										messageHistoryTokens: outputData.tokens,
+									};
+								}
+							}
+						}
+
+						// Fallback: Extract from user-prompt if llm-context not available (legacy)
+						if (entry.type === "user-prompt" && latestTrimmedData === null) {
 							const outputData = entry.output as {
 								messages?: Array<{ role: string; content: unknown }>;
 								messageCount?: number;
@@ -582,36 +732,29 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 							} | null;
 
 							if (outputData) {
-								// Check if we have actual messages array
 								if (Array.isArray(outputData.messages) && outputData.messages.length > 0) {
-									if (!latestTrimmedData || timestamp > latestTrimmedData.timestamp) {
-										// Convert to Message format with generated IDs
-										const messagesWithIds: Message[] = outputData.messages.map((m, i) => ({
-											id: `trimmed-${i}-${timestamp.getTime()}`,
-											role: m.role as "user" | "assistant" | "system" | "tool",
-											content: m.content,
-											createdAt: timestamp,
-										}));
+									const messagesWithIds: Message[] = outputData.messages.map((m, i) => ({
+										id: `trimmed-${i}-${timestamp.getTime()}`,
+										role: m.role as "user" | "assistant" | "system" | "tool",
+										content: m.content,
+										createdAt: timestamp,
+									}));
 
-										latestTrimmedData = {
-											messages: messagesWithIds,
-											systemPrompt: null, // System prompt is emitted separately
-											timestamp,
-											messageCount: outputData.messageCount,
-											messageHistoryTokens: outputData.messageHistoryTokens,
-										};
-									}
+									latestTrimmedData = {
+										messages: messagesWithIds,
+										systemPrompt: null,
+										timestamp,
+										messageCount: outputData.messageCount,
+										messageHistoryTokens: outputData.messageHistoryTokens,
+									};
 								} else if (typeof outputData.messageCount === "number") {
-									// Fallback: only metadata available (older format)
-									if (!latestTrimmedData || (!latestTrimmedData.messages.length && timestamp > latestTrimmedData.timestamp)) {
-										latestTrimmedData = {
-											messages: [],
-											systemPrompt: null,
-											timestamp,
-											messageCount: outputData.messageCount,
-											messageHistoryTokens: outputData.messageHistoryTokens,
-										};
-									}
+									latestTrimmedData = {
+										messages: [],
+										systemPrompt: null,
+										timestamp,
+										messageCount: outputData.messageCount,
+										messageHistoryTokens: outputData.messageHistoryTokens,
+									};
 								}
 							}
 						}
@@ -661,23 +804,25 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 	}, [isStreaming, fetchMessages]);
 
 	// Check if we have actual trimmed messages or just metadata
-	const hasTrimmedMessages = trimmedData && trimmedData.messages.length > 0;
-	const hasTrimmedMetadataOnly = trimmedData && trimmedData.messages.length === 0 && typeof trimmedData.messageCount === "number";
+	// Use effective values that merge real-time and persisted data
+	const hasTrimmedMessages = effectiveTrimmedData && effectiveTrimmedData.messages.length > 0;
+	const hasTrimmedMetadataOnly = effectiveTrimmedData && effectiveTrimmedData.messages.length === 0 && typeof effectiveTrimmedData.messageCount === "number";
 
 	// Get the active messages and system prompt based on toggle
-	const activeMessages = showTrimmed && hasTrimmedMessages ? trimmedData.messages : messages;
-	const activeSystemPrompt = showTrimmed && hasTrimmedMessages
-		? (trimmedData.systemPrompt ? { content: trimmedData.systemPrompt, timestamp: trimmedData.timestamp } : null)
-		: systemPrompt;
+	// When showing "Sent to LLM" view:
+	// - Use trimmed messages (from llm-context event)
+	// - System prompt already contains injected tool instructions (updated in-place by trace-logger)
+	const activeMessages = showTrimmed && hasTrimmedMessages ? effectiveTrimmedData.messages : messages;
+	const activeSystemPrompt = effectiveSystemPrompt; // Already includes injected instructions if any
 
 	// Copy all chat history to clipboard
 	const copyAllHistory = useCallback(async () => {
 		const lines: string[] = [];
 
 		// Add header indicating which view
-		if (showTrimmed && trimmedData) {
+		if (showTrimmed && effectiveTrimmedData) {
 			lines.push("=== SENT TO LLM (TRIMMED) ===");
-			lines.push(`Captured: ${trimmedData.timestamp.toISOString()}`);
+			lines.push(`Captured: ${effectiveTrimmedData.timestamp.toISOString()}`);
 			lines.push("");
 		}
 
@@ -721,7 +866,7 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 		await navigator.clipboard.writeText(text);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
-	}, [activeSystemPrompt, activeMessages, showTrimmed, trimmedData]);
+	}, [activeSystemPrompt, activeMessages, showTrimmed, effectiveTrimmedData]);
 
 	// Convert messages to tree structure, including system prompt at the top
 	const treeData = useMemo(() => {
@@ -906,16 +1051,16 @@ export function ChatHistoryPanel({ className }: ChatHistoryPanelProps) {
 							)}
 							title={
 								hasTrimmedMetadataOnly
-									? `Last LLM call used ${trimmedData?.messageCount} messages (${trimmedData?.messageHistoryTokens?.toLocaleString()} tokens) - full messages not logged`
+									? `Last LLM call used ${effectiveTrimmedData?.messageCount} messages (${effectiveTrimmedData?.messageHistoryTokens?.toLocaleString()} tokens)`
 									: hasTrimmedMessages
-									? "Show messages sent to LLM"
-									: "No trimmed message data available"
+									? `Show actual messages sent to LLM (${effectiveTrimmedData?.messageCount} msgs, ${effectiveTrimmedData?.messageHistoryTokens?.toLocaleString()} tokens)`
+									: "No LLM context data available yet"
 							}
 						>
 							<Scissors className='h-3 w-3' />
-							<span className='hidden sm:inline'>Trimmed</span>
-							{hasTrimmedMetadataOnly && (
-								<span className='text-[10px] text-muted-foreground'>({trimmedData?.messageCount})</span>
+							<span className='hidden sm:inline'>Sent to LLM</span>
+							{hasTrimmedMessages && effectiveTrimmedData && (
+								<span className='text-[10px] text-muted-foreground'>({effectiveTrimmedData.messageCount})</span>
 							)}
 						</Label>
 					</div>

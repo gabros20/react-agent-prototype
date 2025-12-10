@@ -233,6 +233,34 @@ export interface TraceLogger {
 	instructionsInjected(stepNumber: number, tools: string[], instructions: string, updatedSystemPrompt?: string): void;
 
 	// =========================================================================
+	// Context Management
+	// =========================================================================
+
+	/**
+	 * Log the actual messages sent to LLM (after trimming)
+	 * @param messages Array of messages sent to LLM
+	 * @param messageCount Number of messages
+	 * @param tokens Token count
+	 */
+	llmContext(
+		messages: Array<{ role: string; content: unknown }>,
+		messageCount: number,
+		tokens: number
+	): void;
+
+	/**
+	 * Log context cleanup event (message trimming + tool removal)
+	 * @param messagesRemoved Number of messages removed
+	 * @param removedTools Tools that were removed
+	 * @param activeTools Tools that remain active
+	 */
+	contextCleanup(
+		messagesRemoved: number,
+		removedTools: string[],
+		activeTools: string[]
+	): void;
+
+	// =========================================================================
 	// Working Memory
 	// =========================================================================
 

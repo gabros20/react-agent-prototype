@@ -43,6 +43,13 @@ export class WorkingContext {
     return Array.from(this.discoveredTools);
   }
 
+  /** Remove tools from discovered set (for context cleanup) */
+  removeTools(toolNames: string[]): void {
+    for (const name of toolNames) {
+      this.discoveredTools.delete(name);
+    }
+  }
+
   /** Record tool usage */
   recordToolUsage(toolName: string, result: 'success' | 'error'): void {
     const existing = this.usedTools.get(toolName);

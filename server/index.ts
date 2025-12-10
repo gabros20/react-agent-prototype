@@ -42,8 +42,8 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(corsMiddleware);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '5mb' })); // Increased for large conversation logs
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Async startup
 async function startServer() {

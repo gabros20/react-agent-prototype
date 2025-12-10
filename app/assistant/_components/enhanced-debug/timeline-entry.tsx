@@ -80,6 +80,9 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	"tools-discovered": Search,
 	"active-tools-changed": PlusCircle,
 	"instructions-injected": BookOpen,
+	// Context management
+	"llm-context": MessageSquare,
+	"context-cleanup": Scissors,
 };
 
 interface TimelineEntryProps {

@@ -241,6 +241,24 @@ export function useAgent() {
 				break;
 			}
 
+			case "llm-context": {
+				// Actual messages sent to LLM (after trimming)
+				const messages = (d.messages as Array<{ role: string; content: unknown }>) || [];
+				const messageCount = (d.messageCount as number) || messages.length;
+				const tokens = (d.tokens as number) || 0;
+				traceRef.current?.llmContext(messages, messageCount, tokens);
+				break;
+			}
+
+			case "context-cleanup": {
+				// Context cleanup: messages trimmed and/or tools removed
+				const messagesRemoved = (d.messagesRemoved as number) || 0;
+				const removedTools = (d.removedTools as string[]) || [];
+				const activeTools = (d.activeTools as string[]) || [];
+				traceRef.current?.contextCleanup(messagesRemoved, removedTools, activeTools);
+				break;
+			}
+
 			case "step-finish": {
 				const stepNumber = d.stepNumber as number;
 				const finalText = streamingTextRef.current;

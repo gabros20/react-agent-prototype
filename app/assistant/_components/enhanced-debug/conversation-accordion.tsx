@@ -162,6 +162,13 @@ function ConversationSection({ conversation, isExpanded, onToggleExpanded }: Con
 								</Badge>
 							)}
 
+							{/* Cost */}
+							{stats.cost > 0 && (
+								<Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 text-emerald-600 border-emerald-500/50">
+									${stats.cost < 0.01 ? stats.cost.toFixed(4) : stats.cost.toFixed(3)}
+								</Badge>
+							)}
+
 							{/* Errors */}
 							{stats.errorCount > 0 && (
 								<Badge variant="destructive" className="text-[10px] gap-1 px-1.5 py-0">
@@ -361,6 +368,13 @@ export function ConversationAccordion({ className }: ConversationAccordionProps)
 		];
 		return merged.sort((a, b) => a.conversationIndex - b.conversationIndex);
 	}, [persistedLogs, liveConversations]);
+
+	// Clear local expanded state when store's expanded set is cleared (collapse all)
+	useEffect(() => {
+		if (expandedConversationIds.size === 0) {
+			setExpandedIds(new Set());
+		}
+	}, [expandedConversationIds]);
 
 	// Track expanded state locally
 	const isExpanded = (id: string) => {

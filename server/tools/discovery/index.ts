@@ -52,10 +52,5 @@ export {
 // Discovery Tool (Phase 5)
 export { toolSearchTool, type ToolSearchOutput } from "./tool-search";
 
-// Utilities (Phase 7)
-export {
-	extractToolsFromWorkingMemory,
-	extractToolsFromSteps,
-	extractUsedToolsFromSteps,
-	getAllDiscoveredTools,
-} from "./utils";
+// Utilities - extract tools from current execution steps
+export { extractToolsFromSteps } from "./utils";

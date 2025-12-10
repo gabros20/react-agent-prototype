@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Search, X, Filter, Copy, Download, Trash2, Check } from "lucide-react";
+import { Search, X, Filter, Copy, Download, Trash2, Check, ChevronsDownUp } from "lucide-react";
 import { useTraceStore, type TraceEntryType, type TraceLevel, type TraceMetrics, type ConversationLog, type TraceEntry, ENTRY_TYPE_COLORS, ENTRY_TYPE_LABELS } from "../../_stores/trace-store";
 import { useChatStore } from "../../_stores/chat-store";
 import { sessionsApi } from "@/lib/api";
@@ -46,6 +46,7 @@ export function TraceFilters({ className, compact = false }: TraceFiltersProps) 
 	const clearAllTraces = useTraceStore((state) => state.clearAllTraces);
 	const exportTrace = useTraceStore((state) => state.exportTrace);
 	const copyAllLogs = useTraceStore((state) => state.copyAllLogs);
+	const collapseAllConversations = useTraceStore((state) => state.collapseAllConversations);
 	const liveConversations = useTraceStore((state) => state.conversationLogs);
 	const clearedAt = useTraceStore((state) => state.clearedAt);
 
@@ -230,6 +231,20 @@ export function TraceFilters({ className, compact = false }: TraceFiltersProps) 
 
 				{/* Separator */}
 				<div className='h-6 w-px bg-border mx-1' />
+
+				{/* Collapse all conversations */}
+				<TooltipProvider>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button variant='outline' size='sm' className='h-7 w-7 p-0' onClick={collapseAllConversations} disabled={totalEventCount === 0}>
+								<ChevronsDownUp className='h-3.5 w-3.5' />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>
+							<p>Collapse all conversations</p>
+						</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
 
 				{/* Copy all logs */}
 				<TooltipProvider>

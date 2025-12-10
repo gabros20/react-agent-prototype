@@ -49,6 +49,38 @@ export default function AssistantPage() {
           setSessionId(loadedSessions[0].id);
           useSessionStore.getState().setCurrentSessionId(loadedSessions[0].id);
         }
+      } else {
+        // Session ID exists (from localStorage) - verify it still exists and reload messages
+        // This handles page refresh where localStorage may have stale/malformed message content
+        const sessionExists = loadedSessions.some(s => s.id === currentSessionId);
+        if (sessionExists) {
+          // Reload the session to get fresh messages from API
+          const { sessionsApi } = await import('@/lib/api');
+          const { extractMessageContent } = await import('./_components/session-item');
+          try {
+            const session = await sessionsApi.get(currentSessionId);
+            // Convert messages to ChatMessage format, filtering out tool-only messages
+            const chatMessages = session.messages
+              .filter((msg: { role: string }) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+              .map((msg: { id: string; role: string; content: unknown; createdAt: Date }) => ({
+                id: msg.id,
+                role: msg.role as 'user' | 'assistant' | 'system',
+                content: extractMessageContent(msg.content),
+                createdAt: msg.createdAt,
+              }))
+              .filter((msg: { content: string }) => msg.content.trim() !== '');
+            useChatStore.getState().setMessages(chatMessages);
+          } catch (error) {
+            console.error('Failed to reload session messages:', error);
+          }
+        } else {
+          // Session no longer exists - reset and select first available
+          useChatStore.getState().reset();
+          if (loadedSessions.length > 0) {
+            setSessionId(loadedSessions[0].id);
+            useSessionStore.getState().setCurrentSessionId(loadedSessions[0].id);
+          }
+        }
       }
     };
 

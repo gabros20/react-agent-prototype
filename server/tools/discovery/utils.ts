@@ -1,15 +1,12 @@
 /**
  * Discovery Utilities
  *
- * Helper functions for tool discovery system.
- * - Extract discovered tools from working memory (previous turns)
- * - Extract discovered tools from current execution steps
- * - Extract used tools from current execution steps
+ * Extract discovered tools from current execution steps.
+ * Used by prepareStep to get tools discovered via tool_search in the current turn.
  *
- * Implements Phase 7.2.2 from DYNAMIC_TOOL_INJECTION_PLAN.md
+ * Note: Cross-turn tool persistence is handled by ContextManager and WorkingContext.
+ * Tools from previous turns are passed directly via options.discoveredTools.
  */
-
-import type { CoreMessage, ToolResultPart } from "ai";
 
 // ============================================================================
 // Types
@@ -17,74 +14,16 @@ import type { CoreMessage, ToolResultPart } from "ai";
 
 /** AI SDK 6 StepResult structure (simplified for our needs) */
 interface StepResult {
-	toolCalls?: Array<{
-		toolName: string;
-		input: unknown; // AI SDK 5+ renamed args → input
-	}>;
 	toolResults?: Array<{
 		toolName: string;
-		output: unknown; // AI SDK 5+ renamed result → output
+		output: unknown;
 	}>;
-	text?: string;
 }
 
 /** Tool search result structure - matches tool-search.ts output */
 interface ToolSearchResult {
-	tools?: string[];  // tool_search returns string array, not { name: string }[]
+	tools?: string[];
 	message?: string;
-}
-
-// ============================================================================
-// Extract from Working Memory
-// ============================================================================
-
-/**
- * Extract discovered tools from working memory in system message.
- * Working memory contains tools from PREVIOUS conversation turns.
- *
- * Working memory format in system prompt (from WorkingContext.toContextString):
- * ```
- * [DISCOVERED TOOLS]
- * cms_getPage, cms_updatePage, cms_listPosts
- * ```
- */
-export function extractToolsFromWorkingMemory(
-	systemMessage: CoreMessage | undefined
-): string[] {
-	if (!systemMessage || systemMessage.role !== "system") {
-		return [];
-	}
-
-	// Get content as string - system messages can have string or array content
-	const rawContent = systemMessage.content as unknown;
-	let content = "";
-
-	if (typeof rawContent === "string") {
-		content = rawContent;
-	} else if (Array.isArray(rawContent)) {
-		// Handle array of content parts
-		content = rawContent
-			.filter((p: any) => p?.type === "text" && typeof p?.text === "string")
-			.map((p: any) => p.text as string)
-			.join("");
-	}
-
-	if (!content) {
-		return [];
-	}
-
-	// Match [DISCOVERED TOOLS] section followed by comma-separated tool names
-	// Format: [DISCOVERED TOOLS]\ncms_getPage, cms_updatePage, ...
-	const match = content.match(/\[DISCOVERED TOOLS\]\s*\n([^\n\[]+)/);
-	if (!match) {
-		return [];
-	}
-
-	// Parse comma-separated tool names
-	return match[1]
-		.split(",")
-		.map((s: string) => s.trim())
-		.filter(Boolean);
 }
 
 // ============================================================================
@@ -93,7 +32,7 @@ export function extractToolsFromWorkingMemory(
 
 /**
  * Extract discovered tools from current execution steps.
- * Steps contain tool_search results from CURRENT multi-step execution.
+ * Finds tool_search results and extracts the returned tool names.
  */
 export function extractToolsFromSteps(steps: StepResult[]): string[] {
 	const tools = new Set<string>();
@@ -117,45 +56,4 @@ export function extractToolsFromSteps(steps: StepResult[]): string[] {
 	}
 
 	return Array.from(tools);
-}
-
-/**
- * Extract used tools from current execution steps.
- * Tracks which tools were actually called (not just discovered).
- */
-export function extractUsedToolsFromSteps(steps: StepResult[]): string[] {
-	const tools = new Set<string>();
-
-	for (const step of steps) {
-		step.toolCalls?.forEach((tc) => {
-			// Don't count tool_search itself as a "used" tool
-			if (tc.toolName !== "tool_search") {
-				tools.add(tc.toolName);
-			}
-		});
-	}
-
-	return Array.from(tools);
-}
-
-// ============================================================================
-// Combine Discovery Sources
-// ============================================================================
-
-/**
- * Get all discovered tools from both working memory and current steps.
- * This is the main function used by prepareStep.
- */
-export function getAllDiscoveredTools(
-	messages: CoreMessage[],
-	steps: StepResult[]
-): string[] {
-	// Working memory contains tools from previous turns
-	const workingMemoryTools = extractToolsFromWorkingMemory(messages[0]);
-
-	// Steps contain tools discovered in current execution
-	const currentStepTools = extractToolsFromSteps(steps);
-
-	// Combine and deduplicate
-	return [...new Set([...workingMemoryTools, ...currentStepTools])];
 }

@@ -37,7 +37,10 @@ export type TraceEntryType =
 	// Dynamic tool injection observability
 	| "tools-discovered" // tool_search returned tools
 	| "active-tools-changed" // prepareStep expanded activeTools
-	| "instructions-injected"; // Tool instructions injected into system prompt
+	| "instructions-injected" // Tool instructions injected into system prompt
+	// Context management
+	| "llm-context" // Actual messages sent to LLM (after trimming)
+	| "context-cleanup"; // Tools removed due to message trimming
 
 export type TraceLevel = "debug" | "info" | "warn" | "error";
 
@@ -223,6 +226,7 @@ interface TraceState {
 	setActiveSession: (sessionId: string | null) => void;
 	toggleConversationExpanded: (conversationId: string) => void;
 	setConversationExpanded: (conversationId: string, expanded: boolean) => void;
+	collapseAllConversations: () => void;
 	getConversationLogs: () => ConversationLog[];
 
 	// Working memory actions
@@ -565,6 +569,10 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 		});
 	},
 
+	collapseAllConversations: () => {
+		set({ expandedConversationIds: new Set() });
+	},
+
 	getConversationLogs: () => {
 		const state = get();
 		// Just return persisted logs - live traces are added via addConversationLog during streaming
@@ -815,6 +823,9 @@ export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
 	"tools-discovered": "bg-purple-500",
 	"active-tools-changed": "bg-purple-400",
 	"instructions-injected": "bg-fuchsia-500",
+	// Context management
+	"llm-context": "bg-cyan-500",
+	"context-cleanup": "bg-orange-500",
 };
 
 export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
@@ -849,6 +860,9 @@ export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
 	"tools-discovered": "Discovered",
 	"active-tools-changed": "Tools+",
 	"instructions-injected": "Instructions",
+	// Context management
+	"llm-context": "LLM Context",
+	"context-cleanup": "Cleanup",
 };
 
 export function formatDuration(ms: number): string {

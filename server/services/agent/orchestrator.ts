@@ -18,6 +18,7 @@ import type { ModelMessage } from "ai";
 import { cmsAgent, AGENT_CONFIG, getLastInjectedInstructions, type AgentCallOptions } from "../../agent/cms-agent";
 import { getSystemPrompt } from "../../agent/system-prompt";
 import { EntityExtractor, WorkingContext } from "../working-memory";
+import { ContextManager } from "../context-manager";
 import { getSiteAndEnv } from "../../utils/get-context";
 import { getModelPricing } from "../openrouter-pricing";
 import { countTokens, countChatTokens } from "../../../lib/tokenizer";
@@ -37,10 +38,12 @@ import type {
 export class AgentOrchestrator {
 	private readonly deps: OrchestratorDependencies;
 	private readonly extractor: EntityExtractor;
+	private readonly contextManager: ContextManager;
 
 	constructor(deps: OrchestratorDependencies) {
 		this.deps = deps;
 		this.extractor = new EntityExtractor();
+		this.contextManager = new ContextManager({ maxMessages: 30, minTurnsToKeep: 2 });
 	}
 
 	// ==========================================================================
@@ -88,6 +91,28 @@ export class AgentOrchestrator {
 				{ role: "user", content: resolved.prompt },
 			];
 
+			// Progressive context cleanup - trim messages and remove unused tools
+			const trimResult = this.contextManager.trimContext(messages, workingContext);
+
+			// Emit SSE event for debugging/UI visibility
+			if (trimResult.messagesRemoved > 0 || trimResult.removedTools.length > 0 || trimResult.invalidTurnsRemoved > 0) {
+				logger.info("Context cleanup", {
+					messagesRemoved: trimResult.messagesRemoved,
+					turnsRemoved: trimResult.turnsRemoved,
+					invalidTurnsRemoved: trimResult.invalidTurnsRemoved,
+					removedTools: trimResult.removedTools,
+				});
+				writeSSE("context-cleanup", {
+					type: "context-cleanup",
+					messagesRemoved: trimResult.messagesRemoved,
+					turnsRemoved: trimResult.turnsRemoved,
+					invalidTurnsRemoved: trimResult.invalidTurnsRemoved,
+					removedTools: trimResult.removedTools,
+					activeTools: trimResult.activeTools,
+					timestamp: new Date().toISOString(),
+				});
+			}
+
 			// Build agent options
 			const agentOptions = this.buildAgentOptions(resolved, workingContext, logger, {
 				write: (event) => {
@@ -96,15 +121,36 @@ export class AgentOrchestrator {
 				},
 			});
 
+			// Emit the actual context sent to LLM (after trimming)
+			// This is what the debug panel "Trimmed" view shows
+			const trimmedTokens = countChatTokens(
+				trimResult.messages.map((m) => ({
+					role: m.role,
+					content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+				}))
+			);
+			writeSSE("llm-context", {
+				type: "llm-context",
+				traceId: resolved.traceId,
+				sessionId: resolved.sessionId,
+				messages: trimResult.messages.map((m) => ({
+					role: m.role,
+					content: m.content,
+				})),
+				messageCount: trimResult.messages.length,
+				tokens: trimmedTokens,
+				timestamp: new Date().toISOString(),
+			});
+
 			logger.info("Starting agent execution", {
 				traceId: resolved.traceId,
 				sessionId: resolved.sessionId,
 				prompt: resolved.prompt.slice(0, 100),
 			});
 
-			// Stream using cmsAgent
+			// Stream using cmsAgent (with trimmed messages)
 			const streamResult = await cmsAgent.stream({
-				messages,
+				messages: trimResult.messages,
 				options: agentOptions,
 			});
 
@@ -196,12 +242,24 @@ export class AgentOrchestrator {
 			{ role: "user", content: resolved.prompt },
 		];
 
+		// Progressive context cleanup - trim messages and remove unused tools
+		const trimResult = this.contextManager.trimContext(messages, workingContext);
+
+		if (trimResult.messagesRemoved > 0 || trimResult.removedTools.length > 0 || trimResult.invalidTurnsRemoved > 0) {
+			logger.info("Context cleanup", {
+				messagesRemoved: trimResult.messagesRemoved,
+				turnsRemoved: trimResult.turnsRemoved,
+				invalidTurnsRemoved: trimResult.invalidTurnsRemoved,
+				removedTools: trimResult.removedTools,
+			});
+		}
+
 		// Build agent options (no stream writer for non-streaming)
 		const agentOptions = this.buildAgentOptions(resolved, workingContext, logger);
 
-		// Execute using cmsAgent
+		// Execute using cmsAgent (with trimmed messages)
 		const result = await cmsAgent.generate({
-			messages,
+			messages: trimResult.messages,
 			options: agentOptions,
 		});
 
