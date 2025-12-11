@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Clock, Wrench, Layers, Zap, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { ChevronDown, Clock, Wrench, Layers, Zap, AlertCircle, Loader2, CheckCircle2, Copy, Check } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
 	useTraceStore,
 	type ConversationLog,
@@ -82,6 +83,16 @@ function ConversationSection({ conversation, isExpanded, onToggleExpanded }: Con
 	const setSelectedEntry = useTraceStore((state) => state.setSelectedEntry);
 	const openModal = useTraceStore((state) => state.openModal);
 	const entriesByTrace = useTraceStore((state) => state.entriesByTrace);
+	const copyConversationLogs = useTraceStore((state) => state.copyConversationLogs);
+
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = useCallback(async (e: React.MouseEvent) => {
+		e.stopPropagation(); // Prevent accordion toggle
+		await copyConversationLogs(conversation.id);
+		setCopied(true);
+		setTimeout(() => setCopied(false), 2000);
+	}, [copyConversationLogs, conversation.id]);
 
 	// For live conversations, get entries from entriesByTrace (real-time updates)
 	// For completed conversations, use the stored entries
@@ -181,6 +192,29 @@ function ConversationSection({ conversation, isExpanded, onToggleExpanded }: Con
 
 					{/* Divider line */}
 					<div className="flex-1 h-px bg-border/50 mx-2" />
+
+					{/* Copy button */}
+					<TooltipProvider>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-6 w-6 p-0 flex-shrink-0"
+									onClick={handleCopy}
+								>
+									{copied ? (
+										<Check className="h-3.5 w-3.5 text-green-500" />
+									) : (
+										<Copy className="h-3.5 w-3.5 text-muted-foreground" />
+									)}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent>
+								<p>{copied ? "Copied!" : "Copy conversation logs"}</p>
+							</TooltipContent>
+						</Tooltip>
+					</TooltipProvider>
 
 					{/* Collapse button */}
 					<Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0">

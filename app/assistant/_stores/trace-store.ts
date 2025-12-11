@@ -239,6 +239,7 @@ interface TraceState {
 	// Export utilities
 	exportTrace: (traceId: string) => string;
 	copyAllLogs: () => Promise<void>;
+	copyConversationLogs: (conversationId: string) => Promise<void>;
 	getFilteredEntries: () => TraceEntry[];
 	getMetrics: () => TraceMetrics;
 	getTotalMetrics: () => TraceMetrics;
@@ -725,6 +726,67 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 				sections.push(formatEntry(entry));
 				sections.push("");
 			}
+		}
+
+		await navigator.clipboard.writeText(sections.join("\n"));
+	},
+
+	copyConversationLogs: async (conversationId: string) => {
+		const state = get();
+		const conversation = state.conversationLogs.find((c) => c.id === conversationId);
+
+		if (!conversation) {
+			await navigator.clipboard.writeText("Conversation not found.");
+			return;
+		}
+
+		const entries = conversation.entries || [];
+
+		// Format a single entry
+		const formatEntry = (e: TraceEntry): string => {
+			const time = new Date(e.timestamp).toISOString();
+			const duration = e.duration ? ` (${e.duration}ms)` : "";
+			const tool = e.toolName ? ` [${e.toolName}]` : "";
+			const inputStr = e.input
+				? `\n  Input: ${JSON.stringify(e.input, null, 2)
+						.split("\n")
+						.map((l, i) => (i === 0 ? l : "  " + l))
+						.join("\n")}`
+				: "";
+			const outputStr = e.output
+				? `\n  Output: ${JSON.stringify(e.output, null, 2)
+						.split("\n")
+						.map((l, i) => (i === 0 ? l : "  " + l))
+						.join("\n")}`
+				: "";
+			const errorStr = e.error ? `\n  Error: ${e.error.message}` : "";
+
+			return `[${time}] [${e.type}]${tool}${duration}\n  ${e.summary}${inputStr}${outputStr}${errorStr}`;
+		};
+
+		const sections: string[] = [];
+
+		// Header
+		sections.push(`# Conversation ${conversation.conversationIndex + 1}`);
+		sections.push(`Prompt: ${conversation.userPrompt || "Unknown"}`);
+		sections.push(`Started: ${conversation.startedAt?.toISOString() || "N/A"}`);
+		if (conversation.completedAt) {
+			sections.push(`Completed: ${conversation.completedAt.toISOString()}`);
+		}
+		if (conversation.metrics) {
+			const m = conversation.metrics;
+			sections.push(
+				`Metrics: ${formatDuration(m.totalDuration)} | ${m.toolCallCount} tools | ${m.stepCount} steps | ${m.tokens?.input || 0} in / ${m.tokens?.output || 0} out`
+			);
+		}
+		sections.push(`Total Events: ${entries.length}`);
+		sections.push(`${"=".repeat(80)}`);
+		sections.push("");
+
+		// Process entries
+		for (const entry of entries) {
+			sections.push(formatEntry(entry));
+			sections.push("");
 		}
 
 		await navigator.clipboard.writeText(sections.join("\n"));
