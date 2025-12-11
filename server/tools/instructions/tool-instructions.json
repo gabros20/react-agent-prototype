@@ -27,13 +27,13 @@
 
 	"cms_listSectionTemplates": "BEFORE: None required\nAFTER: Show available section types to user\nNEXT: cms_getSectionFields (see required fields), cms_addSectionToPage\nGOTCHA: Returns template definitions, not page sections. Use cms_getPageSections for sections on a page.",
 
-	"cms_getSectionFields": "BEFORE: Know sectionDefId or key (from cms_listSectionTemplates)\nAFTER: Show field schema to user if they need to update content\nNEXT: cms_updateSectionContent with correct field names\nGOTCHA: Use this to discover field names (title, subtitle, backgroundImage, etc.) before updating content.",
+	"cms_getSectionFields": "BEFORE: Know sectionTemplateId or key (from cms_listSectionTemplates)\nAFTER: Show field schema to user if they need to update content\nNEXT: cms_updateSectionContent with correct field names\nGOTCHA: Use this to discover field names (title, subtitle, backgroundImage, etc.) before updating content.",
 
 	"cms_getPageSections": "BEFORE: cms_getPage to get pageId\nAFTER: Show section list to user\nNEXT: cms_getSectionContent (specific section), cms_updateSectionContent\nGOTCHA: Default lightweight. Use includeContent:true only when needed.",
 
 	"cms_getSectionContent": "BEFORE: cms_getPageSections to get pageSectionId\nAFTER: Show content to user\nNEXT: cms_updateSectionContent (edit), cms_updateSectionImage (change image)\nGOTCHA: Returns full content for ONE section. More efficient than fetching entire page.",
 
-	"cms_addSectionToPage": "BEFORE: cms_getPage (get the actual pageId UUID; if you only know the slug, use cms_findResource or cms_listPages to retrieve the pageId), cms_listSectionTemplates (get sectionDefId)\nAFTER: Show new pageSectionId, suggest adding content\nNEXT: cms_updateSectionContent, cms_updateSectionImage\nGOTCHA: Returns pageSectionId - use this for content updates, not sectionDefId. Passing slug/label instead of pageId will fail.",
+	"cms_addSectionToPage": "BEFORE: cms_getPage (get the actual pageId UUID; if you only know the slug, use cms_findResource or cms_listPages to retrieve the pageId), cms_listSectionTemplates (get sectionTemplateId)\nAFTER: Show new pageSectionId, suggest adding content\nNEXT: cms_updateSectionContent, cms_updateSectionImage\nGOTCHA: Returns pageSectionId - use this for content updates, not sectionTemplateId. Passing slug/label instead of pageId will fail.",
 
 	"cms_updateSectionContent": "BEFORE: cms_getSectionFields to know field names\nAFTER: Verify update with cms_getSectionContent if needed\nNEXT: cms_updateSectionImage (for images)\nGOTCHA: MERGES with existing - only send fields you want to change. Don't resend all fields.",
 
@@ -49,7 +49,7 @@
 
 	"cms_addImageToSection": "BEFORE: cms_getSectionFields to know image field names\nAFTER: Verify with cms_getSectionContent\nNEXT: None (operation complete)\nGOTCHA: Deprecated - use cms_updateSectionImage instead.",
 
-	"cms_updateSectionImage": "BEFORE: 1) Get the pageId (UUID) via cms_getPage or cms_listPages/cms_findResource when you only know the slug; never pass slug/name. 2) Fetch cms_getPageSections for that pageId, locate the target section by key/name (e.g., hero), and use its pageSectionId (do NOT fabricate strings like 'hero', 'Meet-Our-Team', 'Meet-Our-Team-hero', or any sectionDefId). 3) Get field names via cms_getSectionFields if needed. 4) Find/confirm image via cms_searchImages/cms_findImage (or download first). \nAFTER: Confirm image attached\nNEXT: cms_getSectionContent (verify)\nGOTCHA: imageField must match section schema (e.g., \"backgroundImage\", \"image\", \"cover\"); only the pageSectionId from cms_getPageSections is valid—sectionDefId/key/slug/name will fail.",
+	"cms_updateSectionImage": "BEFORE: 1) Get the pageId (UUID) via cms_getPage or cms_listPages/cms_findResource when you only know the slug; never pass slug/name. 2) Fetch cms_getPageSections for that pageId, locate the target section by key/name (e.g., hero), and use its pageSectionId (do NOT fabricate strings like 'hero', 'Meet-Our-Team', 'Meet-Our-Team-hero', or any sectionTemplateId). 3) Get field names via cms_getSectionFields if needed. 4) Find/confirm image via cms_searchImages/cms_findImage (or download first). \nAFTER: Confirm image attached\nNEXT: cms_getSectionContent (verify)\nGOTCHA: imageField must match section schema (e.g., \"backgroundImage\", \"image\", \"cover\"); only the pageSectionId from cms_getPageSections is valid—sectionTemplateId/key/slug/name will fail.",
 
 	"cms_replaceImage": "BEFORE: cms_searchImages to find both old and new image IDs\nAFTER: Confirm replacement\nNEXT: cms_getSectionContent (verify)\nGOTCHA: Replaces image across all usages. Use for site-wide image updates.",
 

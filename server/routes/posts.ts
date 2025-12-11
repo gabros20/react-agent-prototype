@@ -18,7 +18,7 @@ export function createPostsRouter(
       const locale = (req.query.locale as string) || "en";
 
       // Get collection definition
-      const collection = await entryService.getCollectionDefBySlug(collectionSlug);
+      const collection = await entryService.getCollectionTemplateBySlug(collectionSlug);
 
       if (!collection) {
         return res.status(404).send(`
@@ -72,7 +72,7 @@ export function createPostsRouter(
       const locale = (req.query.locale as string) || "en";
 
       // Get collection definition
-      const collection = await entryService.getCollectionDefBySlug(collectionSlug);
+      const collection = await entryService.getCollectionTemplateBySlug(collectionSlug);
 
       if (!collection) {
         return res.status(404).send(`

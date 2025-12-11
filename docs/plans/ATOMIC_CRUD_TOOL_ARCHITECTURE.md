@@ -1,14 +1,48 @@
 # Atomic CRUD Tool Architecture Plan
 
-## Status: Draft
-## Date: 2025-12-10
+## Status: ✅ Phase 1 IMPLEMENTED
+## Date: 2025-12-11
 ## Next Phase: [DATABASE_ENDPOINT_REFACTOR.md](./DATABASE_ENDPOINT_REFACTOR.md)
 
 ---
 
-## Executive Summary
+## Implementation Summary (Phase 1 Complete)
 
-Current tool inventory: **45 tools** with significant redundancy and inconsistent patterns. This plan consolidates to **~25 atomic CRUD tools** using:
+**Phase 1 delivered:** 24 new atomic tools + legacy aliases for backward compatibility
+
+### New Atomic Tools (24 total)
+
+| Entity     | Tools | Names                                          |
+|------------|-------|------------------------------------------------|
+| Pages      | 4     | `getPage`, `createPage`, `updatePage`, `deletePage` |
+| Posts      | 4     | `getPost`, `createPost`, `updatePost`, `deletePost` |
+| Sections   | 5     | `getSectionTemplate`, `getSection`, `createSection`, `updateSection`, `deleteSection` |
+| Navigation | 4     | `getNavItem`, `createNavItem`, `updateNavItem`, `deleteNavItem` |
+| Images     | 3     | `getImage`, `updateImage`, `deleteImage` |
+| Entries    | 4     | `getEntry`, `createEntry`, `updateEntry`, `deleteEntry` |
+
+### Files Created
+- `server/tools/atomic/page-tools.ts`
+- `server/tools/atomic/post-tools.ts`
+- `server/tools/atomic/section-tools.ts`
+- `server/tools/atomic/navigation-tools.ts`
+- `server/tools/atomic/image-tools.ts`
+- `server/tools/atomic/entry-tools.ts`
+- `server/tools/atomic/index.ts`
+- `server/tools/guidance/tool-guidance.json`
+
+### Legacy Aliases (Backward Compatibility)
+All `cms_*` tools now alias to the new atomic tools:
+- `cms_getPage` → `getPage`
+- `cms_listPages` → `getPage({ all: true })`
+- `cms_publishPost` → `updatePost({ status: 'published' })`
+- etc.
+
+---
+
+## Original Executive Summary
+
+Original tool inventory: **45 tools** with significant redundancy. Plan consolidates to **24 atomic CRUD tools** using:
 - Entity-centric naming: `getPage`, `createPost`, `updateSection`
 - Parameter-based scope: single/batch/all via params, not separate tools
 - Semantic external tool names: `browseImages`, `importImage`

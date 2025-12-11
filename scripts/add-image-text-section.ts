@@ -3,18 +3,18 @@ import { db } from "../server/db/client";
 import * as schema from "../server/db/schema";
 
 async function addImageTextSection() {
-  console.log("➕ Adding image-text section definition...");
+  console.log("➕ Adding image-text section template...");
 
   try {
-    // Create the image-text section definition
+    // Create the image-text section template
     const imageTextSectionId = randomUUID();
-    await db.insert(schema.sectionDefinitions).values({
+    await db.insert(schema.sectionTemplates).values({
       id: imageTextSectionId,
       key: "image-text",
       name: "Image-Text Section",
       description: "Flexible two-column layout with text and image, configurable for desktop (LTR/RTL) and mobile (image-first/text-first)",
       status: "published",
-      elementsStructure: JSON.stringify({
+      fields: JSON.stringify({
         version: 1,
         rows: [
           {
@@ -77,13 +77,13 @@ async function addImageTextSection() {
           },
         ],
       }),
-      templateKey: "image-text",
+      templateFile: "image-text",
       defaultVariant: "default",
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    console.log(`✅ Successfully added image-text section definition (${imageTextSectionId})`);
+    console.log(`✅ Successfully added image-text section template (${imageTextSectionId})`);
     console.log("\n📋 Section Details:");
     console.log(`   Key: image-text`);
     console.log(`   Name: Image-Text Section`);
@@ -92,7 +92,7 @@ async function addImageTextSection() {
 
     process.exit(0);
   } catch (error) {
-    console.error("❌ Failed to add image-text section:", error);
+    console.error("❌ Failed to add image-text section template:", error);
     process.exit(1);
   }
 }

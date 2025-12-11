@@ -40,7 +40,7 @@ export const cmsCreatePost = tool({
 		const ctx = experimental_context as AgentContext;
 
 		// Get collection
-		const collection = await ctx.services.entryService.getCollectionDefBySlug(input.collectionSlug);
+		const collection = await ctx.services.entryService.getCollectionTemplateBySlug(input.collectionSlug);
 		if (!collection) {
 			throw new Error(`Collection "${input.collectionSlug}" not found`);
 		}
@@ -137,7 +137,7 @@ export const cmsUpdatePost = tool({
 
 		// Update content if provided
 		if (input.updates.content) {
-			const collection = await ctx.services.entryService.getCollectionDefById(entry.collection.id);
+			const collection = await ctx.services.entryService.getCollectionTemplateById(entry.collection.id);
 			await ctx.services.entryService.upsertEntry({
 				collectionId: collection!.id,
 				slug: entry.slug,
@@ -264,7 +264,7 @@ export const cmsListPosts = tool({
 		const ctx = experimental_context as AgentContext;
 
 		// Get collection
-		const collection = await ctx.services.entryService.getCollectionDefBySlug(input.collectionSlug);
+		const collection = await ctx.services.entryService.getCollectionTemplateBySlug(input.collectionSlug);
 		if (!collection) {
 			throw new Error(`Collection "${input.collectionSlug}" not found`);
 		}

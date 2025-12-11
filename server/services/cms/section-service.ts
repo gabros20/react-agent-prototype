@@ -4,32 +4,33 @@ import type { DrizzleDB } from "../../db/client";
 import * as schema from "../../db/schema";
 import type { VectorIndexService } from "../vector-index";
 
-export interface CreateSectionDefInput {
+export interface CreateSectionTemplateInput {
   key: string;
   name: string;
   description?: string;
   status?: "published" | "unpublished";
-  elementsStructure: any;
-  templateKey: string;
+  fields: any; // RENAMED: elementsStructure → fields
+  templateFile: string; // RENAMED: templateKey → templateFile
   defaultVariant?: string;
   cssBundle?: string;
 }
 
-export interface UpdateSectionDefInput {
+export interface UpdateSectionTemplateInput {
   key?: string;
   name?: string;
   description?: string;
   status?: "published" | "unpublished";
-  templateKey?: string;
+  templateFile?: string; // RENAMED: templateKey → templateFile
   defaultVariant?: string;
   cssBundle?: string;
 }
 
 export interface AddSectionToPageInput {
   pageId: string;
-  sectionDefId: string;
+  sectionTemplateId: string; // RENAMED: sectionDefId → sectionTemplateId
   sortOrder?: number;
-  status?: "published" | "unpublished";
+  status?: "published" | "unpublished" | "draft";
+  hidden?: boolean;
 }
 
 export interface SyncPageContentsInput {
@@ -76,64 +77,68 @@ export class SectionService {
     return normalized;
   }
 
-  async createSectionDef(input: CreateSectionDefInput) {
+  // ===========================================================================
+  // Section Template Methods (RENAMED from SectionDef)
+  // ===========================================================================
+
+  async createSectionTemplate(input: CreateSectionTemplateInput) {
     // Validate key format
     this.validateKey(input.key);
 
     // Check if key already exists
-    const existing = await this.db.query.sectionDefinitions.findFirst({
-      where: eq(schema.sectionDefinitions.key, input.key),
+    const existing = await this.db.query.sectionTemplates.findFirst({
+      where: eq(schema.sectionTemplates.key, input.key),
     });
 
     if (existing) {
-      throw new Error(`Section definition with key '${input.key}' already exists`);
+      throw new Error(`Section template with key '${input.key}' already exists`);
     }
 
-    const sectionDef = {
+    const sectionTemplate = {
       id: randomUUID(),
       key: input.key,
       name: input.name,
       description: input.description ?? null,
       status: input.status ?? "published",
-      elementsStructure: JSON.stringify(input.elementsStructure),
-      templateKey: input.templateKey,
+      fields: JSON.stringify(input.fields),
+      templateFile: input.templateFile,
       defaultVariant: input.defaultVariant ?? "default",
       cssBundle: input.cssBundle ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    await this.db.insert(schema.sectionDefinitions).values(sectionDef);
+    await this.db.insert(schema.sectionTemplates).values(sectionTemplate);
 
     // Index in vector DB
     await this.vectorIndex.add({
-      id: sectionDef.id,
-      type: "section_def",
-      name: sectionDef.name,
-      slug: sectionDef.key,
-      searchableText: `${sectionDef.name} ${sectionDef.key} ${sectionDef.description || ""}`,
-      metadata: { templateKey: sectionDef.templateKey },
+      id: sectionTemplate.id,
+      type: "section_template",
+      name: sectionTemplate.name,
+      slug: sectionTemplate.key,
+      searchableText: `${sectionTemplate.name} ${sectionTemplate.key} ${sectionTemplate.description || ""}`,
+      metadata: { templateFile: sectionTemplate.templateFile },
     });
 
-    return sectionDef;
+    return sectionTemplate;
   }
 
-  async updateSectionDef(id: string, input: UpdateSectionDefInput) {
-    const original = await this.getSectionDefById(id);
+  async updateSectionTemplate(id: string, input: UpdateSectionTemplateInput) {
+    const original = await this.getSectionTemplateById(id);
     if (!original) {
-      throw new Error("Section definition not found");
+      throw new Error("Section template not found");
     }
 
     if (input.key) {
       this.validateKey(input.key);
 
       // Check key uniqueness (excluding current)
-      const existing = await this.db.query.sectionDefinitions.findFirst({
-        where: eq(schema.sectionDefinitions.key, input.key),
+      const existing = await this.db.query.sectionTemplates.findFirst({
+        where: eq(schema.sectionTemplates.key, input.key),
       });
 
       if (existing && existing.id !== id) {
-        throw new Error(`Section definition with key '${input.key}' already exists`);
+        throw new Error(`Section template with key '${input.key}' already exists`);
       }
     }
 
@@ -143,48 +148,52 @@ export class SectionService {
     };
 
     await this.db
-      .update(schema.sectionDefinitions)
+      .update(schema.sectionTemplates)
       .set(updated)
-      .where(eq(schema.sectionDefinitions.id, id));
+      .where(eq(schema.sectionTemplates.id, id));
 
     // Re-index if name/key changed
     if (input.name !== original.name || input.key !== original.key) {
       await this.vectorIndex.update(id, {
-        type: "section_def",
+        type: "section_template",
         name: input.name || original.name,
         slug: input.key || original.key,
         searchableText: `${input.name || original.name} ${input.key || original.key} ${input.description || original.description || ""}`,
-        metadata: { templateKey: input.templateKey || original.templateKey },
+        metadata: { templateFile: input.templateFile || original.templateFile },
       });
     }
 
-    return this.getSectionDefById(id);
+    return this.getSectionTemplateById(id);
   }
 
-  async getSectionDefById(id: string) {
+  async getSectionTemplateById(id: string) {
     // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-    return await this.db.query.sectionDefinitions.findFirst({
-      where: eq(schema.sectionDefinitions.id, id),
+    return await this.db.query.sectionTemplates.findFirst({
+      where: eq(schema.sectionTemplates.id, id),
     });
   }
 
-  async getSectionDefByKey(key: string) {
+  async getSectionTemplateByKey(key: string) {
     // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-    return await this.db.query.sectionDefinitions.findFirst({
-      where: eq(schema.sectionDefinitions.key, key),
+    return await this.db.query.sectionTemplates.findFirst({
+      where: eq(schema.sectionTemplates.key, key),
     });
   }
 
-  async listSectionDefs() {
-    return await this.db.query.sectionDefinitions.findMany({});
+  async listSectionTemplates() {
+    return await this.db.query.sectionTemplates.findMany({});
   }
 
-  async deleteSectionDef(id: string) {
-    await this.db.delete(schema.sectionDefinitions).where(eq(schema.sectionDefinitions.id, id));
+  async deleteSectionTemplate(id: string) {
+    await this.db.delete(schema.sectionTemplates).where(eq(schema.sectionTemplates.id, id));
 
     // Remove from vector index
     await this.vectorIndex.delete(id);
   }
+
+  // ===========================================================================
+  // Page Section Methods
+  // ===========================================================================
 
   async addSectionToPage(input: AddSectionToPageInput) {
     // Verify page exists
@@ -196,13 +205,13 @@ export class SectionService {
       throw new Error(`Page with id '${input.pageId}' not found`);
     }
 
-    // Verify section definition exists
-    const sectionDef = await this.db.query.sectionDefinitions.findFirst({
-      where: eq(schema.sectionDefinitions.id, input.sectionDefId),
+    // Verify section template exists
+    const sectionTemplate = await this.db.query.sectionTemplates.findFirst({
+      where: eq(schema.sectionTemplates.id, input.sectionTemplateId),
     });
 
-    if (!sectionDef) {
-      throw new Error(`Section definition with id '${input.sectionDefId}' not found`);
+    if (!sectionTemplate) {
+      throw new Error(`Section template with id '${input.sectionTemplateId}' not found`);
     }
 
     // Determine sort order
@@ -215,13 +224,14 @@ export class SectionService {
     }
 
     const pageSectionId = randomUUID();
-    
+
     const pageSection = {
       id: pageSectionId,
       pageId: input.pageId,
-      sectionDefId: input.sectionDefId,
+      sectionTemplateId: input.sectionTemplateId,
       sortOrder,
       status: input.status ?? "published",
+      hidden: input.hidden ?? false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -332,10 +342,10 @@ export class SectionService {
     const sections = await this.db.query.pageSections.findMany({
       where: eq(schema.pageSections.pageId, pageId),
       with: includeContent ? {
-        sectionDefinition: true,
+        sectionTemplate: true,
         contents: true,
       } : {
-        sectionDefinition: true,
+        sectionTemplate: true,
       },
       orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
     });
@@ -344,17 +354,18 @@ export class SectionService {
     return sections.map((section: any) => {
       const base = {
         id: section.id,
-        sectionDefId: section.sectionDefId,
-        sectionKey: section.sectionDefinition?.key,
-        sectionName: section.sectionDefinition?.name,
+        sectionTemplateId: section.sectionTemplateId,
+        sectionKey: section.sectionTemplate?.key,
+        sectionName: section.sectionTemplate?.name,
         sortOrder: section.sortOrder,
         status: section.status,
+        hidden: section.hidden,
       };
 
       if (includeContent && section.contents) {
         // Find content for requested locale
         const contentRecord = section.contents.find((c: any) => c.localeCode === localeCode);
-        
+
         // Parse content if it's a JSON string
         let parsedContent = {};
         if (contentRecord?.content) {
@@ -366,7 +377,7 @@ export class SectionService {
             console.error(`Failed to parse content for section ${section.id}:`, error);
           }
         }
-        
+
         return {
           ...base,
           content: parsedContent,
@@ -387,7 +398,7 @@ export class SectionService {
     const pageSection = await this.db.query.pageSections.findFirst({
       where: eq(schema.pageSections.id, pageSectionId),
       with: {
-        sectionDefinition: true,
+        sectionTemplate: true,
       },
     });
 
@@ -404,8 +415,8 @@ export class SectionService {
     if (!content) {
       return {
         pageSectionId,
-        sectionKey: (pageSection as any).sectionDefinition?.key,
-        sectionName: (pageSection as any).sectionDefinition?.name,
+        sectionKey: (pageSection as any).sectionTemplate?.key,
+        sectionName: (pageSection as any).sectionTemplate?.name,
         localeCode,
         content: {},
         message: 'No content found for this locale',
@@ -426,8 +437,8 @@ export class SectionService {
 
     return {
       pageSectionId,
-      sectionKey: (pageSection as any).sectionDefinition?.key,
-      sectionName: (pageSection as any).sectionDefinition?.name,
+      sectionKey: (pageSection as any).sectionTemplate?.key,
+      sectionName: (pageSection as any).sectionTemplate?.name,
       localeCode,
       content: parsedContent,
     };

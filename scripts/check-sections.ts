@@ -2,25 +2,25 @@ import { db } from "../server/db/client";
 import * as schema from "../server/db/schema";
 
 async function checkSections() {
-  console.log("🔍 Checking section definitions in database...\n");
+  console.log("🔍 Checking section templates in database...\n");
 
   try {
     const sections = await db
       .select({
-        key: schema.sectionDefinitions.key,
-        name: schema.sectionDefinitions.name,
-        description: schema.sectionDefinitions.description,
-        templateKey: schema.sectionDefinitions.templateKey,
-        status: schema.sectionDefinitions.status,
+        key: schema.sectionTemplates.key,
+        name: schema.sectionTemplates.name,
+        description: schema.sectionTemplates.description,
+        templateFile: schema.sectionTemplates.templateFile,
+        status: schema.sectionTemplates.status,
       })
-      .from(schema.sectionDefinitions);
+      .from(schema.sectionTemplates);
 
-    console.log(`Found ${sections.length} section definition(s):\n`);
+    console.log(`Found ${sections.length} section template(s):\n`);
 
     sections.forEach((section, index) => {
       console.log(`${index + 1}. ${section.name}`);
       console.log(`   Key: ${section.key}`);
-      console.log(`   Template: server/templates/sections/${section.templateKey}/default.njk`);
+      console.log(`   Template: server/templates/sections/${section.templateFile}/default.njk`);
       console.log(`   Status: ${section.status}`);
       console.log(`   Description: ${section.description}`);
       console.log();

@@ -4,19 +4,23 @@ import type { DrizzleDB } from "../../db/client";
 import * as schema from "../../db/schema";
 import type { VectorIndexService } from "../vector-index";
 
-export interface CreateCollectionDefInput {
+export interface CreateCollectionTemplateInput {
 	slug: string;
 	name: string;
 	description?: string;
 	status?: "published" | "unpublished";
-	elementsStructure: any;
+	fields: any; // RENAMED: elementsStructure → fields
+	hasSlug?: boolean; // NEW
+	orderDirection?: "asc" | "desc"; // NEW
 }
 
-export interface UpdateCollectionDefInput {
+export interface UpdateCollectionTemplateInput {
 	slug?: string;
 	name?: string;
 	description?: string;
 	status?: "published" | "unpublished";
+	hasSlug?: boolean;
+	orderDirection?: "asc" | "desc";
 }
 
 export interface UpsertEntryInput {
@@ -44,52 +48,54 @@ export interface UpdateEntryMetadataInput {
 export class EntryService {
 	constructor(private db: DrizzleDB, private vectorIndex: VectorIndexService) {}
 
-	async createCollectionDef(input: CreateCollectionDefInput) {
+	async createCollectionTemplate(input: CreateCollectionTemplateInput) {
 		// Validate slug format
 		this.validateSlug(input.slug);
 
 		// Check if slug already exists
-		const existing = await this.db.query.collectionDefinitions.findFirst({
-			where: eq(schema.collectionDefinitions.slug, input.slug),
+		const existing = await this.db.query.collectionTemplates.findFirst({
+			where: eq(schema.collectionTemplates.slug, input.slug),
 		});
 
 		if (existing) {
 			throw new Error(`Collection with slug '${input.slug}' already exists`);
 		}
 
-		const collectionDef = {
+		const collectionTemplate = {
 			id: randomUUID(),
 			slug: input.slug,
 			name: input.name,
 			description: input.description ?? null,
 			status: input.status ?? "published",
-			elementsStructure: JSON.stringify(input.elementsStructure),
+			fields: JSON.stringify(input.fields),
+			hasSlug: input.hasSlug ?? true,
+			orderDirection: input.orderDirection ?? "desc",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		};
 
-		await this.db.insert(schema.collectionDefinitions).values(collectionDef);
+		await this.db.insert(schema.collectionTemplates).values(collectionTemplate);
 
 		// Index in vector DB
 		await this.vectorIndex.add({
-			id: collectionDef.id,
+			id: collectionTemplate.id,
 			type: "collection",
-			name: collectionDef.name,
-			slug: collectionDef.slug,
-			searchableText: `${collectionDef.name} ${collectionDef.slug} ${collectionDef.description || ""}`,
+			name: collectionTemplate.name,
+			slug: collectionTemplate.slug,
+			searchableText: `${collectionTemplate.name} ${collectionTemplate.slug} ${collectionTemplate.description || ""}`,
 			metadata: {},
 		});
 
-		return collectionDef;
+		return collectionTemplate;
 	}
 
-	async updateCollectionDef(id: string, input: UpdateCollectionDefInput) {
+	async updateCollectionTemplate(id: string, input: UpdateCollectionTemplateInput) {
 		if (input.slug) {
 			this.validateSlug(input.slug);
 
 			// Check slug uniqueness (excluding current)
-			const existing = await this.db.query.collectionDefinitions.findFirst({
-				where: eq(schema.collectionDefinitions.slug, input.slug),
+			const existing = await this.db.query.collectionTemplates.findFirst({
+				where: eq(schema.collectionTemplates.slug, input.slug),
 			});
 
 			if (existing && existing.id !== id) {
@@ -102,39 +108,39 @@ export class EntryService {
 			updatedAt: new Date(),
 		};
 
-		await this.db.update(schema.collectionDefinitions).set(updated).where(eq(schema.collectionDefinitions.id, id));
+		await this.db.update(schema.collectionTemplates).set(updated).where(eq(schema.collectionTemplates.id, id));
 
-		return this.getCollectionDefById(id);
+		return this.getCollectionTemplateById(id);
 	}
 
-	async getCollectionDefById(id: string) {
+	async getCollectionTemplateById(id: string) {
 		// @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-		return await this.db.query.collectionDefinitions.findFirst({
-			where: eq(schema.collectionDefinitions.id, id),
+		return await this.db.query.collectionTemplates.findFirst({
+			where: eq(schema.collectionTemplates.id, id),
 		});
 	}
 
-	async getCollectionDefBySlug(slug: string) {
+	async getCollectionTemplateBySlug(slug: string) {
 		// @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-		return await this.db.query.collectionDefinitions.findFirst({
-			where: eq(schema.collectionDefinitions.slug, slug),
+		return await this.db.query.collectionTemplates.findFirst({
+			where: eq(schema.collectionTemplates.slug, slug),
 		});
 	}
 
-	async listCollectionDefs() {
-		return await this.db.query.collectionDefinitions.findMany({});
+	async listCollectionTemplates() {
+		return await this.db.query.collectionTemplates.findMany({});
 	}
 
-	async deleteCollectionDef(id: string) {
-		await this.db.delete(schema.collectionDefinitions).where(eq(schema.collectionDefinitions.id, id));
+	async deleteCollectionTemplate(id: string) {
+		await this.db.delete(schema.collectionTemplates).where(eq(schema.collectionTemplates.id, id));
 	}
 
 	async upsertEntry(input: UpsertEntryInput) {
 		this.validateSlug(input.slug);
 
 		// Verify collection exists
-		const collection = await this.db.query.collectionDefinitions.findFirst({
-			where: eq(schema.collectionDefinitions.id, input.collectionId),
+		const collection = await this.db.query.collectionTemplates.findFirst({
+			where: eq(schema.collectionTemplates.id, input.collectionId),
 		});
 
 		if (!collection) {
@@ -294,8 +300,8 @@ export class EntryService {
 	 */
 	async getCollectionEntries(collectionId: string, includeContent = false, localeCode = "en") {
 		// Verify collection exists
-		const collection = await this.db.query.collectionDefinitions.findFirst({
-			where: eq(schema.collectionDefinitions.id, collectionId),
+		const collection = await this.db.query.collectionTemplates.findFirst({
+			where: eq(schema.collectionTemplates.id, collectionId),
 		});
 
 		if (!collection) {

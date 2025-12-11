@@ -120,7 +120,7 @@ AFTER: Show available section types to user
 NEXT: cms_getSectionFields (see required fields), cms_addSectionToPage
 GOTCHA: Returns template definitions, not page sections. Use cms_getPageSections for sections on a page.`,
 
-	cms_getSectionFields: `BEFORE: Know sectionDefId or key (from cms_listSectionTemplates)
+	cms_getSectionFields: `BEFORE: Know sectionTemplateId or key (from cms_listSectionTemplates)
 AFTER: Show field schema to user if they need to update content
 NEXT: cms_updateSectionContent with correct field names
 GOTCHA: Use this to discover field names (title, subtitle, backgroundImage, etc.) before updating content.`,
@@ -135,10 +135,10 @@ AFTER: Show content to user
 NEXT: cms_updateSectionContent (edit), cms_updateSectionImage (change image)
 GOTCHA: Returns full content for ONE section. More efficient than fetching entire page.`,
 
-	cms_addSectionToPage: `BEFORE: cms_getPage (get pageId), cms_listSectionTemplates (get sectionDefId)
+	cms_addSectionToPage: `BEFORE: cms_getPage (get pageId), cms_listSectionTemplates (get sectionTemplateId)
 AFTER: Show new pageSectionId, suggest adding content
 NEXT: cms_updateSectionContent, cms_updateSectionImage
-GOTCHA: Returns pageSectionId - use this for content updates, not sectionDefId.`,
+GOTCHA: Returns pageSectionId - use this for content updates, not sectionTemplateId.`,
 
 	cms_updateSectionContent: `BEFORE: cms_getSectionFields to know field names
 AFTER: Verify update with cms_getSectionContent if needed

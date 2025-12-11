@@ -23,22 +23,22 @@ async function reindex() {
       console.log(`+ Indexed page: ${page.name} (${page.slug})`);
     }
 
-    // Index all section definitions
-    const sections = await db.query.sectionDefinitions.findMany();
+    // Index all section templates
+    const sections = await db.query.sectionTemplates.findMany();
     for (const section of sections) {
       await vectorIndex.add({
         id: section.id,
-        type: "section_def",
+        type: "section_template",
         name: section.name,
         slug: section.key,
         searchableText: `${section.name} ${section.key} ${section.description || ""}`,
-        metadata: { templateKey: section.templateKey },
+        metadata: { templateFile: section.templateFile },
       });
       console.log(`+ Indexed section: ${section.name} (${section.key})`);
     }
 
     // Index all collections
-    const collections = await db.query.collectionDefinitions.findMany();
+    const collections = await db.query.collectionTemplates.findMany();
     for (const collection of collections) {
       await vectorIndex.add({
         id: collection.id,

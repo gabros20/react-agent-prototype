@@ -1,0 +1,44 @@
+{
+	"getPage": "Lightweight by default. `includeContent: true` only when editing sections. Use `all: true` to list.",
+	"createPage": "Returns `pageId`. Sections added separately with createSection.",
+	"updatePage": "Metadata only. Use updateSection for section content.",
+	"deletePage": "CASCADE deletes all sections. Array param for batch. Requires `confirmed: true`.",
+
+	"getPost": "Default: published only. Use `status: 'all'` for drafts. Use `all: true` to list.",
+	"createPost": "Creates DRAFT. Use updatePost with `status: 'published'` to publish.",
+	"updatePost": "For covers, set BOTH `featuredImage` AND `content.cover`. Publish/archive via status field. Requires `confirmed: true` for status changes.",
+	"deletePost": "PERMANENT. Consider `status: 'archived'` instead. Requires `confirmed: true`.",
+
+	"getSectionTemplate": "Returns schema. Use `key` as `templateKey` in createSection. Use `all: true` to list.",
+	"getSection": "By `pageSectionId` for single, `pageId` for all on page.",
+	"createSection": "Returns `pageSectionId` - use for updates, NOT templateId.",
+	"updateSection": "`imageField` must match schema exactly: `backgroundImage`, `image`, `cover`. Content merges with existing.",
+	"deleteSection": "Array param for batch. Requires `confirmed: true`.",
+
+	"getNavItem": "Returns all items by default.",
+	"createNavItem": "href format: `/pages/{slug}?locale=en`. location: `header`, `footer`, or `both`.",
+	"updateNavItem": "Set `visible: false` to hide without deleting.",
+	"deleteNavItem": "Array param for batch.",
+
+	"getImage": "Expand short queries: 'AI' → 'artificial intelligence technology'. Use `all: true` to list.",
+	"updateImage": "Updates metadata only (description, tags, categories).",
+	"deleteImage": "PERMANENT. Requires `confirmed: true`. Check usages first.",
+
+	"getEntry": "By `id`, `slug`, or `collectionId`. Default lightweight.",
+	"createEntry": "Creates in collection. Status defaults to draft.",
+	"updateEntry": "Content merges with existing.",
+	"deleteEntry": "PERMANENT. Array param for batch. Requires `confirmed: true`.",
+
+	"browseImages": "Specific queries: 'monstera leaf close-up' not 'plant'. Returns previews, use importImage to download.",
+	"importImage": "Returns local `/uploads/...` URL. Credit photographer.",
+
+	"searchWeb": "mode: 'quick' for facts, 'deep' for comprehensive research.",
+	"fetchContent": "Up to 10 URLs per call. Returns markdown/text.",
+
+	"httpGet": "For external API data. Respect rate limits.",
+	"httpPost": "Requires `confirmed: true`. External API submissions only.",
+
+	"searchTools": "Search by CAPABILITY keywords ('create post', 'list pages') not content. You MUST call discovered tools.",
+	"acknowledgeRequest": "Vary naturally. Match tone to request complexity.",
+	"finalAnswer": "VERIFY first if user asks about status. Use relative `/uploads/...` image paths only."
+}

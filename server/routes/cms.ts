@@ -13,38 +13,41 @@ const createPageSchema = z.object({
 
 const updatePageSchema = createPageSchema.partial();
 
-const createSectionDefSchema = z.object({
+const createSectionTemplateSchema = z.object({
   key: z.string().regex(/^[a-z0-9-]{2,64}$/),
   name: z.string().min(1).max(100),
   description: z.string().optional(),
   status: z.enum(["published", "unpublished"]).optional(),
-  elementsStructure: z.any(),
-  templateKey: z.string().min(1),
+  fields: z.any(), // RENAMED: elementsStructure → fields
+  templateFile: z.string().min(1), // RENAMED: templateKey → templateFile
   defaultVariant: z.string().optional(),
   cssBundle: z.string().optional(),
 });
 
-const updateSectionDefSchema = createSectionDefSchema.partial();
+const updateSectionTemplateSchema = createSectionTemplateSchema.partial();
 
 const addSectionToPageSchema = z.object({
-  sectionDefId: z.string().uuid(),
+  sectionTemplateId: z.string().uuid(), // RENAMED: sectionDefId → sectionTemplateId
   sortOrder: z.number().int().min(0).optional(),
-  status: z.enum(["published", "unpublished"]).optional(),
+  status: z.enum(["published", "unpublished", "draft"]).optional(), // UPDATED: added draft
+  hidden: z.boolean().optional(), // NEW
 });
 
 const syncPageContentsSchema = z.object({
   content: z.record(z.string(), z.any()),
 });
 
-const createCollectionDefSchema = z.object({
+const createCollectionTemplateSchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]{2,64}$/),
   name: z.string().min(1).max(100),
   description: z.string().optional(),
   status: z.enum(["published", "unpublished"]).optional(),
-  elementsStructure: z.any(),
+  fields: z.any(), // RENAMED: elementsStructure → fields
+  hasSlug: z.boolean().optional(), // NEW
+  orderDirection: z.enum(["asc", "desc"]).optional(), // NEW
 });
 
-const updateCollectionDefSchema = createCollectionDefSchema.partial();
+const updateCollectionTemplateSchema = createCollectionTemplateSchema.partial();
 
 const upsertEntrySchema = z.object({
   slug: z.string().regex(/^[a-z0-9-]{2,64}$/),
@@ -64,7 +67,7 @@ export function createCMSRoutes(services: ServiceContainer) {
     try {
       const schema = z.object({
         query: z.string().min(1),
-        type: z.enum(["page", "section_def", "collection", "entry"]).optional(),
+        type: z.enum(["page", "section_template", "collection", "entry"]).optional(),
         limit: z.number().int().min(1).max(10).optional().default(3),
       });
 
@@ -210,7 +213,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   // GET /v1/teams/:team/sites/:site/environments/:env/sections
   router.get("/sections", async (_req, res, next) => {
     try {
-      const sections = await services.sectionService.listSectionDefs();
+      const sections = await services.sectionService.listSectionTemplates();
       res.json(ApiResponse.success(sections));
     } catch (error) {
       next(error);
@@ -220,8 +223,8 @@ export function createCMSRoutes(services: ServiceContainer) {
   // POST /v1/teams/:team/sites/:site/environments/:env/sections
   router.post("/sections", async (req, res, next) => {
     try {
-      const input = createSectionDefSchema.parse(req.body);
-      const section = await services.sectionService.createSectionDef(input);
+      const input = createSectionTemplateSchema.parse(req.body);
+      const section = await services.sectionService.createSectionTemplate(input);
       res.status(HttpStatus.CREATED).json(ApiResponse.success(section));
     } catch (error) {
       next(error);
@@ -231,10 +234,10 @@ export function createCMSRoutes(services: ServiceContainer) {
   // GET /v1/teams/:team/sites/:site/environments/:env/sections/:section
   router.get("/sections/:section", async (req, res, next) => {
     try {
-      const section = await services.sectionService.getSectionDefById(req.params.section);
+      const section = await services.sectionService.getSectionTemplateById(req.params.section);
       if (!section) {
         return res.status(HttpStatus.NOT_FOUND).json(
-          ApiResponse.error(ErrorCodes.NOT_FOUND, "Section definition not found")
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Section template not found")
         );
       }
       res.json(ApiResponse.success(section));
@@ -246,11 +249,11 @@ export function createCMSRoutes(services: ServiceContainer) {
   // PUT /v1/teams/:team/sites/:site/environments/:env/sections/:section
   router.put("/sections/:section", async (req, res, next) => {
     try {
-      const input = updateSectionDefSchema.parse(req.body);
-      const section = await services.sectionService.updateSectionDef(req.params.section, input);
+      const input = updateSectionTemplateSchema.parse(req.body);
+      const section = await services.sectionService.updateSectionTemplate(req.params.section, input);
       if (!section) {
         return res.status(HttpStatus.NOT_FOUND).json(
-          ApiResponse.error(ErrorCodes.NOT_FOUND, "Section definition not found")
+          ApiResponse.error(ErrorCodes.NOT_FOUND, "Section template not found")
         );
       }
       res.json(ApiResponse.success(section));
@@ -262,7 +265,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   // DELETE /v1/teams/:team/sites/:site/environments/:env/sections/:section
   router.delete("/sections/:section", async (req, res, next) => {
     try {
-      await services.sectionService.deleteSectionDef(req.params.section);
+      await services.sectionService.deleteSectionTemplate(req.params.section);
       res.json(ApiResponse.success({ success: true }));
     } catch (error) {
       next(error);
@@ -276,7 +279,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   // GET /v1/teams/:team/sites/:site/environments/:env/collections
   router.get("/collections", async (_req, res, next) => {
     try {
-      const collections = await services.entryService.listCollectionDefs();
+      const collections = await services.entryService.listCollectionTemplates();
       res.json(ApiResponse.success(collections));
     } catch (error) {
       next(error);
@@ -286,8 +289,8 @@ export function createCMSRoutes(services: ServiceContainer) {
   // POST /v1/teams/:team/sites/:site/environments/:env/collections
   router.post("/collections", async (req, res, next) => {
     try {
-      const input = createCollectionDefSchema.parse(req.body);
-      const collection = await services.entryService.createCollectionDef(input);
+      const input = createCollectionTemplateSchema.parse(req.body);
+      const collection = await services.entryService.createCollectionTemplate(input);
       res.status(HttpStatus.CREATED).json(ApiResponse.success(collection));
     } catch (error) {
       next(error);
@@ -297,7 +300,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   // GET /v1/teams/:team/sites/:site/environments/:env/collections/:collection
   router.get("/collections/:collection", async (req, res, next) => {
     try {
-      const collection = await services.entryService.getCollectionDefById(req.params.collection);
+      const collection = await services.entryService.getCollectionTemplateById(req.params.collection);
       if (!collection) {
         return res.status(HttpStatus.NOT_FOUND).json(
           ApiResponse.error(ErrorCodes.NOT_FOUND, "Collection not found")
@@ -312,8 +315,8 @@ export function createCMSRoutes(services: ServiceContainer) {
   // PUT /v1/teams/:team/sites/:site/environments/:env/collections/:collection
   router.put("/collections/:collection", async (req, res, next) => {
     try {
-      const input = updateCollectionDefSchema.parse(req.body);
-      const collection = await services.entryService.updateCollectionDef(
+      const input = updateCollectionTemplateSchema.parse(req.body);
+      const collection = await services.entryService.updateCollectionTemplate(
         req.params.collection,
         input,
       );
@@ -331,7 +334,7 @@ export function createCMSRoutes(services: ServiceContainer) {
   // DELETE /v1/teams/:team/sites/:site/environments/:env/collections/:collection
   router.delete("/collections/:collection", async (req, res, next) => {
     try {
-      await services.entryService.deleteCollectionDef(req.params.collection);
+      await services.entryService.deleteCollectionTemplate(req.params.collection);
       res.json(ApiResponse.success({ success: true }));
     } catch (error) {
       next(error);

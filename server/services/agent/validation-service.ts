@@ -173,12 +173,12 @@ export class ValidationService {
 	}
 
 	/**
-	 * Validate section definition creation
+	 * Validate section template creation
 	 */
-	async validateSectionDefCreation(input: {
+	async validateSectionTemplateCreation(input: {
 		key: string
 		name: string
-		elementsStructure: any
+		fields: any
 	}): Promise<ValidationResult> {
 		const issues: ValidationIssue[] = []
 
@@ -194,8 +194,8 @@ export class ValidationService {
 		}
 
 		// 2. Check key uniqueness
-		const existing = await this.db.query.sectionDefinitions.findFirst({
-			where: eq(schema.sectionDefinitions.key, input.key),
+		const existing = await this.db.query.sectionTemplates.findFirst({
+			where: eq(schema.sectionTemplates.key, input.key),
 		})
 
 		if (existing) {
@@ -208,18 +208,18 @@ export class ValidationService {
 			})
 		}
 
-		// 3. Validate elements structure schema
+		// 3. Validate fields structure schema
 		try {
-			const structure = typeof input.elementsStructure === 'string'
-				? JSON.parse(input.elementsStructure)
-				: input.elementsStructure
+			const structure = typeof input.fields === 'string'
+				? JSON.parse(input.fields)
+				: input.fields
 
 			if (!structure.version || !structure.rows || !Array.isArray(structure.rows)) {
 				issues.push({
 					type: 'error',
 					category: 'schema',
-					field: 'elementsStructure',
-					message: 'Invalid elements structure: missing version or rows',
+					field: 'fields',
+					message: 'Invalid fields structure: missing version or rows',
 					suggestion: 'Ensure structure has { version: 1, rows: [...] }',
 				})
 			}
@@ -230,7 +230,7 @@ export class ValidationService {
 					issues.push({
 						type: 'error',
 						category: 'schema',
-						field: 'elementsStructure',
+						field: 'fields',
 						message: `Row ${row.id} missing slots array`,
 						suggestion: 'Each row must have slots: [{ key, type, label }]',
 					})
@@ -241,7 +241,7 @@ export class ValidationService {
 						issues.push({
 							type: 'error',
 							category: 'schema',
-							field: 'elementsStructure',
+							field: 'fields',
 							message: `Slot missing required fields: key or type`,
 							suggestion: 'Each slot must have { key, type, label? }',
 						})
@@ -261,7 +261,7 @@ export class ValidationService {
 						issues.push({
 							type: 'error',
 							category: 'schema',
-							field: 'elementsStructure',
+							field: 'fields',
 							message: `Invalid element type '${slot.type}' for slot '${slot.key}'`,
 							suggestion: `Valid types: ${validTypes.join(', ')}`,
 						})
@@ -272,9 +272,9 @@ export class ValidationService {
 			issues.push({
 				type: 'error',
 				category: 'schema',
-				field: 'elementsStructure',
-				message: `Invalid JSON in elements structure: ${error.message}`,
-				suggestion: 'Ensure elements structure is valid JSON',
+				field: 'fields',
+				message: `Invalid JSON in fields structure: ${error.message}`,
+				suggestion: 'Ensure fields structure is valid JSON',
 			})
 		}
 
@@ -285,33 +285,33 @@ export class ValidationService {
 	}
 
 	/**
-	 * Validate content matches section definition schema
+	 * Validate content matches section template schema
 	 */
 	async validateSectionContent(params: {
-		sectionDefId: string
+		sectionTemplateId: string
 		content: Record<string, any>
 	}): Promise<ValidationResult> {
 		const issues: ValidationIssue[] = []
 
-		// 1. Get section definition
-		const sectionDef = await this.db.query.sectionDefinitions.findFirst({
-			where: eq(schema.sectionDefinitions.id, params.sectionDefId),
+		// 1. Get section template
+		const sectionTemplate = await this.db.query.sectionTemplates.findFirst({
+			where: eq(schema.sectionTemplates.id, params.sectionTemplateId),
 		})
 
-		if (!sectionDef) {
+		if (!sectionTemplate) {
 			issues.push({
 				type: 'error',
 				category: 'existence',
-				message: `Section definition '${params.sectionDefId}' not found`,
-				suggestion: 'Create section definition first',
+				message: `Section template '${params.sectionTemplateId}' not found`,
+				suggestion: 'Create section template first',
 			})
 			return { valid: false, issues }
 		}
 
-		// 2. Parse elements structure
-		const structure = typeof sectionDef.elementsStructure === 'string'
-			? JSON.parse(sectionDef.elementsStructure)
-			: sectionDef.elementsStructure
+		// 2. Parse fields structure
+		const structure = typeof sectionTemplate.fields === 'string'
+			? JSON.parse(sectionTemplate.fields)
+			: sectionTemplate.fields
 
 		// 3. Extract all slot keys
 		const slotKeys = new Set<string>()
@@ -367,9 +367,9 @@ export class ValidationService {
 	}): Promise<ValidationResult> {
 		const issues: ValidationIssue[] = []
 
-		// 1. Get collection definition
-		const collection = await this.db.query.collectionDefinitions.findFirst({
-			where: eq(schema.collectionDefinitions.id, params.collectionId),
+		// 1. Get collection template
+		const collection = await this.db.query.collectionTemplates.findFirst({
+			where: eq(schema.collectionTemplates.id, params.collectionId),
 		})
 
 		if (!collection) {
@@ -377,15 +377,15 @@ export class ValidationService {
 				type: 'error',
 				category: 'existence',
 				message: `Collection '${params.collectionId}' not found`,
-				suggestion: 'Create collection definition first',
+				suggestion: 'Create collection template first',
 			})
 			return { valid: false, issues }
 		}
 
-		// 2. Parse elements structure
-		const structure = typeof collection.elementsStructure === 'string'
-			? JSON.parse(collection.elementsStructure)
-			: collection.elementsStructure
+		// 2. Parse fields structure
+		const structure = typeof collection.fields === 'string'
+			? JSON.parse(collection.fields)
+			: collection.fields
 
 		// 3. Extract all slot keys and required fields
 		const slotKeys = new Set<string>()
@@ -437,7 +437,7 @@ export class ValidationService {
 	 */
 	async validateAddSection(params: {
 		pageId: string
-		sectionDefId: string
+		sectionTemplateId: string
 		sortOrder?: number
 	}): Promise<ValidationResult> {
 		const issues: ValidationIssue[] = []
@@ -457,18 +457,18 @@ export class ValidationService {
 			})
 		}
 
-		// 2. Check section definition exists
-		const sectionDef = await this.db.query.sectionDefinitions.findFirst({
-			where: eq(schema.sectionDefinitions.id, params.sectionDefId),
+		// 2. Check section template exists
+		const sectionTemplate = await this.db.query.sectionTemplates.findFirst({
+			where: eq(schema.sectionTemplates.id, params.sectionTemplateId),
 		})
 
-		if (!sectionDef) {
+		if (!sectionTemplate) {
 			issues.push({
 				type: 'error',
 				category: 'existence',
-				field: 'sectionDefId',
-				message: `Section definition '${params.sectionDefId}' not found`,
-				suggestion: 'Create section definition first or verify ID',
+				field: 'sectionTemplateId',
+				message: `Section template '${params.sectionTemplateId}' not found`,
+				suggestion: 'Create section template first or verify ID',
 			})
 		}
 

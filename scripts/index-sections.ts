@@ -11,28 +11,28 @@ async function indexSections() {
   const services = await ServiceContainer.initialize(db);
   const vectorIndex = services.vectorIndex;
 
-  // Get all section definitions
-  const sectionDefs = await db.select().from(schema.sectionDefinitions);
-  console.log("Found", sectionDefs.length, "section definitions to index");
+  // Get all section templates
+  const sectionTemplates = await db.select().from(schema.sectionTemplates);
+  console.log("Found", sectionTemplates.length, "section templates to index");
 
-  for (const def of sectionDefs) {
-    const searchableText = `${def.name} ${def.key} ${def.description || ""}`;
+  for (const st of sectionTemplates) {
+    const searchableText = `${st.name} ${st.key} ${st.description || ""}`;
 
     // Check if already indexed
-    const exists = await vectorIndex.exists(def.id);
+    const exists = await vectorIndex.exists(st.id);
     if (exists) {
-      console.log("- Already indexed:", def.key);
+      console.log("- Already indexed:", st.key);
       continue;
     }
 
-    console.log("- Indexing:", def.key, "-", def.name);
+    console.log("- Indexing:", st.key, "-", st.name);
     await vectorIndex.add({
-      id: def.id,
-      type: "section_def",
-      name: def.name,
-      slug: def.key,
+      id: st.id,
+      type: "section_template",
+      name: st.name,
+      slug: st.key,
       searchableText,
-      metadata: { templateKey: def.templateKey },
+      metadata: { templateFile: st.templateFile },
     });
   }
 
@@ -42,7 +42,7 @@ async function indexSections() {
       pageSection: {
         with: {
           page: true,
-          sectionDef: true,
+          sectionTemplate: true,
         },
       },
     },
@@ -55,8 +55,8 @@ async function indexSections() {
 
     const pageName = ps.pageSection.page?.name || "Unknown";
     const sectionName =
-      ps.pageSection.sectionDef?.name ||
-      ps.pageSection.sectionDef?.key ||
+      ps.pageSection.sectionTemplate?.name ||
+      ps.pageSection.sectionTemplate?.key ||
       "section";
     const searchableText = `${pageName} ${sectionName} page section`;
 
@@ -71,11 +71,11 @@ async function indexSections() {
       id: ps.id,
       type: "section",
       name: `${pageName} - ${sectionName}`,
-      slug: ps.pageSection.sectionDef?.key || "section",
+      slug: ps.pageSection.sectionTemplate?.key || "section",
       searchableText,
       metadata: {
         pageId: ps.pageSection.pageId,
-        sectionKey: ps.pageSection.sectionDef?.key,
+        sectionKey: ps.pageSection.sectionTemplate?.key,
       },
     });
   }

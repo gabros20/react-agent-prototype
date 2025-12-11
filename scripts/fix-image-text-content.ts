@@ -15,10 +15,10 @@ async function fixImageTextContent() {
         eq(schema.pageSectionContents.pageSectionId, schema.pageSections.id)
       )
       .innerJoin(
-        schema.sectionDefinitions,
-        eq(schema.pageSections.sectionDefId, schema.sectionDefinitions.id)
+        schema.sectionTemplates,
+        eq(schema.pageSections.sectionTemplateId, schema.sectionTemplates.id)
       )
-      .where(eq(schema.sectionDefinitions.key, "image-text"));
+      .where(eq(schema.sectionTemplates.key, "image-text"));
 
     console.log(`Found ${contents.length} image-text section(s)\n`);
 

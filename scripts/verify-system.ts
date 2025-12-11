@@ -75,7 +75,7 @@ async function verifySystem() {
       // Check core tables exist
       const pages = await db.query.pages.findMany();
       const images = await db.query.images.findMany();
-      const sections = await db.query.sectionDefinitions.findMany();
+      const sections = await db.query.sectionTemplates.findMany();
 
       results.push({
         name: "Database Schema",

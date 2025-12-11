@@ -112,10 +112,10 @@ export class PageService {
 			with: {
 				pageSections: {
 					with: {
-						sectionDefinition: true,
+						sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
 						contents: true,
 					},
-					orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
+					orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
 				},
 			},
 		});
@@ -130,9 +130,9 @@ export class PageService {
 				with: {
 					pageSections: {
 						with: {
-							sectionDefinition: true,
+							sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
 						},
-						orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
+						orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
 					},
 				},
 			});
@@ -153,10 +153,10 @@ export class PageService {
 			with: {
 				pageSections: {
 					with: {
-						sectionDefinition: true,
+						sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
 						contents: true,
 					},
-					orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
+					orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
 				},
 			},
 		});

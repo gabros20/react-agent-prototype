@@ -7,7 +7,7 @@
 
 import { tool } from "ai";
 import { z } from "zod";
-import { images, pageSectionContents } from "../db/schema";
+import { images, pageSectionContents, pageSections, sectionTemplates } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import imageProcessingService from "../services/storage/image-processing.service";
 import type { AgentContext } from "./types";
@@ -350,7 +350,6 @@ export const updateSectionImageTool = tool({
 		const { pageSectionId, imageField, imageId, localeCode = "en" } = input;
 		try {
 			// Get section to validate field name
-			const { pageSections, sectionDefinitions } = await import("../db/schema");
 			const section = await ctx.db.query.pageSections.findFirst({
 				where: eq(pageSections.id, pageSectionId),
 			});
@@ -359,19 +358,19 @@ export const updateSectionImageTool = tool({
 				return { success: false, error: "Section not found" };
 			}
 
-			// Get section definition to validate field
-			const sectionDef = await ctx.db.query.sectionDefinitions.findFirst({
-				where: eq(sectionDefinitions.id, section.sectionDefId),
+			// Get section template to validate field
+			const sectionTemplate = await ctx.db.query.sectionTemplates.findFirst({
+				where: eq(sectionTemplates.id, section.sectionTemplateId),
 			});
 
-			if (!sectionDef) {
-				return { success: false, error: "Section definition not found" };
+			if (!sectionTemplate) {
+				return { success: false, error: "Section template not found" };
 			}
 
-			// Parse elements structure to find image fields
-			const structure = typeof sectionDef.elementsStructure === 'string'
-				? JSON.parse(sectionDef.elementsStructure)
-				: sectionDef.elementsStructure;
+			// Parse fields structure to find image fields
+			const structure = typeof sectionTemplate.fields === 'string'
+				? JSON.parse(sectionTemplate.fields)
+				: sectionTemplate.fields;
 
 			const imageFields: string[] = [];
 			if (structure && structure.rows) {
@@ -386,17 +385,17 @@ export const updateSectionImageTool = tool({
 				}
 			}
 
-			// Validate imageField exists in definition
+			// Validate imageField exists in template
 			if (!imageFields.includes(imageField)) {
 				if (imageFields.length === 0) {
 					return {
 						success: false,
-						error: `Section "${sectionDef.name}" has no image fields defined`,
+						error: `Section "${sectionTemplate.name}" has no image fields defined`,
 					};
 				}
 				return {
 					success: false,
-					error: `Field "${imageField}" not found in section definition. Available image fields: ${imageFields.join(', ')}`,
+					error: `Field "${imageField}" not found in section template. Available image fields: ${imageFields.join(', ')}`,
 					availableImageFields: imageFields,
 				};
 			}

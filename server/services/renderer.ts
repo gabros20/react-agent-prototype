@@ -137,13 +137,13 @@ export class RendererService {
 
     const sectionHtmlList: string[] = [];
 
-    if (!page.pageSections || page.pageSections.length === 0) {
+    if (!(page as any).pageSections || (page as any).pageSections.length === 0) {
       console.warn(`No sections found for page: ${pageSlug}`);
     } else {
-      for (const pageSection of page.pageSections) {
-        const sectionDef = pageSection.sectionDefinition;
-        const templateKey = sectionDef.templateKey;
-        const variant = sectionDef.defaultVariant || "default";
+      for (const pageSection of (page as any).pageSections) {
+        const sectionTemplate = pageSection.sectionTemplate;
+        const templateKey = sectionTemplate.templateFile; // RENAMED: templateKey → templateFile
+        const variant = sectionTemplate.defaultVariant || "default";
 
         // After hybrid content fetching, content is directly on pageSection
         const contentData = pageSection.content || {};
@@ -152,7 +152,7 @@ export class RendererService {
 
         const sectionHtml = this.env.render(templatePath, {
           ...contentData,
-          sectionKey: sectionDef.key,
+          sectionKey: sectionTemplate.key,
           locale,
           globalNavItems,
           currentYear,

@@ -116,16 +116,39 @@ async function seed() {
 		console.log("✓ Created locales: en, de");
 
 		// ========================================================================
-		// 5. Create section definitions
+		// 4b. Link locales to environment (NEW)
+		// ========================================================================
+		await db.insert(schema.environmentLocales).values([
+			{
+				id: randomUUID(),
+				environmentId: envId,
+				localeCode: "en",
+				isDefault: true,
+				status: "active",
+				createdAt: new Date(),
+			},
+			{
+				id: randomUUID(),
+				environmentId: envId,
+				localeCode: "de",
+				isDefault: false,
+				status: "inactive",
+				createdAt: new Date(),
+			},
+		]);
+		console.log("✓ Linked locales to environment");
+
+		// ========================================================================
+		// 5. Create section templates (RENAMED from section definitions)
 		// ========================================================================
 		const heroSectionId = randomUUID();
-		await db.insert(schema.sectionDefinitions).values({
+		await db.insert(schema.sectionTemplates).values({
 			id: heroSectionId,
 			key: "hero",
 			name: "Hero Section",
 			description: "Homepage hero with title, subtitle, image, and CTA",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({ // RENAMED: elementsStructure → fields
 				version: 1,
 				rows: [
 					{
@@ -162,21 +185,21 @@ async function seed() {
 					},
 				],
 			}),
-			templateKey: "hero",
+			templateFile: "hero", // RENAMED: templateKey → templateFile
 			defaultVariant: "default",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created section definition: hero (${heroSectionId})`);
+		console.log(`✓ Created section template: hero (${heroSectionId})`);
 
 		const featureSectionId = randomUUID();
-		await db.insert(schema.sectionDefinitions).values({
+		await db.insert(schema.sectionTemplates).values({
 			id: featureSectionId,
 			key: "feature",
 			name: "Feature Section",
 			description: "Feature grid with heading and items",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({
 				version: 1,
 				rows: [
 					{
@@ -197,21 +220,21 @@ async function seed() {
 					},
 				],
 			}),
-			templateKey: "feature",
+			templateFile: "feature",
 			defaultVariant: "default",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created section definition: feature (${featureSectionId})`);
+		console.log(`✓ Created section template: feature (${featureSectionId})`);
 
 		const ctaSectionId = randomUUID();
-		await db.insert(schema.sectionDefinitions).values({
+		await db.insert(schema.sectionTemplates).values({
 			id: ctaSectionId,
 			key: "cta",
 			name: "Call-to-Action Section",
 			description: "CTA with heading, description, and button",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({
 				version: 1,
 				rows: [
 					{
@@ -248,21 +271,21 @@ async function seed() {
 					},
 				],
 			}),
-			templateKey: "cta",
+			templateFile: "cta",
 			defaultVariant: "default",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created section definition: cta (${ctaSectionId})`);
+		console.log(`✓ Created section template: cta (${ctaSectionId})`);
 
 		const gallerySectionId = randomUUID();
-		await db.insert(schema.sectionDefinitions).values({
+		await db.insert(schema.sectionTemplates).values({
 			id: gallerySectionId,
 			key: "gallery",
 			name: "Image Gallery",
 			description: "Gallery with title and multiple images",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({
 				version: 1,
 				rows: [
 					{
@@ -292,21 +315,21 @@ async function seed() {
 					},
 				],
 			}),
-			templateKey: "gallery",
+			templateFile: "gallery",
 			defaultVariant: "default",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created section definition: gallery (${gallerySectionId})`);
+		console.log(`✓ Created section template: gallery (${gallerySectionId})`);
 
 		const imageTextSectionId = randomUUID();
-		await db.insert(schema.sectionDefinitions).values({
+		await db.insert(schema.sectionTemplates).values({
 			id: imageTextSectionId,
 			key: "image-text",
 			name: "Image-Text Section",
 			description: "Flexible two-column layout with text and image, configurable for desktop (LTR/RTL) and mobile (image-first/text-first)",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({
 				version: 1,
 				rows: [
 					{
@@ -369,21 +392,21 @@ async function seed() {
 					},
 				],
 			}),
-			templateKey: "image-text",
+			templateFile: "image-text",
 			defaultVariant: "default",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created section definition: image-text (${imageTextSectionId})`);
+		console.log(`✓ Created section template: image-text (${imageTextSectionId})`);
 
 		const headerSectionId = randomUUID();
-		await db.insert(schema.sectionDefinitions).values({
+		await db.insert(schema.sectionTemplates).values({
 			id: headerSectionId,
 			key: "header",
 			name: "Header",
 			description: "Site header with logo, navigation, and CTA button",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({
 				version: 1,
 				rows: [
 					{
@@ -409,21 +432,21 @@ async function seed() {
 					},
 				],
 			}),
-			templateKey: "header",
+			templateFile: "header",
 			defaultVariant: "default",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created section definition: header (${headerSectionId})`);
+		console.log(`✓ Created section template: header (${headerSectionId})`);
 
 		const footerSectionId = randomUUID();
-		await db.insert(schema.sectionDefinitions).values({
+		await db.insert(schema.sectionTemplates).values({
 			id: footerSectionId,
 			key: "footer",
 			name: "Footer",
 			description: "Site footer with navigation and copyright",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({
 				version: 1,
 				rows: [
 					{
@@ -438,24 +461,24 @@ async function seed() {
 					},
 				],
 			}),
-			templateKey: "footer",
+			templateFile: "footer",
 			defaultVariant: "default",
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created section definition: footer (${footerSectionId})`);
+		console.log(`✓ Created section template: footer (${footerSectionId})`);
 
 		// ========================================================================
-		// 6. Create collection definition: blog
+		// 6. Create collection template: blog (RENAMED from collection definition)
 		// ========================================================================
 		const blogCollectionId = randomUUID();
-		await db.insert(schema.collectionDefinitions).values({
+		await db.insert(schema.collectionTemplates).values({
 			id: blogCollectionId,
 			slug: "blog",
 			name: "Blog Posts",
 			description: "Collection of blog posts",
 			status: "published",
-			elementsStructure: JSON.stringify({
+			fields: JSON.stringify({ // RENAMED: elementsStructure → fields
 				version: 1,
 				rows: [
 					{
@@ -485,10 +508,12 @@ async function seed() {
 					},
 				],
 			}),
+			hasSlug: true, // NEW
+			orderDirection: "desc", // NEW
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
-		console.log(`✓ Created collection definition: blog (${blogCollectionId})`);
+		console.log(`✓ Created collection template: blog (${blogCollectionId})`);
 
 		// ========================================================================
 		// 7. Initialize global navigation
@@ -537,6 +562,7 @@ async function seed() {
 			environmentId: envId,
 			slug: "home",
 			name: "Homepage",
+			isProtected: true, // NEW: Mark as protected default page
 			indexing: true,
 			meta: JSON.stringify({
 				title: "Home",
@@ -554,9 +580,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: headerPageSectionId,
 			pageId: homePageId,
-			sectionDefId: headerSectionId,
+			sectionTemplateId: headerSectionId, // RENAMED: sectionDefId → sectionTemplateId
 			sortOrder: 0,
 			status: "published",
+			hidden: false, // NEW
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -585,9 +612,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: heroPageSectionId,
 			pageId: homePageId,
-			sectionDefId: heroSectionId,
+			sectionTemplateId: heroSectionId,
 			sortOrder: 1,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -622,9 +650,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: featurePageSectionId,
 			pageId: homePageId,
-			sectionDefId: featureSectionId,
+			sectionTemplateId: featureSectionId,
 			sortOrder: 2,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -675,9 +704,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: imageTextPageSectionId,
 			pageId: homePageId,
-			sectionDefId: imageTextSectionId,
+			sectionTemplateId: imageTextSectionId,
 			sortOrder: 3,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -716,9 +746,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: ctaPageSectionId,
 			pageId: homePageId,
-			sectionDefId: ctaSectionId,
+			sectionTemplateId: ctaSectionId,
 			sortOrder: 4,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -749,9 +780,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: footerPageSectionId,
 			pageId: homePageId,
-			sectionDefId: footerSectionId,
+			sectionTemplateId: footerSectionId,
 			sortOrder: 999,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -782,6 +814,7 @@ async function seed() {
 			environmentId: envId,
 			slug: "about",
 			name: "About Us",
+			isProtected: false,
 			indexing: true,
 			meta: JSON.stringify({
 				title: "About Us",
@@ -800,9 +833,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: aboutHeaderSectionId,
 			pageId: aboutPageId,
-			sectionDefId: headerSectionId,
+			sectionTemplateId: headerSectionId,
 			sortOrder: 0,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -823,10 +857,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: aboutHeroSectionId,
 			pageId: aboutPageId,
-			sectionDefId: heroSectionId,
+			sectionTemplateId: heroSectionId,
 			sortOrder: 1,
 			status: "published",
-			variant: "centered",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -853,9 +887,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: aboutImageText1Id,
 			pageId: aboutPageId,
-			sectionDefId: imageTextSectionId,
+			sectionTemplateId: imageTextSectionId,
 			sortOrder: 2,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -883,9 +918,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: aboutImageText2Id,
 			pageId: aboutPageId,
-			sectionDefId: imageTextSectionId,
+			sectionTemplateId: imageTextSectionId,
 			sortOrder: 3,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -914,9 +950,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: aboutFooterSectionId,
 			pageId: aboutPageId,
-			sectionDefId: footerSectionId,
+			sectionTemplateId: footerSectionId,
 			sortOrder: 999,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -942,6 +979,7 @@ async function seed() {
 			environmentId: envId,
 			slug: "contact",
 			name: "Contact Us",
+			isProtected: false,
 			indexing: true,
 			meta: JSON.stringify({
 				title: "Contact Us",
@@ -960,9 +998,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: contactHeaderSectionId,
 			pageId: contactPageId,
-			sectionDefId: headerSectionId,
+			sectionTemplateId: headerSectionId,
 			sortOrder: 0,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -983,9 +1022,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: contactHeroSectionId,
 			pageId: contactPageId,
-			sectionDefId: heroSectionId,
+			sectionTemplateId: heroSectionId,
 			sortOrder: 1,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -1010,9 +1050,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: contactCtaSectionId,
 			pageId: contactPageId,
-			sectionDefId: ctaSectionId,
+			sectionTemplateId: ctaSectionId,
 			sortOrder: 2,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});
@@ -1035,9 +1076,10 @@ async function seed() {
 		await db.insert(schema.pageSections).values({
 			id: contactFooterSectionId,
 			pageId: contactPageId,
-			sectionDefId: footerSectionId,
+			sectionTemplateId: footerSectionId,
 			sortOrder: 999,
 			status: "published",
+			hidden: false,
 			createdAt: new Date(),
 			updatedAt: new Date(),
 		});

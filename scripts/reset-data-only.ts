@@ -82,21 +82,21 @@ async function resetDataOnly() {
 		try {
 			// Truncate all data tables while preserving schema
 			const truncateSQL = `
-        DELETE FROM conversation_images;
+        DELETE FROM conversation_logs;
         DELETE FROM messages;
         DELETE FROM sessions;
         DELETE FROM media;
         DELETE FROM image_variants;
         DELETE FROM image_metadata;
         DELETE FROM images;
-        DELETE FROM page_section_images;
         DELETE FROM entry_contents;
         DELETE FROM collection_entries;
-        DELETE FROM collection_definitions;
+        DELETE FROM collection_templates;
         DELETE FROM page_section_contents;
         DELETE FROM page_sections;
-        DELETE FROM section_definitions;
+        DELETE FROM section_templates;
         DELETE FROM pages;
+        DELETE FROM environment_locales;
         DELETE FROM environments;
         DELETE FROM navigation_items;
         DELETE FROM navigations;

@@ -46,12 +46,18 @@ export const locales = sqliteTable("locales", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
-export const siteSettings = sqliteTable("site_settings", {
+// Environment-Locale junction table (production aligned)
+export const environmentLocales = sqliteTable("environment_locales", {
   id: text("id").primaryKey(),
-  key: text("key").notNull().unique(),
-  value: text("value", { mode: "json" }).notNull(),
+  environmentId: text("environment_id")
+    .notNull()
+    .references(() => environments.id, { onDelete: "cascade" }),
+  localeCode: text("locale_code")
+    .notNull()
+    .references(() => locales.code, { onDelete: "cascade" }),
+  isDefault: integer("is_default", { mode: "boolean" }).default(false),
+  status: text("status", { enum: ["active", "inactive"] }).default("active"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
 // ============================================================================
@@ -66,8 +72,10 @@ export const pages = sqliteTable("pages", {
   environmentId: text("environment_id")
     .notNull()
     .references(() => environments.id, { onDelete: "cascade" }),
+  parentId: text("parent_id"), // Self-reference handled in relations
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
+  isProtected: integer("is_protected", { mode: "boolean" }).default(false), // NEW: Default page flag
   indexing: integer("indexing", { mode: "boolean" }).notNull().default(true),
   meta: text("meta", { mode: "json" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
@@ -79,13 +87,14 @@ export const pageSections = sqliteTable("page_sections", {
   pageId: text("page_id")
     .notNull()
     .references(() => pages.id, { onDelete: "cascade" }),
-  sectionDefId: text("section_def_id")
+  sectionTemplateId: text("section_template_id") // RENAMED: sectionDefId → sectionTemplateId
     .notNull()
-    .references(() => sectionDefinitions.id, { onDelete: "restrict" }),
+    .references(() => sectionTemplates.id, { onDelete: "restrict" }),
   sortOrder: integer("sort_order").notNull(),
-  status: text("status", { enum: ["published", "unpublished"] })
+  status: text("status", { enum: ["published", "unpublished", "draft"] }) // UPDATED: Added draft
     .notNull()
     .default("published"),
+  hidden: integer("hidden", { mode: "boolean" }).default(false), // NEW: Visibility toggle
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -104,10 +113,11 @@ export const pageSectionContents = sqliteTable("page_section_contents", {
 });
 
 // ============================================================================
-// SECTION & COLLECTION DEFINITIONS
+// SECTION & COLLECTION TEMPLATES (RENAMED from Definitions)
 // ============================================================================
 
-export const sectionDefinitions = sqliteTable("section_definitions", {
+// RENAMED: sectionDefinitions → sectionTemplates
+export const sectionTemplates = sqliteTable("section_templates", {
   id: text("id").primaryKey(),
   key: text("key").notNull().unique(),
   name: text("name").notNull(),
@@ -115,15 +125,16 @@ export const sectionDefinitions = sqliteTable("section_definitions", {
   status: text("status", { enum: ["published", "unpublished"] })
     .notNull()
     .default("published"),
-  elementsStructure: text("elements_structure", { mode: "json" }).notNull(),
-  templateKey: text("template_key").notNull(),
+  fields: text("fields", { mode: "json" }).notNull(), // RENAMED: elementsStructure → fields
+  templateFile: text("template_file").notNull(), // RENAMED: templateKey → templateFile
   defaultVariant: text("default_variant").notNull().default("default"),
   cssBundle: text("css_bundle"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const collectionDefinitions = sqliteTable("collection_definitions", {
+// RENAMED: collectionDefinitions → collectionTemplates
+export const collectionTemplates = sqliteTable("collection_templates", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
@@ -131,7 +142,9 @@ export const collectionDefinitions = sqliteTable("collection_definitions", {
   status: text("status", { enum: ["published", "unpublished"] })
     .notNull()
     .default("published"),
-  elementsStructure: text("elements_structure", { mode: "json" }).notNull(),
+  fields: text("fields", { mode: "json" }).notNull(), // RENAMED: elementsStructure → fields
+  hasSlug: integer("has_slug", { mode: "boolean" }).default(true), // NEW: Entry slug support
+  orderDirection: text("order_direction", { enum: ["asc", "desc"] }).default("desc"), // NEW: Entry ordering
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -144,7 +157,7 @@ export const collectionEntries = sqliteTable("collection_entries", {
   id: text("id").primaryKey(),
   collectionId: text("collection_id")
     .notNull()
-    .references(() => collectionDefinitions.id, { onDelete: "cascade" }),
+    .references(() => collectionTemplates.id, { onDelete: "cascade" }), // UPDATED: Reference collectionTemplates
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   // Post metadata
@@ -296,32 +309,8 @@ export const imageVariants = sqliteTable("image_variants", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
-/**
- * DEPRECATED for single image fields - use inline JSON in page_section_contents instead.
- * Reserved for future use: image galleries/collections where multiple images need ordering.
- *
- * Current Pattern:
- * - Single images (hero, background) → Stored as {url, alt} in page_section_contents.content JSON
- * - Multiple images (future: galleries) → Can use this junction table with sortOrder
- */
-export const pageSectionImages = sqliteTable("page_section_images", {
-  id: text("id").primaryKey(),
-  pageSectionId: text("page_section_id")
-    .notNull()
-    .references(() => pageSections.id, { onDelete: "cascade" }),
-  imageId: text("image_id")
-    .notNull()
-    .references(() => images.id, { onDelete: "cascade" }),
-  fieldName: text("field_name").notNull(), // e.g., "gallery", "carousel"
-  sortOrder: integer("sort_order"), // For ordering multiple images in galleries
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }),
-});
-
-// imageProcessingQueue table removed - BullMQ handles job tracking in Redis
-
 // ============================================================================
-// NAVIGATIONS
+// NAVIGATIONS (Production-aligned with proper tables)
 // ============================================================================
 
 export const navigations = sqliteTable("navigations", {
@@ -332,7 +321,7 @@ export const navigations = sqliteTable("navigations", {
   environmentId: text("environment_id")
     .notNull()
     .references(() => environments.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
+  name: text("name").notNull(), // e.g., "header", "footer", "main"
   description: text("description"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
@@ -343,15 +332,28 @@ export const navigationItems = sqliteTable("navigation_items", {
   navigationId: text("navigation_id")
     .notNull()
     .references(() => navigations.id, { onDelete: "cascade" }),
-  parentId: text("parent_id"),
-  value: text("value").notNull(),
+  parentId: text("parent_id"), // For nested menus
+  label: text("label").notNull(), // RENAMED: value → label (display text)
   targetType: text("target_type", {
-    enum: ["page", "medium", "entry", "url", "placeholder"],
+    enum: ["page", "entry", "media", "url", "placeholder"], // UPDATED: medium → media
   }).notNull(),
-  targetUuid: text("target_uuid"),
-  url: text("url"),
+  targetId: text("target_id"), // UUID of page/entry/media (RENAMED: targetUuid → targetId)
+  url: text("url"), // For external URLs
   sortOrder: integer("sort_order").notNull(),
+  visible: integer("visible", { mode: "boolean" }).default(true), // NEW: Item visibility
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+// ============================================================================
+// SITE SETTINGS
+// ============================================================================
+
+export const siteSettings = sqliteTable("site_settings", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value", { mode: "json" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
 // ============================================================================
@@ -447,6 +449,12 @@ export const environmentsRelations = relations(environments, ({ one, many }) => 
   pages: many(pages),
   media: many(media),
   navigations: many(navigations),
+  locales: many(environmentLocales),
+}));
+
+export const environmentLocalesRelations = relations(environmentLocales, ({ one }) => ({
+  environment: one(environments, { fields: [environmentLocales.environmentId], references: [environments.id] }),
+  locale: one(locales, { fields: [environmentLocales.localeCode], references: [locales.code] }),
 }));
 
 export const pagesRelations = relations(pages, ({ one, many }) => ({
@@ -455,14 +463,16 @@ export const pagesRelations = relations(pages, ({ one, many }) => ({
     fields: [pages.environmentId],
     references: [environments.id],
   }),
+  parent: one(pages, { fields: [pages.parentId], references: [pages.id], relationName: "pageHierarchy" }), // NEW
+  children: many(pages, { relationName: "pageHierarchy" }), // NEW
   pageSections: many(pageSections),
 }));
 
 export const pageSectionsRelations = relations(pageSections, ({ one, many }) => ({
   page: one(pages, { fields: [pageSections.pageId], references: [pages.id] }),
-  sectionDefinition: one(sectionDefinitions, {
-    fields: [pageSections.sectionDefId],
-    references: [sectionDefinitions.id],
+  sectionTemplate: one(sectionTemplates, { // RENAMED: sectionDefinition → sectionTemplate
+    fields: [pageSections.sectionTemplateId],
+    references: [sectionTemplates.id],
   }),
   contents: many(pageSectionContents),
 }));
@@ -478,18 +488,20 @@ export const pageSectionContentsRelations = relations(pageSectionContents, ({ on
   }),
 }));
 
-export const sectionDefinitionsRelations = relations(sectionDefinitions, ({ many }) => ({
+// RENAMED: sectionDefinitionsRelations → sectionTemplatesRelations
+export const sectionTemplatesRelations = relations(sectionTemplates, ({ many }) => ({
   pageSections: many(pageSections),
 }));
 
-export const collectionDefinitionsRelations = relations(collectionDefinitions, ({ many }) => ({
+// RENAMED: collectionDefinitionsRelations → collectionTemplatesRelations
+export const collectionTemplatesRelations = relations(collectionTemplates, ({ many }) => ({
   entries: many(collectionEntries),
 }));
 
 export const collectionEntriesRelations = relations(collectionEntries, ({ one, many }) => ({
-  collection: one(collectionDefinitions, {
+  collection: one(collectionTemplates, { // UPDATED: Reference collectionTemplates
     fields: [collectionEntries.collectionId],
-    references: [collectionDefinitions.id],
+    references: [collectionTemplates.id],
   }),
   contents: many(entryContents),
 }));
@@ -521,7 +533,6 @@ export const imagesRelations = relations(images, ({ one, many }) => ({
     references: [imageMetadata.imageId],
   }),
   variants: many(imageVariants),
-  pageSectionImages: many(pageSectionImages),
 }));
 
 export const imageMetadataRelations = relations(imageMetadata, ({ one }) => ({
@@ -538,18 +549,15 @@ export const imageVariantsRelations = relations(imageVariants, ({ one }) => ({
   }),
 }));
 
-export const pageSectionImagesRelations = relations(pageSectionImages, ({ one }) => ({
-  pageSection: one(pageSections, {
-    fields: [pageSectionImages.pageSectionId],
-    references: [pageSections.id],
-  }),
-  image: one(images, {
-    fields: [pageSectionImages.imageId],
-    references: [images.id],
-  }),
+export const navigationsRelations = relations(navigations, ({ one, many }) => ({
+  site: one(sites, { fields: [navigations.siteId], references: [sites.id] }),
+  environment: one(environments, { fields: [navigations.environmentId], references: [environments.id] }),
+  items: many(navigationItems),
 }));
 
-// imageProcessingQueueRelations removed - table no longer exists
+export const navigationItemsRelations = relations(navigationItems, ({ one }) => ({
+  navigation: one(navigations, { fields: [navigationItems.navigationId], references: [navigations.id] }),
+}));
 
 // ============================================================================
 // ZOD SCHEMAS FOR VALIDATION
@@ -567,6 +575,9 @@ export const selectEnvironmentSchema = createSelectSchema(environments);
 export const insertLocaleSchema = createInsertSchema(locales);
 export const selectLocaleSchema = createSelectSchema(locales);
 
+export const insertEnvironmentLocaleSchema = createInsertSchema(environmentLocales);
+export const selectEnvironmentLocaleSchema = createSelectSchema(environmentLocales);
+
 export const insertPageSchema = createInsertSchema(pages);
 export const selectPageSchema = createSelectSchema(pages);
 
@@ -576,11 +587,13 @@ export const selectPageSectionSchema = createSelectSchema(pageSections);
 export const insertPageSectionContentSchema = createInsertSchema(pageSectionContents);
 export const selectPageSectionContentSchema = createSelectSchema(pageSectionContents);
 
-export const insertSectionDefinitionSchema = createInsertSchema(sectionDefinitions);
-export const selectSectionDefinitionSchema = createSelectSchema(sectionDefinitions);
+// RENAMED: sectionDefinition → sectionTemplate
+export const insertSectionTemplateSchema = createInsertSchema(sectionTemplates);
+export const selectSectionTemplateSchema = createSelectSchema(sectionTemplates);
 
-export const insertCollectionDefinitionSchema = createInsertSchema(collectionDefinitions);
-export const selectCollectionDefinitionSchema = createSelectSchema(collectionDefinitions);
+// RENAMED: collectionDefinition → collectionTemplate
+export const insertCollectionTemplateSchema = createInsertSchema(collectionTemplates);
+export const selectCollectionTemplateSchema = createSelectSchema(collectionTemplates);
 
 export const insertCollectionEntrySchema = createInsertSchema(collectionEntries);
 export const selectCollectionEntrySchema = createSelectSchema(collectionEntries);
@@ -612,10 +625,3 @@ export const selectImageMetadataSchema = createSelectSchema(imageMetadata);
 export const insertImageVariantSchema = createInsertSchema(imageVariants);
 export const selectImageVariantSchema = createSelectSchema(imageVariants);
 
-export const insertPageSectionImageSchema = createInsertSchema(pageSectionImages);
-export const selectPageSectionImageSchema = createSelectSchema(pageSectionImages);
-
-export const insertSiteSettingSchema = createInsertSchema(siteSettings);
-export const selectSiteSettingSchema = createSelectSchema(siteSettings);
-
-// imageProcessingQueue schemas removed - table no longer exists

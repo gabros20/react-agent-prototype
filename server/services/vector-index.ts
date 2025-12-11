@@ -2,7 +2,7 @@ import { connect, type Table } from "@lancedb/lancedb";
 
 export interface ResourceDocument {
   id: string;
-  type: "page" | "section_def" | "collection" | "entry" | "image";
+  type: "page" | "section_template" | "collection" | "entry" | "image";
   name: string;
   slug: string;
   searchableText: string;
