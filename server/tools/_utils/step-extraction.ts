@@ -5,18 +5,18 @@
  * Used by prepareStep to determine which tools were discovered during execution.
  */
 
+/** Tool search result structure - matches searchTools output */
 interface SearchToolsResult {
-	tools?: string[];  // searchTools returns string[] not { name: string }[]
+	tools?: string[];
 	message?: string;
 }
 
-interface ToolResult {
-	toolName: string;
-	result: unknown;
-}
-
+/** AI SDK 6 StepResult structure (simplified for our needs) */
 interface StepResult {
-	toolResults?: ToolResult[];
+	toolResults?: Array<{
+		toolName: string;
+		output: unknown;  // AI SDK 6 uses 'output' not 'result'
+	}>;
 }
 
 /**
@@ -27,11 +27,20 @@ export function extractToolsFromSteps(steps: StepResult[]): string[] {
 	const tools = new Set<string>();
 
 	for (const step of steps) {
-		const searchResults = step.toolResults?.filter((tr) => tr.toolName === "searchTools");
+		// Check tool results for searchTools calls
+		const searchResults = step.toolResults?.filter(
+			(tr) => tr.toolName === "searchTools"
+		);
+
 		searchResults?.forEach((sr) => {
-			const result = sr.result as SearchToolsResult;
-			// searchTools returns tools as string[] directly
-			result?.tools?.forEach((toolName) => tools.add(toolName));
+			// AI SDK 6 uses 'output' instead of 'result'
+			const output = sr.output as SearchToolsResult | undefined;
+			// searchTools returns string[] directly
+			output?.tools?.forEach((toolName) => {
+				if (toolName && typeof toolName === "string") {
+					tools.add(toolName);
+				}
+			});
 		});
 	}
 
@@ -56,3 +65,6 @@ export function extractUsedToolsFromSteps(steps: StepResult[]): string[] {
 
 	return Array.from(tools);
 }
+
+// Re-export for debugging
+export type { StepResult, SearchToolsResult };
