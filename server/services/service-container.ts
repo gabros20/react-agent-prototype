@@ -5,6 +5,7 @@ import { SectionService } from "./cms/section-service";
 import { SessionService } from "./session-service";
 import { ConversationLogService } from "./conversation-log-service";
 import { VectorIndexService } from "./vector-index";
+import { ToolSearchService } from "./tool-search";
 import { AgentOrchestrator } from "./agent";
 
 export class ServiceContainer {
@@ -12,6 +13,7 @@ export class ServiceContainer {
 
   readonly db: DrizzleDB; // Expose DB for agent context
   readonly vectorIndex: VectorIndexService;
+  readonly toolSearch: ToolSearchService;
   readonly pageService: PageService;
   readonly sectionService: SectionService;
   readonly entryService: EntryService;
@@ -26,6 +28,9 @@ export class ServiceContainer {
 
     // Initialize vector index first
     this.vectorIndex = new VectorIndexService(process.env.LANCEDB_DIR || "data/lancedb");
+
+    // Initialize tool search service
+    this.toolSearch = new ToolSearchService();
 
     // Initialize services with vector index
     this.pageService = new PageService(db, this.vectorIndex);
@@ -43,6 +48,7 @@ export class ServiceContainer {
     if (!ServiceContainer.instance) {
       ServiceContainer.instance = new ServiceContainer(db);
       await ServiceContainer.instance.vectorIndex.initialize();
+      await ServiceContainer.instance.toolSearch.initialize();
     }
     return ServiceContainer.instance;
   }

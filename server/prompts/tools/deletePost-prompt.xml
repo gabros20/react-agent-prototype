@@ -1,0 +1,4 @@
+<deletePost>
+- PERMANENT deletion - cannot be undone
+- Requires confirmed: true
+</deletePost>

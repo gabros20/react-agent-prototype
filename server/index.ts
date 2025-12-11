@@ -9,11 +9,11 @@ import { createAgentRoutes } from "./routes/agent";
 import { createSessionRoutes } from "./routes/sessions";
 import { createWorkerEventsRoutes } from "./routes/worker-events";
 import { createModelsRoutes } from "./routes/models";
+import { createToolRoutes } from "./routes/tools";
 import uploadRoutes from "./routes/upload";
 import imageRoutes from "./routes/images";
 import { ServiceContainer } from "./services/service-container";
 import { getSubscriber } from "./services/worker-events.service";
-import { validateToolIndex, initBM25Index, initToolVectorIndex } from "./tools/discovery";
 
 const app = express();
 const PORT = process.env.EXPRESS_PORT || 8787;
@@ -48,19 +48,9 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // Async startup
 async function startServer() {
   try {
-    // Validate tool index at startup (fail fast if misconfigured)
-    validateToolIndex();
 
-    // Initialize BM25 search index for tool discovery
-    initBM25Index();
-
-    // Initialize vector search index for semantic tool discovery (async - generates embeddings)
-    // Run in background so server can start immediately - BM25 search works while vectors load
-    initToolVectorIndex().catch((err) => {
-      console.warn("⚠️ Vector search init failed (BM25 fallback available):", err.message);
-    });
-
-    // Initialize services (includes vector index initialization)
+    // Initialize services (includes vector index and tool search initialization)
+    // Tool search (BM25 + vector) is now handled by ToolSearchService in ServiceContainer
     const services = await ServiceContainer.initialize(db);
     console.log("✓ Services initialized");
 
@@ -76,6 +66,7 @@ async function startServer() {
     app.use("/v1/agent", createAgentRoutes(services));
     app.use("/v1/sessions", createSessionRoutes(services));
     app.use("/v1/models", createModelsRoutes());
+    app.use("/v1/tools", createToolRoutes(services));
     app.use("/v1/worker-events", createWorkerEventsRoutes());
 
     // Serve uploaded images
@@ -107,6 +98,7 @@ async function startServer() {
       console.log(`   CMS API: http://localhost:${PORT}/v1/teams/dev-team/sites/local-site/environments/main`);
       console.log(`   Agent: http://localhost:${PORT}/v1/agent/stream`);
       console.log(`   Models: http://localhost:${PORT}/v1/models`);
+      console.log(`   Tools: http://localhost:${PORT}/v1/tools`);
       console.log(`   Worker Events: http://localhost:${PORT}/v1/worker-events/stream`);
       console.log(`   Images: http://localhost:${PORT}/api/images`);
       console.log(`   Upload: http://localhost:${PORT}/api/upload`);

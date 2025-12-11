@@ -18,6 +18,6 @@ export interface ToolUsageRecord {
 /** Serialized state for DB storage (Phase 7 - includes tool tracking) */
 export interface WorkingContextState {
   entities: Entity[];
-  discoveredTools?: string[];      // Tools returned by tool_search
+  discoveredTools?: string[];      // Tools returned by searchTools
   usedTools?: ToolUsageRecord[];   // Tools actually called
 }

@@ -1,0 +1,5 @@
+<importImage>
+- DEDUPLICATES: Returns existing image if already imported (by provider:photoId)
+- Processing is async - may return status: "processing" while variants generate
+- Attribution stored automatically in metadata.detailedDescription
+</importImage>

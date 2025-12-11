@@ -1,0 +1,5 @@
+<updatePost>
+- For covers, set BOTH featuredImage AND content.cover in same call
+- Content MERGES with existing - only send changed fields
+- Publishing requires confirmed: true
+</updatePost>

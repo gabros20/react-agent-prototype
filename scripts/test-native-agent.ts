@@ -2,7 +2,7 @@
  * Test Native AI SDK v6 Agent
  *
  * Tests the refactored agent with:
- * - cmsAgent from cms-agent.ts
+ * - cmsAgent from main-agent.ts
  * - Type-safe call options via callOptionsSchema
  * - Tool execution
  */
@@ -10,7 +10,7 @@
 import "dotenv/config";
 import { db } from "../server/db/client";
 import { ServiceContainer } from "../server/services/service-container";
-import { cmsAgent, type AgentCallOptions } from "../server/agent/cms-agent";
+import { cmsAgent, type AgentCallOptions } from "../server/agents/main-agent";
 
 async function testAgent() {
 	console.log("🧪 Testing Native AI SDK v6 Agent\n");

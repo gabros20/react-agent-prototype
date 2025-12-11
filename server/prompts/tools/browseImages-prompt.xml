@@ -1,0 +1,5 @@
+<browseImages>
+- Returns PREVIEW URLs only - use importImage to download for CMS use
+- Workflow: browseImages → pick photo → importImage → updateSection with imageId
+- Photos require attribution (handled automatically by importImage)
+</browseImages>

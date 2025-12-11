@@ -1,0 +1,5 @@
+<searchTools>
+- STOP after ONE search - discovered tools are now active, USE THEM
+- Never call searchTools twice in a row - if tools returned, call one of them next
+- Search by CAPABILITY keywords ("create post", "list pages") not content
+</searchTools>

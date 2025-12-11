@@ -1,0 +1,5 @@
+<createSection>
+- Call getSectionTemplate({ all: true }) FIRST to see available templateKeys
+- Creates empty section - use updateSection to add content after
+- Common templates: hero, feature, cta, image-text
+</createSection>

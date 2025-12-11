@@ -32,9 +32,9 @@ export interface ContextManagerConfig {
  *
  * Example turn:
  *   [user] "what pages?"
- *   [assistant] tool_call: cms_listPages (id: call_1)
+ *   [assistant] tool_call: listPages (id: call_1)
  *   [tool] result for call_1
- *   [assistant] tool_call: final_answer (id: call_2)
+ *   [assistant] tool_call: finalAnswer (id: call_2)
  *   [tool] result for call_2
  *
  * This is ONE turn with TWO exchanges.

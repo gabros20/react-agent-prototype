@@ -1,0 +1,5 @@
+<deletePage>
+- CASCADE deletes all sections - cannot be undone
+- Check getNavItem first - remove from menu after deletion
+- Requires confirmed: true
+</deletePage>

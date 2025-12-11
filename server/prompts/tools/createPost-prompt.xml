@@ -1,0 +1,5 @@
+<createPost>
+- Creates DRAFT only - use updatePost to publish
+- Set BOTH featuredImage AND content.cover for cover images
+- Check for duplicate titles with getPost first
+</createPost>

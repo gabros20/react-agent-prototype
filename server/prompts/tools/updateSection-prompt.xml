@@ -1,0 +1,5 @@
+<updateSection>
+- MERGES with existing - only send fields you want to change
+- imageField must match section schema (e.g., "backgroundImage", "image", "cover")
+- Call getSectionTemplate first to know field names
+</updateSection>

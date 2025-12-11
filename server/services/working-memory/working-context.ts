@@ -26,7 +26,7 @@ export class WorkingContext {
     for (const e of entities) this.add(e);
   }
 
-  /** Add discovered tools (from tool_search results) */
+  /** Add discovered tools (from searchTools results) */
   addDiscoveredTools(tools: string[]): void {
     for (const tool of tools) {
       this.discoveredTools.add(tool);

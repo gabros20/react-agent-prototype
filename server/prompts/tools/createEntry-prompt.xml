@@ -1,0 +1,4 @@
+<createEntry>
+- UPSERTS: If slug exists in collection, updates instead of creating
+- Entries always start as "draft" unless explicitly set to "published"
+</createEntry>

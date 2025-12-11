@@ -15,8 +15,8 @@
 
 import { randomUUID } from "crypto";
 import type { ModelMessage } from "ai";
-import { cmsAgent, AGENT_CONFIG, getLastInjectedInstructions, type AgentCallOptions } from "../../agent/cms-agent";
-import { getSystemPrompt } from "../../agent/system-prompt";
+import { cmsAgent, AGENT_CONFIG, getLastInjectedInstructions, type AgentCallOptions } from "../../agents/main-agent";
+import { getSystemPrompt } from "../../agents/system-prompt";
 import { EntityExtractor, WorkingContext } from "../working-memory";
 import { ContextManager } from "../context-manager";
 import { getSiteAndEnv } from "../../utils/get-context";
@@ -594,9 +594,9 @@ export class AgentOrchestrator {
 						result: chunk.output,
 					});
 
-					// Special handling for final_answer - extract content as final text
+					// Special handling for finalAnswer - extract content as final text
 					// Use content if available, otherwise fall back to summary
-					if (chunk.toolName === "final_answer" && chunk.output) {
+					if (chunk.toolName === "finalAnswer" && chunk.output) {
 						const finalAnswerResult = chunk.output as { content?: string; summary?: string };
 						const responseText = finalAnswerResult.content?.trim() ? finalAnswerResult.content : finalAnswerResult.summary || "";
 						if (responseText) {
@@ -627,9 +627,9 @@ export class AgentOrchestrator {
 						}
 					}
 
-					// Special handling for acknowledge tool - emit as streaming message
+					// Special handling for acknowledgeRequest tool - emit as streaming message
 					// This creates the "preflight response" that users see before tools execute
-					if (chunk.toolName === "acknowledge" && chunk.output) {
+					if (chunk.toolName === "acknowledgeRequest" && chunk.output) {
 						const ackResult = chunk.output as { message?: string };
 						if (ackResult.message) {
 							const ackMessageId = randomUUID();
@@ -656,8 +656,8 @@ export class AgentOrchestrator {
 						}
 					}
 
-					// Special handling for tool_search - emit tools-discovered event and persist
-					if (chunk.toolName === "tool_search" && chunk.output) {
+					// Special handling for searchTools - emit tools-discovered event and persist
+					if (chunk.toolName === "searchTools" && chunk.output) {
 						// New format: { tools: string[], message: string }
 						const searchResult = chunk.output as {
 							tools?: string[];
@@ -676,7 +676,7 @@ export class AgentOrchestrator {
 								timestamp: new Date().toISOString(),
 							});
 
-							logger.info("Tools discovered via tool_search", {
+							logger.info("Tools discovered via searchTools", {
 								toolCount: toolNames.length,
 								tools: toolNames,
 								totalDiscovered: workingContext.discoveredToolsCount(),
@@ -767,7 +767,7 @@ export class AgentOrchestrator {
 						type: "step-start",
 						stepNumber: currentStep,
 						discoveredTools: discoveredToolsList,
-						activeTools: ["tool_search", "final_answer", ...discoveredToolsList],
+						activeTools: ["searchTools", "finalAnswer", ...discoveredToolsList],
 						timestamp: new Date().toISOString(),
 					});
 
