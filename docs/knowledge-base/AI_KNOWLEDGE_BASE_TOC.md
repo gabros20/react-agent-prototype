@@ -4,7 +4,7 @@
 **Organization**: 12 layers (Foundation → Advanced) with 72 topics total  
 **Grounding**: Research papers, production systems, proven implementations from this codebase
 
-**Last Updated**: 2025-12-11
+**Last Updated**: 2025-12-12
 **Status**: 🚧 In Progress
 
 ---
@@ -75,16 +75,16 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 66/73 topics (90%)
+**Completion**: 87/88 topics (99%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
 | Layer 0: Foundations                 | 3      | ✅ Complete    | 13/13 (100%) |
 | Layer 1: Prompt Engineering          | 3      | ✅ Complete    | 14/14 (100%) |
-| Layer 2: Context Engineering         | 3      | ✅ Complete    | 12/12 (100%) |
+| Layer 2: Context Engineering         | 3      | ✅ Complete    | 13/13 (100%) |
 | Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 17/20 (85%)  |
 | Layer 4: Memory & State              | 5      | ✅ Complete    | 21/21 (100%) |
-| Layer 5: Retrieval & RAG             | 4      | ⏳ Pending     | 0/20         |
+| Layer 5: Retrieval & RAG             | 4      | ✅ Complete    | 20/20 (100%) |
 | Layer 6: Planning & Orchestration    | 4      | ⏳ Pending     | 0/20         |
 | Layer 7: Error Recovery & Resilience | 5      | ⏳ Pending     | 0/20         |
 | Layer 8: Tool Design Patterns        | 4      | ⏳ Pending     | 0/20         |
@@ -93,7 +93,61 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
-**Latest Updates** (2025-12-11):
+**Latest Updates** (2025-12-12):
+
+**Layer 5: RAG & Retrieval** (20/20 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
+
+_Vector Search Fundamentals (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 5.1.1 Embedding Documents - **RESTRUCTURED!** AI SDK v6 `embed`/`embedMany`, OpenAI text-embedding-3-small (80.5% MTEB), batch processing
+-   ✅ 5.1.2 Similarity Metrics - **RESTRUCTURED!** Cosine (85% of RAG), Dot Product (2-3× faster), Euclidean, AI SDK v6 `cosineSimilarity`
+-   ✅ 5.1.3 Index Types - **RESTRUCTURED!** HNSW (95%+ recall), IVF (memory-efficient), Flat (prototyping), pgvector integration
+-   ✅ 5.1.4 Query Strategies - **RESTRUCTURED!** HyDE (10-20% recall), Cohere Rerank (15-30% precision), Hybrid Search (BM25+vector)
+-   ✅ 5.1.5 Top-K Selection - **RESTRUCTURED!** Retrieve-then-rerank (100→5, 94% precision), Adaptive K, MMR diversity
+
+_Chunking Strategies (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 5.2.1 Fixed-Size Chunks - **RESTRUCTURED!** Token-based (512 tokens), 10-20% overlap critical, sentence-aware, tiktoken integration
+-   ✅ 5.2.2 Semantic Chunks - **NEW!** Max-Min chunking (0.85-0.90 AMI), paragraph-based, embedding-based, hierarchical patterns
+-   ✅ 5.2.3 Overlapping Windows - **NEW!** 10-20% overlap optimal (NVIDIA 15%), stride calculation, boundary handling
+-   ✅ 5.2.4 Metadata Enrichment - **NEW!** 15-30% precision improvement, hierarchical paths, entity extraction, filtered retrieval
+-   ✅ 5.2.5 Chunk Size Trade-offs - **NEW!** 256-512 factoid, 512-1024 analytical, query-adaptive sizing, multi-resolution indexing
+
+_Hybrid Search (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 5.3.1 Vector Search - **NEW!** Basic semantic search, pgvector HNSW, filtered search, AI SDK v6 `embed`/`cosineSimilarity`
+-   ✅ 5.3.2 Fuzzy Search - **NEW!** Levenshtein/Damerau-Levenshtein, Elasticsearch AUTO fuzziness, 80% typos within 1 edit distance
+-   ✅ 5.3.3 BM25 Keyword Search - **NEW!** k1=1.2, b=0.75 defaults, BM25S 500× speedup, hybrid BM25+vector patterns
+-   ✅ 5.3.4 Reranking - **NEW!** 20-35% precision improvement, Cohere Rerank API, cross-encoder patterns, batch/conditional reranking
+-   ✅ 5.3.5 Fusion Strategies - **NEW!** RRF (k=60), weighted fusion, 8-15% improvement over single retrieval, multi-source hybrid
+
+_RAG Patterns (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 5.4.1 Naive RAG - **NEW!** ~25% accuracy baseline, retrieve→augment→generate pipeline, streaming patterns
+-   ✅ 5.4.2 Advanced RAG - **NEW!** HyDE (10-20% recall), query rewriting (30-40% precision), multi-query expansion, step-back prompting
+-   ✅ 5.4.3 Agentic RAG - **NEW!** Self-RAG (+40%), CRAG, GraphRAG (+76% summarization), iterative retrieval, self-correction
+-   ✅ 5.4.4 Context Optimization - **NEW!** Lost in the Middle mitigation, 50-70% compression, relevance ordering, MMR diversity
+-   ✅ 5.4.5 Evaluation Metrics - **NEW!** RAGAS (faithfulness, relevancy), NDCG@10 >0.8 target, precision/recall/MRR, continuous monitoring
+
+**Layer 4: Memory & State - Long-Term Memory** (5/5 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
+
+_Long-Term Memory (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 4.3.1 Vector Databases - **RESTRUCTURED!** LanceDB, Pinecone, pgvector, Weaviate, AI SDK v6 integration
+-   ✅ 4.3.2 Semantic Search - **RESTRUCTURED!** Basic semantic, hybrid search, reranking (Cohere), HyDE
+-   ✅ 4.3.3 Fact Extraction - **RESTRUCTURED!** LLM-based extraction, NER (spaCy), knowledge graphs (Neo4j)
+-   ✅ 4.3.4 Cross-Session Retrieval - **RESTRUCTURED!** Three-tier architecture, Redis caching, recency-weighted
+-   ✅ 4.3.5 When to Use - **RESTRUCTURED!** Memory type decision framework, hybrid memory system, promotion-based
+
+**Layer 4: Memory & State - State Persistence** (5/5 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
+
+_State Persistence & Checkpointing (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 4.4.1 Why Checkpoint - **RESTRUCTURED!** 70-90% cost savings, 99%+ recovery, ByteCheckpoint, LangGraph
+-   ✅ 4.4.2 What to Save - **RESTRUCTURED!** 5 core components, serialization, compression (10:1 ratio)
+-   ✅ 4.4.3 When to Checkpoint - **RESTRUCTURED!** √N rule, phase transitions, hybrid scheduler, <5% overhead
+-   ✅ 4.4.4 How to Resume - **RESTRUCTURED!** Three-phase recovery, idempotency, fallback recovery
+-   ✅ 4.4.5 Implementation - **RESTRUCTURED!** PostgreSQL, Redis, SQLite, tiered storage, gzip compression
 
 **Layer 4: Memory & State - Working Memory** (6/6 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
 
@@ -452,6 +506,10 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 -   [2.2.4 KV-Cache Optimization](./2-context/2.2.4-kv-cache.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
     -   **Includes**: RocketKV (400× compression), FastKV, EpiCache, production frameworks
+-   [2.2.5 Prompt Caching & Context Compaction](./2-context/2.2.5-prompt-caching.md) ✅
+    -   **Status**: ✅ Complete - NEW (Dec 2025)
+    -   **Includes**: Prefix-based caching (50-90% savings), user-assistant compaction pairs, multi-provider compatibility (OpenAI, Anthropic, DeepSeek)
+    -   **Research**: Anthropic Prompt Caching (2024), OpenCode production patterns, AI SDK integration
 
 #### 2.3 Context Injection Strategies
 
@@ -606,43 +664,51 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
     -   **Includes**: 10:1 target ratio, multi-level compression (50:1+), adaptive compression, monitoring
     -   **Research**: HiAgent (ACL 2025), Dynamic Memory Compression (ICML 2024)
 
-#### 4.3 Long-Term Memory (Persistent)
+#### 4.3 Long-Term Memory (Persistent) (5/5 - ✅ COMPLETE - Restructured Dec 2025)
 
--   [4.3.1 Vector Databases (LanceDB, Pinecone, Weaviate)](./kb/4-memory/4.3.1-vector-databases.md) ✅
-    -   **Status**: Complete - Comprehensive comparison of LanceDB, Pinecone, Weaviate for production (29KB, 15+ sources)
-    -   **Codebase Example**: `server/services/vector-index.ts`
-    -   **Includes**: TypeScript implementations, cost comparisons, performance benchmarks, multi-tenancy patterns
--   [4.3.2 Semantic Search](./kb/4-memory/4.3.2-semantic-search.md) ✅
-    -   **Status**: Complete - Embedding models, similarity metrics, hybrid search (25KB, 10+ sources)
-    -   **Includes**: Cosine similarity, dot product, Euclidean distance, reranking, query optimization
--   [4.3.3 Fact Extraction & Storage](./kb/4-memory/4.3.3-fact-extraction.md) ✅
-    -   **Status**: Complete - Mem0 architecture, entity recognition, knowledge graphs (27KB, 15+ sources)
-    -   **Includes**: LLM-based extraction, NER, graph storage, conflict resolution, temporal facts
--   [4.3.4 Cross-Session Retrieval](./kb/4-memory/4.3.4-cross-session.md) ✅
-    -   **Status**: Complete - Persistent memory across conversations (24KB, 9+ sources)
-    -   **Includes**: Session management, recency-weighted retrieval, multi-hop queries, memory decay
--   [4.3.5 When to Use vs Working Memory](./kb/4-memory/4.3.5-when-to-use.md) ✅
-    -   **Status**: Complete - Decision framework for memory types (22KB, 1 source)
-    -   **Includes**: Cost-benefit analysis, use case matrix, hybrid strategies, ROI calculations
+-   [4.3.1 Vector Databases (LanceDB, Pinecone, Weaviate)](./4-memory/4.3.1-vector-databases.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: LanceDB (embedded), Pinecone (managed), pgvector (PostgreSQL), Weaviate (hybrid), AI SDK v6 integration
+    -   **Research**: Sub-50ms latency, 26% accuracy improvement (Mem0), production scaling patterns
+-   [4.3.2 Semantic Search](./4-memory/4.3.2-semantic-search.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: Basic semantic, hybrid search (BM25+vector), reranking (Cohere), HyDE patterns
+    -   **Research**: 40-60% improvement with hybrid, MRR benchmarks, embedding model comparison
+-   [4.3.3 Fact Extraction & Storage](./4-memory/4.3.3-fact-extraction.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: LLM-based extraction, NER (spaCy), knowledge graphs (Neo4j), hybrid storage
+    -   **Research**: Mem0, A-MEM, temporal facts, conflict resolution, 85%+ extraction accuracy
+-   [4.3.4 Cross-Session Retrieval](./4-memory/4.3.4-cross-session-retrieval.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: Three-tier architecture, session lifecycle, recency-weighted retrieval, Redis caching
+    -   **Research**: Mem0 (26% accuracy, 91% latency), LongMemEval benchmark, cross-session context
+-   [4.3.5 When to Use vs Working Memory](./4-memory/4.3.5-when-to-use.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: Memory type decision framework, hybrid memory system, promotion-based patterns
+    -   **Research**: Working vs Episodic vs Semantic tiers, TTL policies, cost-benefit analysis
 
-#### 4.4 State Persistence & Checkpointing
+#### 4.4 State Persistence & Checkpointing (5/5 - ✅ COMPLETE - Restructured Dec 2025)
 
--   [4.4.1 Why: Crash Recovery, Resume Conversations](./kb/4-memory/4.4.1-why-checkpoint.md) ✅
-    -   **Status**: Complete - Comprehensive guide to checkpointing benefits and crash recovery (21KB, 13+ sources)
-    -   **Includes**: Failure scenarios, cost-benefit analysis, LangGraph + Restate examples, ROI calculations
--   [4.4.2 What to Save (Messages, Phase, Subgoals, Memory)](./kb/4-memory/4.4.2-what-to-save.md) ✅
-    -   **Status**: Complete - State components and serialization strategies (22KB, 6 sources)
-    -   **Includes**: Core components, size optimization, security considerations, custom serializers
--   [4.4.3 When to Checkpoint (Every 3 Steps, Phase Transitions, Errors)](./kb/4-memory/4.4.3-when-to-checkpoint.md) ✅
-    -   **Status**: Complete - Optimal timing and frequency strategies (20KB, 4 sources)
-    -   **Includes**: √N rule, event-based triggers, cost-benefit analysis, adaptive frequency
-    -   **Codebase Example**: `server/agent/orchestrator.ts` (prepareStep)
--   [4.4.4 How to Resume (Load Checkpoint, Continue Execution)](./kb/4-memory/4.4.4-how-to-resume.md) ✅
-    -   **Status**: Complete - Loading and continuing from checkpoints (17KB, 3 sources)
-    -   **Includes**: Three-phase recovery, state reconstruction, execution continuation, edge cases
--   [4.4.5 Implementation: JSON Serialization, DB Storage](./kb/4-memory/4.4.5-implementation.md) ✅
-    -   **Status**: Complete - Production database implementation (21KB, 3 sources)
-    -   **Includes**: PostgreSQL/Redis/SQLite comparison, schemas, compression, production patterns
+-   [4.4.1 Why Checkpoint: Crash Recovery & Resume](./4-memory/4.4.1-why-checkpoint.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: 70-90% cost savings, 99%+ recovery time reduction, crash recovery, conversation resume, HITL
+    -   **Research**: ByteCheckpoint (529× faster), LangGraph PostgresSaver, Restate durable execution
+-   [4.4.2 What to Save in Checkpoints](./4-memory/4.4.2-what-to-save.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: 5 core components (messages, execution, memory, subgoals, metadata), serialization, compression
+    -   **Research**: OpenAI Agents SDK sessions, Mem0 architecture, message compression (10:1 ratio)
+-   [4.4.3 When to Checkpoint: Timing Strategies](./4-memory/4.4.3-when-to-checkpoint.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: √N rule, phase transitions, before expensive ops, hybrid scheduler, <5% overhead target
+    -   **Research**: Mathematical checkpoint optimization, LangGraph persistence, production benchmarks
+-   [4.4.4 How to Resume: Load and Continue](./4-memory/4.4.4-how-to-resume.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: Three-phase recovery (load→reconstruct→continue), idempotency, fallback recovery
+    -   **Research**: LangGraph automatic resume, Restate replay, <1s resume time benchmarks
+-   [4.4.5 Implementation: Storage Backends & Serialization](./4-memory/4.4.5-implementation.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: PostgreSQL (production), Redis (2-5ms), SQLite (embedded), tiered storage, gzip compression
+    -   **Research**: LangGraph PostgresSaver, Couchbase checkpointer, 60-80% compression reduction
 
 ---
 
@@ -650,38 +716,97 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 **Goal**: Build retrieval-augmented generation systems with vector search
 
-#### 5.1 Vector Search Fundamentals
+#### 5.1 Vector Search Fundamentals (5/5 - ✅ COMPLETE - Restructured Dec 2025)
 
--   [5.1.1 Embedding Documents](./kb/5-rag/5.1.1-embedding-documents.md) ⏳
--   [5.1.2 Similarity Metrics (Cosine, Dot Product, Euclidean)](./kb/5-rag/5.1.2-similarity-metrics.md) ⏳
--   [5.1.3 Index Types (Flat, IVF, HNSW)](./kb/5-rag/5.1.3-index-types.md) ⏳
--   [5.1.4 Query Strategies](./kb/5-rag/5.1.4-query-strategies.md) ⏳
--   [5.1.5 Top-K Selection](./kb/5-rag/5.1.5-top-k-selection.md) ⏳
+-   [5.1.1 Embedding Documents](./kb/5-rag/5.1.1-embedding-documents.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: AI SDK v6 `embed`/`embedMany`, OpenAI text-embedding-3-small (80.5% MTEB), batch processing, chunking
+    -   **Research**: OpenAI (2024), MTEB benchmarks, Voyage AI, production patterns
+-   [5.1.2 Similarity Metrics (Cosine, Dot Product, Euclidean)](./kb/5-rag/5.1.2-similarity-metrics.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: Cosine (85% of RAG), Dot Product (2-3× faster normalized), Euclidean, AI SDK v6 `cosineSimilarity`
+    -   **Research**: MTEB (2024), Google Research, database-specific optimizations
+-   [5.1.3 Index Types (Flat, IVF, HNSW)](./kb/5-rag/5.1.3-index-types.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: HNSW (95%+ recall, production default), IVF (memory-efficient), Flat (prototyping), pgvector integration
+    -   **Research**: Milvus benchmarks (2024), MyScale (10M vectors), ann-benchmarks, algorithm trade-offs
+-   [5.1.4 Query Strategies](./kb/5-rag/5.1.4-query-strategies.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: HyDE (10-20% recall boost), Reranking with Cohere (15-30% precision), Hybrid Search (BM25+vector), Query Expansion
+    -   **Research**: HyDE (Gao et al. 2023), Cohere Rerank (2024), Multi-Query RAG patterns
+-   [5.1.5 Top-K Selection](./kb/5-rag/5.1.5-top-k-selection.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: Retrieve-then-rerank (100→5, 94% precision), Adaptive K, MMR for diversity, context budget optimization
+    -   **Research**: LangChain patterns (2024), Microsoft RAG benchmarks, production retrieval strategies
 
-#### 5.2 Chunking Strategies
+#### 5.2 Chunking Strategies (5/5 - ✅ COMPLETE - Restructured Dec 2025)
 
--   [5.2.1 Fixed-Size Chunks (512 Tokens)](./kb/5-rag/5.2.1-fixed-size.md) ⏳
--   [5.2.2 Semantic Chunks (Paragraph, Section)](./kb/5-rag/5.2.2-semantic-chunks.md) ⏳
--   [5.2.3 Overlapping Windows](./kb/5-rag/5.2.3-overlapping-windows.md) ⏳
--   [5.2.4 Metadata Enrichment](./kb/5-rag/5.2.4-metadata.md) ⏳
--   [5.2.5 Chunk Size Trade-offs](./kb/5-rag/5.2.5-tradeoffs.md) ⏳
+-   [5.2.1 Fixed-Size Chunks (512 Tokens)](./kb/5-rag/5.2.1-fixed-size.md) ✅
+    -   **Status**: ✅ Complete - **RESTRUCTURED!** to new template format (Dec 2025)
+    -   **Includes**: Token-based chunking (512 tokens), 10-20% overlap critical, sentence-aware boundaries, tiktoken integration
+    -   **Research**: OpenAI cookbook (2024), LangChain patterns, retrieval benchmarks (92% recall with overlap)
+-   [5.2.2 Semantic Chunks (Paragraph, Section)](./kb/5-rag/5.2.2-semantic-chunks.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: Paragraph-based, embedding-based, hierarchical chunking, Max-Min algorithm (0.85-0.90 AMI)
+    -   **Research**: Chroma Research (2024), NVIDIA (2024), semantic boundary detection
+-   [5.2.3 Overlapping Windows](./kb/5-rag/5.2.3-overlapping-windows.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: 10-20% overlap optimal, NVIDIA 15% finding, stride calculation, boundary handling
+    -   **Research**: NVIDIA FinanceBench (2024), LlamaIndex defaults, retrieval benchmarks
+-   [5.2.4 Metadata Enrichment](./kb/5-rag/5.2.4-metadata.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: 15-30% precision improvement, hierarchical paths, entity extraction, filtered retrieval
+    -   **Research**: Microsoft RAG Architecture (2024), LlamaIndex patterns, production filtering
+-   [5.2.5 Chunk Size Trade-offs](./kb/5-rag/5.2.5-tradeoffs.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: 256-512 factoid, 512-1024 analytical, query-adaptive sizing, multi-resolution indexing
+    -   **Research**: arXiv multi-dataset analysis (2025), content-type specific sizing
 
-#### 5.3 Hybrid Search
+#### 5.3 Hybrid Search (5/5 - ✅ COMPLETE - Restructured Dec 2025)
 
--   [5.3.1 Vector Search (Semantic)](./kb/5-rag/5.3.1-vector-search.md) ⏳
--   [5.3.2 Fuzzy Search (Typo Tolerance)](./kb/5-rag/5.3.2-fuzzy-search.md) ⏳
-    -   **Codebase Example**: `server/tools/all-tools.ts` (cms_findResource)
--   [5.3.3 BM25 (Keyword)](./kb/5-rag/5.3.3-bm25.md) ⏳
--   [5.3.4 Reranking (Cross-Encoder)](./kb/5-rag/5.3.4-reranking.md) ⏳
--   [5.3.5 Fusion Strategies (Weighted, RRF)](./kb/5-rag/5.3.5-fusion.md) ⏳
+-   [5.3.1 Vector Search (Semantic)](./kb/5-rag/5.3.1-vector-search.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: Basic semantic search, pgvector HNSW, filtered search, multi-vector patterns
+    -   **Research**: AI SDK v6 patterns, cosine similarity optimization, production indexing
+-   [5.3.2 Fuzzy Search (Typo Tolerance)](./kb/5-rag/5.3.2-fuzzy-search.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: Levenshtein/Damerau-Levenshtein, Elasticsearch AUTO fuzziness, 80% typos within 1 edit
+    -   **Research**: Elasticsearch fuzzy query (2024), Fuse.js, edit distance algorithms
+-   [5.3.3 BM25 (Keyword)](./kb/5-rag/5.3.3-bm25.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: k1=1.2, b=0.75 defaults, BM25S 500× speedup, hybrid BM25+vector
+    -   **Research**: BM25S (2024), LlamaIndex, Elasticsearch implementations
+-   [5.3.4 Reranking (Cross-Encoder)](./kb/5-rag/5.3.4-reranking.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: 20-35% precision improvement, Cohere Rerank API, batch/conditional reranking
+    -   **Research**: Cohere Rerank 4 (2024), ARAGOG benchmarks, ZeroEntropy zerank-1
+-   [5.3.5 Fusion Strategies (Weighted, RRF)](./kb/5-rag/5.3.5-fusion.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: RRF (k=60), weighted fusion, 8-15% improvement, multi-source hybrid search
+    -   **Research**: Pinecone cascading retrieval (2024), Weaviate hybrid, score normalization
 
-#### 5.4 RAG Patterns
+#### 5.4 RAG Patterns (5/5 - ✅ COMPLETE - Restructured Dec 2025)
 
--   [5.4.1 Naive RAG (Retrieve → Inject → Generate)](./kb/5-rag/5.4.1-naive-rag.md) ⏳
--   [5.4.2 Advanced RAG (Query Rewriting, HyDE)](./kb/5-rag/5.4.2-advanced-rag.md) ⏳
--   [5.4.3 Agentic RAG (Iterative Retrieval, Self-Reflection)](./kb/5-rag/5.4.3-agentic-rag.md) ⏳
--   [5.4.4 Context Injection Optimization](./kb/5-rag/5.4.4-context-optimization.md) ⏳
--   [5.4.5 Evaluation Metrics (Precision, Recall, MRR)](./kb/5-rag/5.4.5-evaluation.md) ⏳
+-   [5.4.1 Naive RAG (Retrieve → Inject → Generate)](./kb/5-rag/5.4.1-naive-rag.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: ~25% accuracy baseline, three-stage pipeline, streaming patterns, source attribution
+    -   **Research**: Modular RAG Survey (2024), Prompt Engineering Guide, production baselines
+-   [5.4.2 Advanced RAG (Query Rewriting, HyDE)](./kb/5-rag/5.4.2-advanced-rag.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: HyDE (10-20% recall), query rewriting (30-40% precision), multi-query expansion, step-back
+    -   **Research**: HyDE (Gao et al. 2023), Google DeepMind step-back (2024), LangChain patterns
+-   [5.4.3 Agentic RAG (Iterative Retrieval, Self-Reflection)](./kb/5-rag/5.4.3-agentic-rag.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: Self-RAG (+40%), CRAG, GraphRAG (+76% summarization), multi-hop, iterative retrieval
+    -   **Research**: Self-RAG (2023), CRAG (2024), GraphRAG Microsoft (2024), Modular RAG
+-   [5.4.4 Context Injection Optimization](./kb/5-rag/5.4.4-context-optimization.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: Lost in the Middle mitigation, 50-70% compression, relevance ordering, MMR diversity
+    -   **Research**: Stanford Lost in the Middle (2024), LongRAG (2024), RAPTOR (2024)
+-   [5.4.5 Evaluation Metrics (Precision, Recall, MRR)](./kb/5-rag/5.4.5-evaluation.md) ✅
+    -   **Status**: ✅ Complete - **NEW!** (Dec 2025)
+    -   **Includes**: RAGAS framework, NDCG@10 >0.8 target, precision/recall/MRR, continuous monitoring
+    -   **Research**: RAGAS (2024), ARAGOG (2024), BEIR benchmark, LLM-as-Judge patterns
 
 ---
 

@@ -27,10 +27,39 @@ export interface Session {
   messages: Message[];
 }
 
+/**
+ * Message part types (from MessageStore/RichMessage pattern)
+ */
+export interface MessagePart {
+  id: string;
+  type: "text" | "tool-call" | "tool-result" | "compaction-marker";
+  // Text part
+  text?: string;
+  // Tool call part
+  toolCallId?: string;
+  toolName?: string;
+  args?: unknown;
+  // Tool result part
+  output?: unknown;
+  isError?: boolean;
+  compactedAt?: number | null;
+}
+
+/**
+ * Rich message structure (aligned with backend MessageStore)
+ *
+ * Messages from MessageStore have `parts` array.
+ * Messages reconstructed from trace logs may only have `content`.
+ */
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
-  content: unknown;
+  /** Parts array from MessageStore (present for DB messages) */
+  parts?: MessagePart[];
+  /** Content field - derived from parts or raw content for trace-reconstructed messages */
+  content?: unknown;
+  /** Total tokens for this message */
+  tokens?: number;
   createdAt: Date;
 }
 
@@ -73,6 +102,18 @@ interface RawSessionMetadata {
   updatedAt: string;
 }
 
+interface RawMessagePart {
+  id: string;
+  type: "text" | "tool-call" | "tool-result" | "compaction-marker";
+  text?: string;
+  toolCallId?: string;
+  toolName?: string;
+  args?: unknown;
+  output?: unknown;
+  isError?: boolean;
+  compactedAt?: number | null;
+}
+
 interface RawSession {
   id: string;
   title: string;
@@ -81,9 +122,11 @@ interface RawSession {
   updatedAt: string;
   messages: Array<{
     id: string;
+    sessionId: string;
     role: "user" | "assistant" | "system" | "tool";
-    content: unknown;
-    createdAt: string;
+    parts: RawMessagePart[];
+    tokens?: number;
+    createdAt: number; // Unix timestamp from backend
   }>;
 }
 
@@ -107,6 +150,18 @@ export async function list(): Promise<SessionMetadata[]> {
 }
 
 /**
+ * Helper: Derive display content from message parts
+ */
+function deriveContentFromParts(parts: RawMessagePart[]): unknown {
+  // For single text part, return the text directly
+  if (parts.length === 1 && parts[0].type === "text") {
+    return parts[0].text || "";
+  }
+  // For multiple parts, return the parts array (UI can handle this)
+  return parts;
+}
+
+/**
  * Get single session with messages
  */
 export async function get(sessionId: string): Promise<Session> {
@@ -118,7 +173,11 @@ export async function get(sessionId: string): Promise<Session> {
     createdAt: new Date(session.createdAt),
     updatedAt: new Date(session.updatedAt),
     messages: session.messages.map((msg) => ({
-      ...msg,
+      id: msg.id,
+      role: msg.role,
+      parts: msg.parts,
+      content: deriveContentFromParts(msg.parts),
+      tokens: msg.tokens,
       createdAt: new Date(msg.createdAt),
     })),
   };
@@ -201,6 +260,66 @@ export async function deleteLogs(sessionId: string): Promise<{ success: boolean 
   return api.delete<{ success: boolean }>(`/api/sessions/${sessionId}/logs`);
 }
 
+// ============================================================================
+// Context & Compaction
+// ============================================================================
+
+/**
+ * Context statistics response type
+ */
+export interface ContextStats {
+  modelId: string;
+  currentTokens: number;
+  availableTokens: number;
+  contextLimit: number;
+  outputReserve: number;
+  usagePercent: number;
+  messageCount: number;
+  compactedResults: number;
+  isApproachingLimit: boolean;
+  isOverLimit: boolean;
+}
+
+/**
+ * Compaction result response type
+ */
+export interface CompactionResult {
+  compacted: boolean;
+  reason?: string;
+  wasPruned?: boolean;
+  wasCompacted?: boolean;
+  tokensBefore: number;
+  tokensAfter: number;
+  tokensSaved?: number;
+  compressionRatio?: number;
+  prunedOutputs?: number;
+  compactedMessages?: number;
+  removedTools?: string[];
+  messageCountBefore?: number;
+  messageCountAfter?: number;
+}
+
+/**
+ * Get context usage statistics for a session
+ */
+export async function getContextStats(
+  sessionId: string,
+  modelId?: string
+): Promise<ContextStats> {
+  const query = modelId ? `?modelId=${encodeURIComponent(modelId)}` : "";
+  return api.get<ContextStats>(`/api/sessions/${sessionId}/context-stats${query}`);
+}
+
+/**
+ * Manually trigger context compaction
+ */
+export async function compactContext(
+  sessionId: string,
+  options?: { modelId?: string; force?: boolean }
+): Promise<CompactionResult> {
+  return api.post<CompactionResult>(`/api/sessions/${sessionId}/compact`, options || {});
+}
+
 /**
  * Working memory entity type
  */
@@ -255,4 +374,6 @@ export const sessionsApi = {
   saveLog,
   deleteLogs,
   getWorkingMemory,
+  getContextStats,
+  compactContext,
 };

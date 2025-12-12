@@ -36,6 +36,7 @@ import {
 	Search,
 	PlusCircle,
 	BookOpen,
+	Shrink,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -83,6 +84,10 @@ const ENTRY_TYPE_ICONS: Record<TraceEntryType, LucideIcon> = {
 	// Context management
 	"llm-context": MessageSquare,
 	"context-cleanup": Scissors,
+	// Compaction
+	"compaction-start": Shrink,
+	"compaction-progress": Loader2,
+	"compaction-complete": Shrink,
 };
 
 interface TimelineEntryProps {

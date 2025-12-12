@@ -56,14 +56,14 @@ export default function AssistantPage() {
           try {
             const session = await sessionsApi.get(firstSession.id);
             const chatMessages = session.messages
-              .filter((msg: { role: string }) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
-              .map((msg: { id: string; role: string; content: unknown; displayContent?: string | null; createdAt: Date }) => ({
+              .filter((msg) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+              .map((msg) => ({
                 id: msg.id,
                 role: msg.role as 'user' | 'assistant' | 'system',
                 content: extractMessageContent(msg),
                 createdAt: msg.createdAt,
               }))
-              .filter((msg: { content: string }) => msg.content.trim() !== '');
+              .filter((msg) => msg.content.trim() !== '');
             useChatStore.getState().setMessages(chatMessages);
           } catch (error) {
             console.error('Failed to load initial session messages:', error);
@@ -80,16 +80,15 @@ export default function AssistantPage() {
           try {
             const session = await sessionsApi.get(currentSessionId);
             // Convert messages to ChatMessage format, filtering out tool-only messages
-            // Pass full message object to extractMessageContent so it can use displayContent
             const chatMessages = session.messages
-              .filter((msg: { role: string }) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
-              .map((msg: { id: string; role: string; content: unknown; displayContent?: string | null; createdAt: Date }) => ({
+              .filter((msg) => msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system')
+              .map((msg) => ({
                 id: msg.id,
                 role: msg.role as 'user' | 'assistant' | 'system',
-                content: extractMessageContent(msg), // Pass full message object
+                content: extractMessageContent(msg),
                 createdAt: msg.createdAt,
               }))
-              .filter((msg: { content: string }) => msg.content.trim() !== '');
+              .filter((msg) => msg.content.trim() !== '');
             useChatStore.getState().setMessages(chatMessages);
           } catch (error) {
             console.error('Failed to reload session messages:', error);

@@ -213,6 +213,43 @@ export interface ToolInjectionEvent extends BaseStreamEvent {
 }
 
 // ============================================================================
+// Compaction Events
+// ============================================================================
+
+export interface CompactionStartEvent extends BaseStreamEvent {
+  type: 'compaction-start';
+  traceId: string;
+  sessionId: string;
+  tokensBefore: number;
+  modelLimit: number;
+}
+
+export interface CompactionProgressEvent extends BaseStreamEvent {
+  type: 'compaction-progress';
+  traceId: string;
+  sessionId: string;
+  stage: 'pruning' | 'summarizing';
+  /** Progress percentage 0-100 */
+  progress: number;
+}
+
+export interface CompactionCompleteEvent extends BaseStreamEvent {
+  type: 'compaction-complete';
+  traceId: string;
+  sessionId: string;
+  tokensBefore: number;
+  tokensAfter: number;
+  tokensSaved: number;
+  /** Compression ratio as percentage (e.g., 75 means 75% smaller) */
+  compressionRatio: number;
+  wasPruned: boolean;
+  wasCompacted: boolean;
+  prunedOutputs: number;
+  compactedMessages: number;
+  removedTools: string[];
+}
+
+// ============================================================================
 // Union Type
 // ============================================================================
 
@@ -235,7 +272,10 @@ export type StreamEvent =
   | ResultEvent
   | DoneEvent
   | ErrorEvent
-  | ToolInjectionEvent;
+  | ToolInjectionEvent
+  | CompactionStartEvent
+  | CompactionProgressEvent
+  | CompactionCompleteEvent;
 
 // ============================================================================
 // Type Guards

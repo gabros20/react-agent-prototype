@@ -261,6 +261,40 @@ export interface TraceLogger {
 	): void;
 
 	// =========================================================================
+	// Compaction Events
+	// =========================================================================
+
+	/**
+	 * Log compaction start
+	 * @param tokensBefore Token count before compaction
+	 * @param modelLimit Model's context limit
+	 */
+	compactionStart(tokensBefore: number, modelLimit: number): void;
+
+	/**
+	 * Log compaction progress
+	 * @param stage Current compaction stage
+	 * @param progress Progress percentage (0-100)
+	 */
+	compactionProgress(stage: 'pruning' | 'summarizing', progress: number): void;
+
+	/**
+	 * Log compaction complete
+	 * @param result Compaction results
+	 */
+	compactionComplete(result: {
+		tokensBefore: number;
+		tokensAfter: number;
+		tokensSaved: number;
+		compressionRatio: number;
+		wasPruned: boolean;
+		wasCompacted: boolean;
+		prunedOutputs: number;
+		compactedMessages: number;
+		removedTools: string[];
+	}): void;
+
+	// =========================================================================
 	// Working Memory
 	// =========================================================================
 

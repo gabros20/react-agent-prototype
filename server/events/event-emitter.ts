@@ -26,6 +26,9 @@ import type {
   DoneEvent,
   ErrorEvent,
   ToolInjectionEvent,
+  CompactionStartEvent,
+  CompactionProgressEvent,
+  CompactionCompleteEvent,
 } from './event-types';
 
 // ============================================================================
@@ -273,6 +276,63 @@ export class SSEEventEmitter {
       tools,
       instructions,
       stepNumber,
+      timestamp: this.timestamp(),
+    });
+  }
+
+  // ============================================================================
+  // Compaction Events
+  // ============================================================================
+
+  emitCompactionStart(tokensBefore: number, modelLimit: number): void {
+    this.emit<CompactionStartEvent>('compaction-start', {
+      type: 'compaction-start',
+      traceId: this.traceId,
+      sessionId: this.sessionId,
+      tokensBefore,
+      modelLimit,
+      timestamp: this.timestamp(),
+    });
+  }
+
+  emitCompactionProgress(stage: 'pruning' | 'summarizing', progress: number): void {
+    this.emit<CompactionProgressEvent>('compaction-progress', {
+      type: 'compaction-progress',
+      traceId: this.traceId,
+      sessionId: this.sessionId,
+      stage,
+      progress,
+      timestamp: this.timestamp(),
+    });
+  }
+
+  emitCompactionComplete(options: {
+    tokensBefore: number;
+    tokensAfter: number;
+    wasPruned: boolean;
+    wasCompacted: boolean;
+    prunedOutputs: number;
+    compactedMessages: number;
+    removedTools: string[];
+  }): void {
+    const tokensSaved = options.tokensBefore - options.tokensAfter;
+    const compressionRatio = options.tokensBefore > 0
+      ? Math.round((tokensSaved / options.tokensBefore) * 100)
+      : 0;
+
+    this.emit<CompactionCompleteEvent>('compaction-complete', {
+      type: 'compaction-complete',
+      traceId: this.traceId,
+      sessionId: this.sessionId,
+      tokensBefore: options.tokensBefore,
+      tokensAfter: options.tokensAfter,
+      tokensSaved,
+      compressionRatio,
+      wasPruned: options.wasPruned,
+      wasCompacted: options.wasCompacted,
+      prunedOutputs: options.prunedOutputs,
+      compactedMessages: options.compactedMessages,
+      removedTools: options.removedTools,
       timestamp: this.timestamp(),
     });
   }

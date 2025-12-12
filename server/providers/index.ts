@@ -2,10 +2,10 @@
  * Providers - Barrel Export
  *
  * Pluggable provider abstractions for:
- * - Memory (session storage, messages, working context)
+ * - Memory (session metadata, working context)
  * - Logger (structured logging)
  *
- * Providers enable dependency injection and easy testing.
+ * Note: Message content is handled by MessageStore, not MemoryProvider.
  */
 
 // Memory provider
@@ -15,9 +15,6 @@ export {
   type SessionWithMetadata,
   type CreateSessionInput,
   type UpdateSessionInput,
-  type StoredMessage,
-  type NewMessage,
-  type ModelMessage,
   type MemoryProviderConfig,
   SQLiteMemoryProvider,
   createMemoryProvider,

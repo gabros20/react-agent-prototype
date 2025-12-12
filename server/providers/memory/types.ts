@@ -8,46 +8,12 @@
  * - Easy testing with mock providers
  * - Production scaling with Redis
  * - Development simplicity with SQLite
+ *
+ * NOTE: Message content storage is now handled by MessageStore.
+ * This provider handles session metadata and working context only.
  */
 
 import type { WorkingContextState } from '../../memory';
-
-// ============================================================================
-// Message Types
-// ============================================================================
-
-/**
- * Stored message structure
- */
-export interface StoredMessage {
-  id: string;
-  sessionId: string;
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: unknown; // JSON content (AI SDK format)
-  displayContent?: string | null; // Plain text for UI
-  toolName?: string | null;
-  stepIdx?: number | null;
-  createdAt: Date;
-}
-
-/**
- * New message input
- */
-export interface NewMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: unknown;
-  displayContent?: string;
-  toolName?: string;
-  stepIdx?: number;
-}
-
-/**
- * Model message format (for AI SDK)
- */
-export interface ModelMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: unknown;
-}
 
 // ============================================================================
 // Session Types
@@ -100,8 +66,9 @@ export interface UpdateSessionInput {
  *
  * Responsible for:
  * - Session CRUD operations
- * - Message persistence
  * - Working context storage
+ *
+ * Note: Message content is handled by MessageStore, not this provider.
  */
 export interface MemoryProvider {
   // ============================================================================
@@ -137,25 +104,6 @@ export interface MemoryProvider {
    * Delete session and all related data
    */
   deleteSession(sessionId: string): Promise<void>;
-
-  // ============================================================================
-  // Message Operations
-  // ============================================================================
-
-  /**
-   * Add message to session
-   */
-  addMessage(sessionId: string, message: NewMessage): Promise<StoredMessage>;
-
-  /**
-   * Load messages for a session (as ModelMessage for AI SDK)
-   */
-  loadMessages(sessionId: string): Promise<ModelMessage[]>;
-
-  /**
-   * Save/replace all messages for a session
-   */
-  saveMessages(sessionId: string, messages: ModelMessage[]): Promise<void>;
 
   /**
    * Clear all messages from session (keep session)

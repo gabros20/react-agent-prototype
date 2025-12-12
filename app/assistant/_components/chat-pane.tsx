@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, memo, useCallback } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { useStickToBottomContext } from "use-stick-to-bottom";
 import { Message, MessageContent } from "@/components/ai-elements/message";
@@ -12,6 +12,7 @@ import { useSessionStore } from "../_stores/session-store";
 import { Button } from "@/components/ui/button";
 import { Trash2, MessageSquare } from "lucide-react";
 import { AgentStatusIndicator } from "@/components/ai-elements/agent-status";
+import { ContextIndicator } from "@/components/ai-elements/context-indicator";
 import { ModelSelector } from "./model-selector";
 import {
 	AlertDialog,
@@ -106,7 +107,19 @@ const ConversationArea = memo(function ConversationArea({ messages, streamingMes
 });
 
 // Isolated input component - typing here won't re-render parent
-function ChatInput({ onSendMessage, isStreaming }: { onSendMessage: (text: string) => void; isStreaming: boolean }) {
+function ChatInput({
+	onSendMessage,
+	isStreaming,
+	sessionId,
+	modelId,
+	onCompactionComplete,
+}: {
+	onSendMessage: (text: string) => void;
+	isStreaming: boolean;
+	sessionId: string | null;
+	modelId: string | null;
+	onCompactionComplete?: () => void;
+}) {
 	const [input, setInput] = useState("");
 
 	return (
@@ -129,8 +142,16 @@ function ChatInput({ onSendMessage, isStreaming }: { onSendMessage: (text: strin
 				/>
 			</PromptInputBody>
 			<PromptInputFooter>
-				<div className='flex items-center justify-between w-full'>
-					<ModelSelector disabled={isStreaming} />
+				<div className='flex items-center justify-between w-full gap-2'>
+					<div className='flex items-center gap-2'>
+						<ModelSelector disabled={isStreaming} />
+						<ContextIndicator
+							sessionId={sessionId}
+							modelId={modelId || undefined}
+							disabled={isStreaming}
+							onCompactionComplete={onCompactionComplete}
+						/>
+					</div>
 					<PromptInputSubmit disabled={isStreaming || !input.trim()} />
 				</div>
 			</PromptInputFooter>
@@ -146,6 +167,9 @@ export function ChatPane() {
 	const reset = useChatStore((state) => state.reset);
 	const sessionId = useChatStore((state) => state.sessionId);
 	const clearHistory = useSessionStore((state) => state.clearHistory);
+	const getCurrentSessionModel = useSessionStore((state) => state.getCurrentSessionModel);
+	const modelId = getCurrentSessionModel();
+	const [refreshKey, setRefreshKey] = useState(0);
 
 	const handleClearHistory = async () => {
 		// Use sessionId from chat store (which is the active session)
@@ -161,6 +185,12 @@ export function ChatPane() {
 			console.error("Failed to clear history:", error);
 		}
 	};
+
+	// Callback when compaction completes - refresh messages
+	const handleCompactionComplete = useCallback(() => {
+		// Trigger refresh of context stats
+		setRefreshKey((k) => k + 1);
+	}, []);
 
 	return (
 		<div className='flex flex-col h-full border rounded-lg bg-card overflow-hidden shadow-sm'>
@@ -203,7 +233,13 @@ export function ChatPane() {
 
 			{/* Input - Fixed (isolated component to prevent re-renders) */}
 			<div className='flex-none p-3 sm:p-4 border-t'>
-				<ChatInput onSendMessage={sendMessage} isStreaming={isStreaming} />
+				<ChatInput
+					onSendMessage={sendMessage}
+					isStreaming={isStreaming}
+					sessionId={sessionId}
+					modelId={modelId}
+					onCompactionComplete={handleCompactionComplete}
+				/>
 			</div>
 		</div>
 	);

@@ -1,5 +1,97 @@
 # Context Compaction System Plan
 
+---
+
+## Executive Summary (Read This First When Resuming)
+
+### What We're Building
+
+A **context compaction system** for our CMS agent that prevents AI drift during long conversations. When context approaches the model's limit, instead of blindly trimming messages (causing the AI to "forget" what it was doing), we:
+
+1. **Prune tool outputs first** - Keep tool call structure, clear verbose results (cheap, 50%+ savings)
+2. **Summarize if still needed** - LLM generates a continuation prompt capturing intent, actions, and state
+3. **Inject summary as user-assistant pair** - NOT into system prompt (preserves LLM caching)
+
+### Why We're Building It
+
+**The Core Problem**: Current context trimming just deletes old messages. The AI loses:
+- Original user intent ("build me a landing page")
+- Actions already taken ("created hero, added 3 features")
+- Current state ("working on CTA button")
+- What's next ("need pricing section")
+
+**Real Impact**: After trimming, the AI might repeat work, contradict itself, or lose the thread entirely.
+
+### Key Research Insights
+
+1. **OpenCode Pattern**: Production-tested compaction from coding assistant with millions of requests
+   - Two-stage: prune first (cheap), summarize second (expensive)
+   - PRUNE_PROTECT threshold protects recent turns
+   - User-assistant pair injection (not system prompt)
+
+2. **LLM Caching Discovery** (Critical):
+   - All providers use **prefix-based caching**
+   - Changing system prompt = cache invalidated = MORE expensive
+   - Summary MUST be injected as conversation turn, not system prompt modification
+   - This led to Phase 8: Cache-Safe Dynamic Injection Plan
+
+3. **Multi-Provider Compatibility**:
+   - OpenAI: 50% automatic savings on cached prefixes
+   - Anthropic: 90% savings but requires `cache_control` markers
+   - DeepSeek: Up to 90% automatic savings
+   - All benefit from stable system prompts
+
+### Architecture At A Glance
+
+```
+User sends message
+       ↓
+┌──────────────────────────────┐
+│   OverflowDetector           │ ← Check: tokens > 80% of model limit?
+│   (token counting)           │
+└──────────────────────────────┘
+       ↓ overflow detected
+┌──────────────────────────────┐
+│   ToolOutputPruner           │ ← First: prune old tool outputs
+│   (cheap, fast)              │    Keep tool calls, clear results
+└──────────────────────────────┘
+       ↓ still over limit?
+┌──────────────────────────────┐
+│   CompactionService          │ ← Second: LLM summarization
+│   (expensive, powerful)      │    Generate continuation prompt
+└──────────────────────────────┘
+       ↓
+┌──────────────────────────────┐
+│   User-Assistant Pair        │ ← Inject as conversation:
+│   Injection                  │    user: "summarize progress"
+│                              │    assistant: "[summary]"
+└──────────────────────────────┘
+       ↓
+Continue with reduced context + preserved intent
+```
+
+### Key Decisions Made
+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| Overflow detection | Token-based (not message count) | Messages vary wildly in size |
+| Pruning target | Tool outputs only | Preserve structure, clear verbose data |
+| Summary injection | User-assistant pair | Preserves LLM cache (NOT system prompt) |
+| Message storage | New `message_parts` table | AI SDK v6 multi-part messages |
+| Compaction indicator | Frontend UI components | User sees "Optimizing..." during compaction |
+
+### Related Plans
+
+- **Phase 8** links to: [CACHE_SAFE_DYNAMIC_INJECTION_PLAN.md](./CACHE_SAFE_DYNAMIC_INJECTION_PLAN.md)
+  - Addresses: Working memory and tool prompts also inject into system prompt
+  - Solution: Move ALL dynamic content to conversation history
+
+### Knowledge Base Entry
+
+Our research is documented in: [2.2.5 Prompt Caching & Context Compaction](../knowledge-base/2-context/2.2.5-prompt-caching.md)
+
+---
+
 ## Overview
 
 Complete reimplementation of context management to prevent AI drift and maintain task continuity during long sessions. Based on OpenCode's battle-tested compaction strategy, adapted for our CMS agent with AI SDK v6.
@@ -22,12 +114,20 @@ Complete reimplementation of context management to prevent AI drift and maintain
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| Phase 1 | ⬜ Pending | Foundation - Types, Token Service, Model Limits |
-| Phase 2 | ⬜ Pending | Tool Output Pruning |
-| Phase 3 | ⬜ Pending | Message Store Redesign |
-| Phase 4 | ⬜ Pending | Compaction/Summarization Service |
-| Phase 5 | ⬜ Pending | Context Manager (replaces existing) |
-| Phase 6 | ⬜ Pending | Integration & Testing |
+| Phase 1 | ✅ Done | Foundation - Types, Token Service, Model Limits |
+| Phase 2 | ✅ Done | Tool Output Pruning |
+| Phase 3 | ✅ Done | Message Store Redesign (schema + message-store.ts) |
+| Phase 4 | ✅ Done | Compaction/Summarization Service |
+| Phase 5 | ✅ Done | Context Preparation (message-converter, context-preparation) |
+| Phase 6 | ✅ Done | Backend Integration (context-coordinator, feature flag) |
+| Phase 7 | ⬜ Pending | Frontend Integration - UI, Debugging & Chat History |
+| Phase 8 | ⬜ Pending | **[EXTERNAL]** Cache-Safe Dynamic Injection → See [CACHE_SAFE_DYNAMIC_INJECTION_PLAN.md](./CACHE_SAFE_DYNAMIC_INJECTION_PLAN.md) |
+
+**Implementation Notes:**
+- Feature flag `useCompaction` in `context-coordinator.ts` defaults to `false`
+- Set to `true` to enable the new compaction system
+- MessageStore created but not yet integrated into Services (deferred for future rich message storage)
+- message_parts table exists but not used yet (future use for per-part token tracking)
 
 ---
 
@@ -1130,13 +1230,8 @@ export function convertRichToModel(messages: RichMessage[]): ModelMessage[] {
               });
               break;
 
-            case 'compaction-marker':
-              // Inject summary as context
-              assistantContent.push({
-                type: 'text',
-                text: `[Previous conversation summary]\n${(part as any).summary}`,
-              });
-              break;
+            // Note: compaction-marker is in USER message, not assistant
+            // Handled in user message conversion below
           }
         }
 
@@ -1259,6 +1354,145 @@ The AI SDK v6 provides `pruneMessages()` which we use as a foundation, but we ex
 - Token-based thresholds (not just message count)
 - Summarization (not just removal)
 - Rich part structure preservation
+
+### Architectural Decision: Summary Injection Method
+
+**The Problem**: After compaction, how do we inject the conversation summary back into context?
+
+**Research Sources**:
+- [Our Knowledge Base: 2.2.5 Prompt Caching & Context Compaction](../knowledge-base/2-context/2.2.5-prompt-caching.md) - Comprehensive analysis of caching patterns
+- [Anthropic Prompt Caching Docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
+- [Anthropic Context Engineering Guide](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Factory.ai Compressing Context](https://factory.ai/news/compressing-context)
+- OpenCode implementation in digest.txt
+
+**Three Options Analyzed**:
+
+| Option | Description | Caching Impact |
+|--------|-------------|----------------|
+| A. Fake assistant message only | Put summary in assistant role | ❌ Puts words in LLM's mouth |
+| B. User-assistant pair | User asks, assistant answers with summary | ✅ **Industry standard** - preserves caching |
+| C. System prompt injection | Add summary to system prompt | ❌ **Breaks entire cache** - invalidates tools + system + messages |
+
+**Decision: Option B - User-Assistant Compaction Pair**
+
+### Why System Prompt Injection Is Wrong
+
+From Anthropic's docs:
+> "Cache keys are cumulative: the cache hash key is generated by hashing all previous blocks sequentially."
+
+If we modify the system prompt:
+1. System prompt content changes → **entire cache invalidated**
+2. Tool definitions need reprocessing (25% premium on cache writes)
+3. All messages need reprocessing
+4. **Every compaction becomes a full cache miss = expensive**
+
+OpenCode explicitly does:
+```typescript
+// max 2 system prompt messages for caching purposes
+const [first, ...rest] = system
+system = [first, rest.join("\n")]
+```
+
+They keep system prompts stable to preserve caching.
+
+### Why User-Assistant Pair Is Correct
+
+From Anthropic's Context Engineering Guide:
+> "In Claude Code, compaction is implemented by passing the message history to the model to summarize."
+
+Summaries are injected **as conversation history**, not system prompt.
+
+**Benefits**:
+1. **System prompt stays constant** → cache preserved (90% cost savings on reads)
+2. **Tools stay constant** → cache preserved
+3. **Only messages section changes** → minimal invalidation
+4. **Natural conversation flow** → LLM understands this is context
+5. **Follows industry best practice** → Claude Code, Factory.ai, etc.
+
+**Implementation**:
+
+```typescript
+// When compaction occurs, insert synthetic turn at compaction point:
+const compactionTurn: RichMessage[] = [
+  {
+    id: uuid(),
+    role: 'user',
+    parts: [{
+      type: 'compaction-marker',
+      // The user "asks" for summary - triggers assistant to provide it
+    }],
+  },
+  {
+    id: uuid(),
+    role: 'assistant',
+    parts: [{
+      type: 'text',
+      text: compactionSummary, // LLM-generated summary
+    }],
+  }
+];
+
+// Message history becomes:
+// [compaction user message, compaction assistant summary, ...remaining messages]
+```
+
+**Conversion to ModelMessage**:
+
+```typescript
+// In message-converter.ts
+case 'compaction-marker':
+  // Convert to natural prompt
+  return {
+    type: 'text',
+    text: 'What have we accomplished so far in this conversation?',
+  };
+```
+
+The assistant's summary response is already a normal text part - no special handling needed.
+
+**Flow After Compaction**:
+1. Old messages are removed from history
+2. Compaction summary is generated via LLM call
+3. User-assistant pair is inserted at the start of remaining messages
+4. System prompt and tools remain **completely unchanged**
+5. On API call: tools cached, system cached, only messages section processed
+
+**Cache Savings Example**:
+- System prompt: 2,000 tokens (stable, cached)
+- Tools: 8,000 tokens (stable, cached)
+- Compaction summary: 500 tokens
+- New messages: 1,000 tokens
+
+With system prompt injection: All 11,500 tokens reprocessed (cache miss)
+With user-assistant pair: Only 1,500 tokens processed, 10,000 cached (90% savings)
+
+### Multi-Provider Caching Compatibility
+
+**This decision applies to ALL providers, not just Anthropic.**
+
+| Provider | Caching Type | Prefix Stability Impact |
+|----------|--------------|------------------------|
+| OpenAI (GPT-4o, 4o-mini) | Automatic | ✅ Prefix matching - system prompt changes = cache miss |
+| DeepSeek (V3, R1) | Automatic | ✅ Prefix matching - system prompt changes = cache miss |
+| Anthropic (Claude) | Manual (`cache_control`) | ✅ Cumulative hash - system prompt changes = full invalidation |
+| Groq (Kimi K2) | Automatic | ✅ Prefix matching |
+| Google Gemini 2.5 | Implicit | ✅ Prefix matching |
+
+From [OpenAI docs](https://platform.openai.com/docs/guides/prompt-caching):
+> "Caching is based on prefix matching... even a single character difference will cause a cache miss"
+
+From [DeepSeek docs](https://api-docs.deepseek.com/guides/kv_cache):
+> "The hard disk cache only matches the prefix part of the user's input"
+
+**Conclusion**: Keeping system prompts stable benefits ALL providers:
+- Automatic caching providers get prefix-based cache hits
+- Manual caching providers preserve explicit cache breakpoints
+- OpenRouter routes to same provider for cache affinity
+
+**Our user-assistant pair approach is universally cache-friendly.**
+
+---
 
 ### Critical: Overflow Check Timing (from OpenCode)
 
@@ -1486,45 +1720,72 @@ export const sessions = sqliteTable("sessions", {
 
 ---
 
-### Gap 3: Message Content Storage Discrepancy
+### Gap 3: Message Storage Schema Change (Clean Migration)
 
-**Our Current System**:
+**Current State**:
 - `messages.content` stores JSON string (AI SDK format)
 - Single flat content field, not rich parts structure
 
-**Plan Assumes**:
-- Rich parts structure with separate `message_parts` table
+**New State**:
+- `messages` table with `tokens` column for token count caching
+- New `message_parts` table for rich part structure
+- Sessions table with compaction tracking fields
 
-**Gap**: The plan creates a new `message_parts` table but doesn't address migration of existing messages or how to handle backward compatibility during transition.
+**Migration Approach**: Clean slate - delete DB and reseed.
 
-**Fix**: Add migration strategy to Phase 3:
-```markdown
-### Migration Strategy
+#### Files Requiring Updates for New Schema:
 
-1. **New messages**: Use new RichMessage format with parts table
-2. **Legacy messages**: Load via converter that parses JSON content to parts on-the-fly
-3. **Incremental migration**: Can optionally backfill old messages to new format
+**Database Schema** (`server/db/schema.ts`):
+```typescript
+// Update sessions table - add:
+compactionCount: integer("compaction_count").default(0),
+lastCompactionAt: integer("last_compaction_at"),
+currentlyCompacting: integer("currently_compacting", { mode: "boolean" }).default(false),
 
-// Converter for legacy messages
-function legacyToRichMessage(dbMessage: LegacyMessage): RichMessage {
-  const content = JSON.parse(dbMessage.content);
+// Update messages table - add:
+tokens: integer("tokens").default(0),  // Cached token count
 
-  if (dbMessage.role === 'user') {
-    return {
-      id: dbMessage.id,
-      role: 'user',
-      parts: [{ id: uuid(), type: 'text', text: typeof content === 'string' ? content : content.text }],
-      // ...
-    };
-  }
-
-  // Parse AI SDK content format to parts
-  if (Array.isArray(content)) {
-    return parseAISDKContentToParts(content);
-  }
-  // ...
-}
+// NEW: message_parts table
+export const messageParts = sqliteTable("message_parts", {
+  id: text("id").primaryKey(),
+  messageId: text("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  sessionId: text("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  type: text("type", { enum: ["text", "tool-call", "tool-result", "compaction-marker"] }).notNull(),
+  content: text("content", { mode: "json" }).notNull(),
+  tokens: integer("tokens").default(0),
+  compactedAt: integer("compacted_at"),
+  sortOrder: integer("sort_order").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
 ```
+
+**Type Files to Update**:
+| File | Change |
+|------|--------|
+| `server/providers/memory/types.ts` | Add `RichMessage`, `MessagePart` types; update `StoredMessage` |
+| `server/memory/context-manager/types.ts` | Import from compaction types |
+
+**Service Files to Update**:
+| File | Change |
+|------|--------|
+| `server/services/session-service.ts` | Update `addMessage`, `loadMessages` for parts structure |
+| `server/providers/memory/sqlite-provider.ts` | Update message CRUD for parts table |
+
+**Execution Files to Update**:
+| File | Change |
+|------|--------|
+| `server/execution/context-coordinator.ts` | Use new ContextManager, handle RichMessage |
+| `server/execution/orchestrator.ts` | Add overflow check, prune call, compaction events |
+
+**Route Files (minimal changes)**:
+| File | Change |
+|------|--------|
+| `server/routes/sessions.ts` | Add compaction status endpoint (optional) |
+
+**No Changes Needed**:
+- `scripts/seed.ts` - Doesn't seed messages
+- `scripts/seed-images.ts` - Unrelated to messages
+- CMS services (`section-service.ts`, `page-service.ts`, `entry-service.ts`) - Different `content` field, not message content
 
 ---
 
@@ -1642,15 +1903,684 @@ if (isCompacting) {
 
 ---
 
+### Gap 8: System Prompt Stability for Caching (NEW)
+
+**OpenCode Pattern** (digest.txt:42176-42178):
+```typescript
+// max 2 system prompt messages for caching purposes
+const [first, ...rest] = system
+system = [first, rest.join("\n")]
+```
+
+**Why This Matters** (from our 2.2.5-prompt-caching.md research):
+- All providers use prefix-based caching
+- System prompt changes invalidate entire cache
+- Tools are part of the prefix - must also stay stable
+
+**Our Gap**: Plan doesn't explicitly ensure system prompt stability across compaction.
+
+**Fix**: Add to Phase 5 ContextManager:
+```typescript
+// In ContextManager initialization
+private readonly systemPromptHash: string;
+
+constructor() {
+  // Cache the system prompt hash to detect accidental changes
+  this.systemPromptHash = this.hashSystemPrompt();
+}
+
+// Validate system prompt hasn't changed before each call
+validateSystemPromptStability(): void {
+  const currentHash = this.hashSystemPrompt();
+  if (currentHash !== this.systemPromptHash) {
+    console.warn('[ContextManager] System prompt changed - cache will be invalidated');
+  }
+}
+```
+
+**Key Insight**: Our user-assistant compaction pair pattern already handles this correctly, but we should add validation to catch accidental system prompt modifications.
+
+---
+
+### Gap 9: Compaction Summary as User-Assistant Pair Implementation Detail (NEW)
+
+**OpenCode Pattern** (digest.txt:39678-39685):
+```typescript
+{
+  role: "user",
+  content: [
+    {
+      type: "text",
+      text: "Provide a detailed prompt for continuing our conversation above...",
+    },
+  ],
+},
+```
+
+**Our Gap**: Plan mentions user-assistant pair but doesn't show exact message format for injection.
+
+**Fix**: Update Phase 4 CompactionService with exact format:
+```typescript
+// The compaction trigger is a USER message asking for summary
+const compactionTrigger: UserMessage = {
+  id: crypto.randomUUID(),
+  sessionId,
+  role: 'user',
+  parts: [{
+    id: crypto.randomUUID(),
+    type: 'text',
+    text: 'What have we accomplished in our conversation so far? Summarize our progress, current state, and next steps.',
+  }],
+  isCompactionTrigger: true,  // Flag for debugging/logging
+  createdAt: Date.now(),
+  tokens: 0,
+};
+
+// The summary is the ASSISTANT response (generated by LLM)
+const summaryResponse: AssistantMessage = {
+  id: crypto.randomUUID(),
+  sessionId,
+  role: 'assistant',
+  parts: [{
+    id: crypto.randomUUID(),
+    type: 'text',
+    text: generatedSummary,  // From compaction LLM call
+  }],
+  isSummary: true,
+  createdAt: Date.now(),
+  tokens: countMessageTokens(...),
+};
+
+// Final messages: [trigger, summary, ...recentMessages]
+```
+
+This ensures:
+1. System prompt unchanged → cached
+2. Tools unchanged → cached
+3. Summary appears as natural conversation → LLM understands context
+4. Multi-provider cache compatible
+
+---
+
+### Gap 10: Anthropic cache_control Integration (NEW)
+
+**From our 2.2.5-prompt-caching.md research**:
+- Anthropic requires explicit `cache_control` markers
+- AI SDK supports `providerOptions.anthropic.cacheControl`
+
+**Our Gap**: Plan doesn't mention Anthropic-specific cache control for maximum savings.
+
+**Fix**: Add to Phase 5 when converting to ModelMessages for Anthropic:
+```typescript
+// In message-converter.ts for Anthropic provider
+export function convertRichToModelWithCaching(
+  messages: RichMessage[],
+  providerId: string
+): ModelMessage[] {
+  const result = convertRichToModel(messages);
+
+  // For Anthropic, add cache_control to system message
+  if (providerId.includes('anthropic') && result[0]?.role === 'system') {
+    result[0] = {
+      ...result[0],
+      providerMetadata: {
+        anthropic: {
+          cacheControl: { type: 'ephemeral' }
+        }
+      }
+    };
+  }
+
+  return result;
+}
+
+// In orchestrator, use providerOptions
+const streamResult = await cmsAgent.stream({
+  messages: modelMessages,
+  providerOptions: {
+    anthropic: {
+      cacheControl: true
+    }
+  }
+});
+```
+
+**Impact**: 90% cost reduction on cached portions for Claude models.
+
+---
+
 ## Risk Assessment
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| Token count inaccuracy | Medium | Add safety margin, test with different models |
-| Migration breaks existing sessions | High | Keep legacy parser, gradual migration |
-| Compaction loses critical context | High | Test summarization quality manually |
-| Prune removes needed tool output | Medium | Protect recent 2 turns minimum |
+| Token count inaccuracy | Medium | Add 10% safety margin for non-OpenAI models |
+| Compaction loses critical context | High | Test summarization quality manually; CMS-specific prompt |
+| Prune removes needed tool output | Medium | Protect recent 2 turns minimum (PRUNE_PROTECT=40k) |
 | Concurrent compaction requests | Low | Lock with `currentlyCompacting` flag |
+| Schema change breaks app | None | Clean migration - just delete DB and reseed (prototype) |
+| Cache invalidation on compaction | Medium | User-assistant pair pattern preserves prefix cache |
+| Anthropic cache not utilized | Low | Add explicit cache_control for Claude models |
+
+---
+
+## Phase 7: Frontend Integration - UI, Debugging & Chat History
+
+### Objective
+
+Integrate compaction visibility throughout the frontend:
+1. **Chat Interface**: Show compaction status indicator, error states, and "start new session" suggestion
+2. **Debugging Panel**: Add compaction events to trace logs with full details
+3. **Chat History**: Display compaction summary messages visibly in conversation
+
+### 7.1 New SSE Event Types
+
+Add compaction-specific events to `sse-handlers.ts`:
+
+```typescript
+// Add to SSEEventType union
+| "compaction-start"      // Compaction triggered
+| "compaction-prune"      // Tool outputs being pruned
+| "compaction-summarize"  // LLM summarization in progress
+| "compaction-complete"   // Compaction finished
+| "compaction-error"      // Compaction failed
+| "context-overflow"      // Context limit reached, needs action
+
+// Handler functions
+export function handleCompactionStart(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const tokensBefore = data.tokensBefore as number;
+  const modelLimit = data.modelLimit as number;
+  const reason = data.reason as string; // 'overflow' | 'manual'
+
+  ctx.store.setAgentStatus({ state: 'compacting' });
+  ctx.trace?.compactionStart(tokensBefore, modelLimit, reason);
+}
+
+export function handleCompactionPrune(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const outputsPruned = data.outputsPruned as number;
+  const tokensSaved = data.tokensSaved as number;
+  const prunedTools = data.prunedTools as string[];
+
+  ctx.trace?.compactionPrune(outputsPruned, tokensSaved, prunedTools);
+}
+
+export function handleCompactionSummarize(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const messagesCount = data.messagesCount as number;
+  ctx.trace?.compactionSummarize(messagesCount);
+}
+
+export function handleCompactionComplete(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const result = {
+    tokensBefore: data.tokensBefore as number,
+    tokensAfter: data.tokensAfter as number,
+    messagesCompacted: data.messagesCompacted as number,
+    wasPruned: data.wasPruned as boolean,
+    wasSummarized: data.wasSummarized as boolean,
+    summary: data.summary as string | undefined,
+  };
+
+  ctx.store.setAgentStatus({ state: 'thinking' });
+  ctx.trace?.compactionComplete(result);
+}
+
+export function handleCompactionError(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const error = data.error as string;
+  const canRetry = data.canRetry as boolean;
+  const suggestNewSession = data.suggestNewSession as boolean;
+
+  ctx.store.setCompactionError({ error, canRetry, suggestNewSession });
+  ctx.trace?.compactionError(error, canRetry, suggestNewSession);
+}
+
+export function handleContextOverflow(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const currentTokens = data.currentTokens as number;
+  const limit = data.limit as number;
+  const percentUsed = data.percentUsed as number;
+
+  ctx.store.setContextOverflow({ currentTokens, limit, percentUsed });
+  ctx.trace?.contextOverflow(currentTokens, limit, percentUsed);
+}
+```
+
+### 7.2 Chat Store Updates
+
+Update `chat-store.ts` with compaction state:
+
+```typescript
+// Add new state fields
+interface ChatState {
+  // ... existing fields ...
+
+  // Compaction state
+  isCompacting: boolean;
+  compactionProgress: {
+    phase: 'idle' | 'pruning' | 'summarizing' | 'complete';
+    tokensBefore?: number;
+    tokensAfter?: number;
+    percentSaved?: number;
+  } | null;
+
+  // Error handling
+  compactionError: {
+    error: string;
+    canRetry: boolean;
+    suggestNewSession: boolean;
+  } | null;
+
+  // Context usage indicator
+  contextUsage: {
+    currentTokens: number;
+    limit: number;
+    percentUsed: number;
+    isWarning: boolean;  // > 80%
+    isCritical: boolean; // > 95%
+  } | null;
+
+  // Actions
+  setIsCompacting: (isCompacting: boolean) => void;
+  setCompactionProgress: (progress: ChatState['compactionProgress']) => void;
+  setCompactionError: (error: ChatState['compactionError']) => void;
+  setContextUsage: (usage: ChatState['contextUsage']) => void;
+  clearCompactionError: () => void;
+}
+
+// Add new AgentStatus state
+export interface AgentStatus {
+  state: 'thinking' | 'tool-call' | 'compacting';  // Add 'compacting'
+  toolName?: string;
+  compactionPhase?: 'pruning' | 'summarizing';
+}
+```
+
+### 7.3 Trace Store Updates
+
+Update `trace-store.ts` with compaction entry types:
+
+```typescript
+// Add to TraceEntryType union
+export type TraceEntryType =
+  | // ... existing types ...
+  // Compaction events
+  | "compaction-start"     // Compaction triggered
+  | "compaction-prune"     // Tool outputs pruned
+  | "compaction-summarize" // LLM summarizing
+  | "compaction-complete"  // Compaction finished
+  | "compaction-error"     // Compaction failed
+  | "context-overflow";    // Hit context limit
+
+// Add colors for new types
+export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
+  // ... existing colors ...
+  "compaction-start": "bg-yellow-500",
+  "compaction-prune": "bg-yellow-400",
+  "compaction-summarize": "bg-yellow-300",
+  "compaction-complete": "bg-green-500",
+  "compaction-error": "bg-red-500",
+  "context-overflow": "bg-red-600",
+};
+
+// Add labels for new types
+export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
+  // ... existing labels ...
+  "compaction-start": "Compacting",
+  "compaction-prune": "Pruning",
+  "compaction-summarize": "Summarizing",
+  "compaction-complete": "Compacted",
+  "compaction-error": "Compact Fail",
+  "context-overflow": "Overflow",
+};
+```
+
+### 7.4 Debug Logger Updates
+
+Add compaction methods to `lib/debug-logger/trace-logger.ts`:
+
+```typescript
+export interface TraceLogger {
+  // ... existing methods ...
+
+  // Compaction logging
+  compactionStart(tokensBefore: number, modelLimit: number, reason: string): void;
+  compactionPrune(outputsPruned: number, tokensSaved: number, prunedTools: string[]): void;
+  compactionSummarize(messagesCount: number): void;
+  compactionComplete(result: {
+    tokensBefore: number;
+    tokensAfter: number;
+    messagesCompacted: number;
+    wasPruned: boolean;
+    wasSummarized: boolean;
+    summary?: string;
+  }): void;
+  compactionError(error: string, canRetry: boolean, suggestNewSession: boolean): void;
+  contextOverflow(currentTokens: number, limit: number, percentUsed: number): void;
+}
+```
+
+### 7.5 Chat Pane UI Updates
+
+Update `chat-pane.tsx` with compaction indicators:
+
+```typescript
+// Compaction Status Indicator Component
+function CompactionIndicator() {
+  const isCompacting = useChatStore(s => s.isCompacting);
+  const progress = useChatStore(s => s.compactionProgress);
+
+  if (!isCompacting) return null;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 border-b border-yellow-200">
+      <Loader2 className="h-4 w-4 animate-spin text-yellow-600" />
+      <span className="text-sm text-yellow-700">
+        {progress?.phase === 'pruning' && 'Optimizing conversation...'}
+        {progress?.phase === 'summarizing' && 'Summarizing context...'}
+      </span>
+      {progress?.tokensBefore && progress?.tokensAfter && (
+        <span className="text-xs text-yellow-600 ml-auto">
+          {Math.round((1 - progress.tokensAfter / progress.tokensBefore) * 100)}% reduced
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Context Usage Bar Component (shows in header)
+function ContextUsageBar() {
+  const usage = useChatStore(s => s.contextUsage);
+
+  if (!usage) return null;
+
+  const bgColor = usage.isCritical ? 'bg-red-500'
+    : usage.isWarning ? 'bg-yellow-500'
+    : 'bg-green-500';
+
+  return (
+    <div className="h-1 w-full bg-gray-200">
+      <div
+        className={`h-full ${bgColor} transition-all`}
+        style={{ width: `${Math.min(usage.percentUsed, 100)}%` }}
+      />
+    </div>
+  );
+}
+
+// Compaction Error Banner Component
+function CompactionErrorBanner() {
+  const error = useChatStore(s => s.compactionError);
+  const clearError = useChatStore(s => s.clearCompactionError);
+
+  if (!error) return null;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border-b border-red-200">
+      <AlertTriangle className="h-4 w-4 text-red-600" />
+      <span className="text-sm text-red-700 flex-1">{error.error}</span>
+      {error.suggestNewSession && (
+        <Button size="sm" variant="outline" onClick={handleNewSession}>
+          Start New Session
+        </Button>
+      )}
+      {error.canRetry && (
+        <Button size="sm" variant="outline" onClick={handleRetry}>
+          Retry
+        </Button>
+      )}
+      <button onClick={clearError} className="text-red-400 hover:text-red-600">
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+// Compaction Summary Message Component (in chat history)
+function CompactionSummaryMessage({ summary }: { summary: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="mx-4 my-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+      <div className="flex items-center gap-2 text-amber-700">
+        <Sparkles className="h-4 w-4" />
+        <span className="text-sm font-medium">Conversation Summarized</span>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="ml-auto text-amber-500 hover:text-amber-700"
+        >
+          {isExpanded ? <ChevronUp /> : <ChevronDown />}
+        </button>
+      </div>
+      {isExpanded && (
+        <div className="mt-2 text-sm text-amber-800 whitespace-pre-wrap">
+          {summary}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### 7.6 Chat Message Type Updates
+
+Update `ChatMessage` type to support compaction summaries:
+
+```typescript
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | 'compaction';  // Add 'compaction'
+  content: string;
+  createdAt: Date;
+
+  // Compaction-specific fields
+  isCompactionSummary?: boolean;
+  compactionMetadata?: {
+    tokensBefore: number;
+    tokensAfter: number;
+    messagesCompacted: number;
+    compactedAt: number;
+  };
+}
+```
+
+### 7.7 Session Item Updates
+
+Update `session-item.tsx` to show compaction history:
+
+```typescript
+// Show compaction count in session list
+interface SessionItemProps {
+  session: Session & {
+    compactionCount?: number;
+    lastCompactionAt?: number;
+  };
+}
+
+function SessionItem({ session }: SessionItemProps) {
+  return (
+    <div className="...">
+      {/* ... existing content ... */}
+
+      {session.compactionCount && session.compactionCount > 0 && (
+        <div className="flex items-center gap-1 text-xs text-gray-400">
+          <Sparkles className="h-3 w-3" />
+          <span>{session.compactionCount} compactions</span>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### 7.8 Debug Panel Compaction Section
+
+Add dedicated compaction section to debug panel:
+
+```typescript
+// CompactionDebugSection component
+function CompactionDebugSection() {
+  const entries = useTraceStore(s => s.filteredEntries);
+
+  const compactionEntries = entries.filter(e =>
+    e.type.startsWith('compaction-') || e.type === 'context-overflow'
+  );
+
+  if (compactionEntries.length === 0) return null;
+
+  return (
+    <div className="border-t pt-2 mt-2">
+      <h4 className="text-xs font-medium text-gray-500 mb-2">Context Management</h4>
+      {compactionEntries.map(entry => (
+        <CompactionEntryRow key={entry.id} entry={entry} />
+      ))}
+    </div>
+  );
+}
+
+function CompactionEntryRow({ entry }: { entry: TraceEntry }) {
+  const isComplete = entry.type === 'compaction-complete';
+  const isError = entry.type === 'compaction-error';
+
+  return (
+    <div className={`text-xs p-2 rounded ${
+      isComplete ? 'bg-green-50' :
+      isError ? 'bg-red-50' :
+      'bg-yellow-50'
+    }`}>
+      <div className="flex items-center gap-2">
+        <span className={ENTRY_TYPE_COLORS[entry.type] + ' px-1.5 py-0.5 rounded text-white'}>
+          {ENTRY_TYPE_LABELS[entry.type]}
+        </span>
+        <span className="text-gray-600">{entry.summary}</span>
+        {entry.duration && (
+          <span className="ml-auto text-gray-400">{formatDuration(entry.duration)}</span>
+        )}
+      </div>
+
+      {entry.type === 'compaction-complete' && entry.output && (
+        <div className="mt-1 grid grid-cols-3 gap-2 text-gray-500">
+          <div>Before: {(entry.output as any).tokensBefore?.toLocaleString()} tokens</div>
+          <div>After: {(entry.output as any).tokensAfter?.toLocaleString()} tokens</div>
+          <div>Saved: {Math.round((1 - (entry.output as any).tokensAfter / (entry.output as any).tokensBefore) * 100)}%</div>
+        </div>
+      )}
+
+      {entry.type === 'compaction-prune' && entry.output && (
+        <div className="mt-1 text-gray-500">
+          Pruned {(entry.output as any).outputsPruned} tool outputs
+          ({(entry.output as any).tokensSaved?.toLocaleString()} tokens)
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### 7.9 Files to Create/Modify
+
+#### New Files
+
+| File | Description |
+|------|-------------|
+| `app/assistant/_components/compaction-indicator.tsx` | Status indicator during compaction |
+| `app/assistant/_components/context-usage-bar.tsx` | Visual context usage indicator |
+| `app/assistant/_components/compaction-error-banner.tsx` | Error state with actions |
+| `app/assistant/_components/compaction-summary-message.tsx` | Chat history compaction display |
+| `app/assistant/_components/compaction-debug-section.tsx` | Debug panel compaction view |
+
+#### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `app/assistant/_hooks/sse-handlers.ts` | Add compaction event handlers |
+| `app/assistant/_stores/chat-store.ts` | Add compaction state and actions |
+| `app/assistant/_stores/trace-store.ts` | Add compaction entry types and colors |
+| `lib/debug-logger/trace-logger.ts` | Add compaction logging methods |
+| `lib/debug-logger/index.ts` | Export compaction methods |
+| `app/assistant/_components/chat-pane.tsx` | Integrate compaction components |
+| `app/assistant/_components/session-item.tsx` | Show compaction count |
+
+### 7.10 Testing Checklist
+
+- [ ] Compaction indicator appears during compaction
+- [ ] Progress shows pruning vs summarizing phase
+- [ ] Context usage bar updates in real-time
+- [ ] Error banner shows with correct actions
+- [ ] "Start New Session" button works when suggested
+- [ ] Compaction summary appears in chat history
+- [ ] Summary can be expanded/collapsed
+- [ ] Debug panel shows all compaction events
+- [ ] Compaction metrics (tokens saved, time) are accurate
+- [ ] Session list shows compaction count
+- [ ] SSE events are properly parsed and dispatched
+
+### 7.11 UX Considerations
+
+**During Compaction**:
+- Disable send button while compacting (prevent race conditions)
+- Show animated indicator with clear phase information
+- Display token reduction percentage in real-time
+
+**On Error**:
+- Clear, actionable error messages
+- Suggest starting new session when context is irrecoverable
+- Allow retry when transient failure
+
+**In Chat History**:
+- Compaction summaries are visually distinct (amber/yellow theme)
+- Collapsible to avoid cluttering conversation
+- Show metadata (tokens saved, messages compacted) on expand
+
+**In Debug Panel**:
+- Compaction events grouped in dedicated section
+- Full details available for debugging
+- Timing information for performance analysis
+
+---
+
+## Phase 8: Cache-Safe Dynamic Injection (External Plan)
+
+### Why This Phase Exists
+
+During the planning of context compaction, we discovered a critical issue: our current system injects dynamic content (working memory, discovered tools, tool prompts) into the **system prompt**, which **destroys LLM provider caching** on every change.
+
+**The Problem**:
+- All major LLM providers use prefix-based caching
+- Changing the system prompt invalidates the entire cache
+- We inject working memory and tool guidance into `<working-memory>` and `<tool-usage-instructions>` sections
+- This happens every turn → cache invalidated every request → no cost savings
+
+**The Solution**:
+Keep the system prompt completely static and inject dynamic content as **conversation history** (user-assistant message pairs) instead.
+
+This is documented in a separate plan because:
+1. It's a significant architectural change affecting multiple systems
+2. It can be implemented independently of compaction
+3. It requires careful coordination with AI SDK patterns
+
+### Link to External Plan
+
+**See**: [CACHE_SAFE_DYNAMIC_INJECTION_PLAN.md](./CACHE_SAFE_DYNAMIC_INJECTION_PLAN.md)
+
+**Key Files Affected**:
+- `server/prompts/agent/main-agent-prompt.xml` → becomes static
+- `server/prompts/builder/prompt-builder.ts` → deprecated
+- `server/agents/main-agent.ts` → inject via messages, not instructions
+- `server/memory/working-context/working-context.ts` → new message factory
 
 ---
 

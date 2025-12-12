@@ -27,30 +27,41 @@ import { useTraceStore } from '../_stores/trace-store';
 
 /**
  * Extract readable text content from a message.
- * Prefers displayContent (plain text for UI) when available.
- * Falls back to parsing AI SDK content format if displayContent is not set.
+ * Handles the new parts-based message format from MessageStore.
  *
- * Message format:
- * - displayContent: Plain text for UI display (new pattern)
- * - content: AI SDK format for LLM context (may be string or array of parts)
+ * Message format (new):
+ * - parts: Array of MessagePart (text, tool-call, tool-result)
+ * - content: Optional derived content
  *
  * Returns empty string for tool-only messages (they shouldn't be displayed).
  */
-export function extractMessageContent(message: { displayContent?: string | null; content?: unknown } | unknown): string {
-  // Handle the full message object case (new pattern)
-  if (message && typeof message === 'object' && 'displayContent' in message) {
-    const msg = message as { displayContent?: string | null; content?: unknown };
+export function extractMessageContent(message: { parts?: Array<{ type: string; text?: string }>; content?: unknown } | unknown): string {
+  // Handle the parts-based message format (new pattern from MessageStore)
+  if (message && typeof message === 'object' && 'parts' in message) {
+    const msg = message as { parts?: Array<{ type: string; text?: string }>; content?: unknown };
 
-    // Prefer displayContent if available
-    if (msg.displayContent && typeof msg.displayContent === 'string') {
-      return msg.displayContent;
+    // Extract text from parts array
+    if (msg.parts && Array.isArray(msg.parts)) {
+      const textParts = msg.parts
+        .filter((part): part is { type: string; text: string } =>
+          part && part.type === 'text' && typeof part.text === 'string'
+        )
+        .map(part => part.text);
+
+      if (textParts.length > 0) {
+        return textParts.join('\n');
+      }
     }
 
-    // Fall back to extracting from content
-    return extractFromContent(msg.content);
+    // Fall back to content field if parts didn't yield text
+    if (msg.content !== undefined) {
+      return extractFromContent(msg.content);
+    }
+
+    return '';
   }
 
-  // Legacy: direct content value (for backward compatibility)
+  // Legacy: direct content value
   return extractFromContent(message);
 }
 

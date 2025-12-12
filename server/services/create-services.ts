@@ -34,6 +34,7 @@ import { ImageService } from './cms/image-service';
 import { SiteSettingsService } from './cms/site-settings-service';
 import { ConversationLogService } from './conversation-log-service';
 import { SessionService } from './session-service';
+import { createMessageStore } from './message-store';
 import { AgentOrchestrator } from '../execution';
 
 // ============================================================================
@@ -82,6 +83,8 @@ export async function createServices(options: CreateServicesOptions): Promise<Se
   // Create session services
   const conversationLogService = new ConversationLogService(db);
   const sessionService = new SessionService(db);
+  const messageStore = createMessageStore(db);
+  logger.info('Message store initialized');
 
   // Build services object (will be completed with agentOrchestrator)
   const servicesBase = {
@@ -97,6 +100,7 @@ export async function createServices(options: CreateServicesOptions): Promise<Se
     siteSettingsService,
     conversationLogService,
     sessionService,
+    messageStore,
   };
 
   // Create orchestrator with services reference
@@ -104,6 +108,7 @@ export async function createServices(options: CreateServicesOptions): Promise<Se
     db,
     services: servicesBase as Services, // Cast needed due to circular reference (orchestrator is part of services)
     sessionService,
+    messageStore,
     vectorIndex,
   });
 

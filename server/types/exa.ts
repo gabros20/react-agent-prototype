@@ -9,7 +9,7 @@
 // Search API Types
 // ============================================================================
 
-export type ExaSearchType = "auto" | "neural" | "keyword";
+export type ExaSearchType = "auto" | "neural" | "keyword" | "fast" | "deep";
 
 export type ExaCategory =
 	| "company"

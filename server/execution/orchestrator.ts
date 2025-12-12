@@ -59,10 +59,11 @@ export class AgentOrchestrator {
     const logger = this.createSSELogger(resolved.traceId, emitter);
 
     try {
-      // Prepare context
+      // Prepare context (pass emitter for compaction events)
       const { context, workingContext } = await this.contextCoordinator.prepareContext(
         resolved,
-        logger
+        logger,
+        emitter
       );
 
       // Emit context events

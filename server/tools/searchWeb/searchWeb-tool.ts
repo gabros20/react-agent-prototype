@@ -126,13 +126,17 @@ async function searchWithTavily(
 
 /**
  * Search using Exa provider
+ *
+ * Cost optimization:
+ * - Uses "auto" search type (good quality, not 3x cost of "deep")
+ * - useAutoprompt disabled (our queries are already well-formed)
+ * - livecrawl disabled by default (only enabled for deep+recentOnly)
  */
 async function searchWithExa(
 	input: SearchWebInput,
 	mode: "quick" | "deep",
 	service: ExaResearchService
 ): Promise<SearchResult[]> {
-	// Exa quickSearch works for both modes - deep mode just uses more results
 	const numResults = mode === "deep" ? (input.numResults ?? 10) : (input.numResults ?? 5);
 
 	// Map topic to Exa category
@@ -141,15 +145,22 @@ async function searchWithExa(
 		category = "news";
 	}
 
+	// Use "auto" for both modes - good semantic matching without the 3x cost of "deep"
+	// Main cost savings come from disabled useAutoprompt and livecrawl
+	const searchType = "auto";
+
 	const response = await service.quickSearch(input.query, {
 		numResults,
 		category,
+		searchType,
 		includeDomains: input.includeDomains,
 		excludeDomains: input.excludeDomains,
 		// Exa uses date filter for recent-only
 		startPublishedDate: input.recentOnly
 			? ExaResearchService.getDateFilter(7)
 			: undefined,
+		// Only enable livecrawl for deep mode when recency matters
+		livecrawl: mode === "deep" && input.recentOnly ? "fallback" : undefined,
 	});
 
 	return response.results.map((r) => ({

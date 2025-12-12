@@ -11,6 +11,7 @@ import type { DrizzleDB } from '../db/client';
 import type { Services } from '../services/types';
 import type { VectorIndexService } from '../services/vector-index';
 import type { SessionService } from '../services/session-service';
+import type { MessageStore } from '../services/message-store';
 
 // ============================================================================
 // Execute Options
@@ -61,6 +62,7 @@ export interface OrchestratorDependencies {
   db: DrizzleDB;
   services: Services;
   sessionService: SessionService;
+  messageStore: MessageStore;
   vectorIndex: VectorIndexService;
 }
 

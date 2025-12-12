@@ -1,7 +1,8 @@
 /**
  * Memory Provider - Barrel Export
  *
- * Provides pluggable memory storage backends.
+ * Provides pluggable memory storage backends for session metadata
+ * and working context. Message content is handled by MessageStore.
  */
 
 // Types
@@ -11,9 +12,6 @@ export type {
   SessionWithMetadata,
   CreateSessionInput,
   UpdateSessionInput,
-  StoredMessage,
-  NewMessage,
-  ModelMessage,
 } from './types';
 
 // Implementations

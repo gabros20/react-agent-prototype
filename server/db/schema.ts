@@ -308,6 +308,10 @@ export const sessions = sqliteTable("sessions", {
   title: text("title").notNull(),
   modelId: text("model_id").default("openai/gpt-4o-mini"), // Selected model for this session
   workingContext: text("working_context", { mode: "json" }), // Working memory storage
+  // Compaction tracking
+  compactionCount: integer("compaction_count").default(0), // How many times compaction occurred
+  lastCompactionAt: integer("last_compaction_at"), // Unix timestamp
+  currentlyCompacting: integer("currently_compacting", { mode: "boolean" }).default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -322,6 +326,27 @@ export const messages = sqliteTable("messages", {
   displayContent: text("display_content"), // Plain text for UI rendering (nullable for tool messages)
   toolName: text("tool_name"),
   stepIdx: integer("step_idx"),
+  // Compaction tracking
+  tokens: integer("tokens").default(0), // Cached token count
+  isSummary: integer("is_summary", { mode: "boolean" }).default(false), // Is this a compaction summary?
+  isCompactionTrigger: integer("is_compaction_trigger", { mode: "boolean" }).default(false), // Is this a compaction trigger user msg?
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+// Message parts table for rich structure tracking
+export const messageParts = sqliteTable("message_parts", {
+  id: text("id").primaryKey(),
+  messageId: text("message_id")
+    .notNull()
+    .references(() => messages.id, { onDelete: "cascade" }),
+  sessionId: text("session_id")
+    .notNull()
+    .references(() => sessions.id, { onDelete: "cascade" }),
+  type: text("type", { enum: ["text", "tool-call", "tool-result", "compaction-marker"] }).notNull(),
+  content: text("content", { mode: "json" }).notNull(), // JSON content based on type
+  tokens: integer("tokens").default(0),
+  compactedAt: integer("compacted_at"), // Unix timestamp if compacted
+  sortOrder: integer("sort_order").notNull(), // Order within message
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
@@ -458,8 +483,14 @@ export const sessionsRelations = relations(sessions, ({ many }) => ({
   conversationLogs: many(conversationLogs),
 }));
 
-export const messagesRelations = relations(messages, ({ one }) => ({
+export const messagesRelations = relations(messages, ({ one, many }) => ({
   session: one(sessions, { fields: [messages.sessionId], references: [sessions.id] }),
+  parts: many(messageParts),
+}));
+
+export const messagePartsRelations = relations(messageParts, ({ one }) => ({
+  message: one(messages, { fields: [messageParts.messageId], references: [messages.id] }),
+  session: one(sessions, { fields: [messageParts.sessionId], references: [sessions.id] }),
 }));
 
 export const conversationLogsRelations = relations(conversationLogs, ({ one }) => ({
@@ -535,6 +566,9 @@ export const selectSessionSchema = createSelectSchema(sessions);
 
 export const insertMessageSchema = createInsertSchema(messages);
 export const selectMessageSchema = createSelectSchema(messages);
+
+export const insertMessagePartSchema = createInsertSchema(messageParts);
+export const selectMessagePartSchema = createSelectSchema(messageParts);
 
 export const insertImageSchema = createInsertSchema(images);
 export const selectImageSchema = createSelectSchema(images);

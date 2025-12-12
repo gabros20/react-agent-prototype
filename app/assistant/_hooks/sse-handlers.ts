@@ -217,6 +217,51 @@ export function handleContextCleanup(
   ctx.trace?.contextCleanup(messagesRemoved, removedTools, activeTools);
 }
 
+export function handleCompactionStart(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const tokensBefore = (data.tokensBefore as number) || 0;
+  const modelLimit = (data.modelLimit as number) || 0;
+  ctx.trace?.compactionStart(tokensBefore, modelLimit);
+}
+
+export function handleCompactionProgress(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const stage = (data.stage as 'pruning' | 'summarizing') || 'pruning';
+  const progress = (data.progress as number) || 0;
+  ctx.trace?.compactionProgress(stage, progress);
+}
+
+export function handleCompactionComplete(
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): void {
+  const tokensBefore = (data.tokensBefore as number) || 0;
+  const tokensAfter = (data.tokensAfter as number) || 0;
+  const tokensSaved = (data.tokensSaved as number) || 0;
+  const compressionRatio = (data.compressionRatio as number) || 0;
+  const wasPruned = (data.wasPruned as boolean) || false;
+  const wasCompacted = (data.wasCompacted as boolean) || false;
+  const prunedOutputs = (data.prunedOutputs as number) || 0;
+  const compactedMessages = (data.compactedMessages as number) || 0;
+  const removedTools = (data.removedTools as string[]) || [];
+
+  ctx.trace?.compactionComplete({
+    tokensBefore,
+    tokensAfter,
+    tokensSaved,
+    compressionRatio,
+    wasPruned,
+    wasCompacted,
+    prunedOutputs,
+    compactedMessages,
+    removedTools,
+  });
+}
+
 export function handleStepFinish(
   data: Record<string, unknown>,
   ctx: SSEHandlerContext
@@ -291,6 +336,9 @@ export type SSEEventType =
   | "instructions-injected"
   | "llm-context"
   | "context-cleanup"
+  | "compaction-start"
+  | "compaction-progress"
+  | "compaction-complete"
   | "step-finish"
   | "result"
   | "error"
@@ -360,6 +408,15 @@ export function dispatchSSEEvent(
       break;
     case "context-cleanup":
       handleContextCleanup(data, ctx);
+      break;
+    case "compaction-start":
+      handleCompactionStart(data, ctx);
+      break;
+    case "compaction-progress":
+      handleCompactionProgress(data, ctx);
+      break;
+    case "compaction-complete":
+      handleCompactionComplete(data, ctx);
       break;
     case "step-finish":
       handleStepFinish(data, ctx);

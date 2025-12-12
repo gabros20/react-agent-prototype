@@ -437,44 +437,80 @@ function PartView({ part, index }: { part: Record<string, unknown>; index: numbe
 		const isError = part.isError === true;
 		// Result might be stored under different keys
 		const result = part.result ?? part.output ?? part.content ?? part.data;
+		// Check for compaction via compactedAt field (from MessageStore)
+		const isCompacted = part.compactedAt !== undefined && part.compactedAt !== null;
 		// Get all other properties
-		const { type: _, toolName, toolCallId, result: _r, output: _o, content: _c, data: _d, isError: _e, ...otherProps } = part;
+		const { type: _, toolName, toolCallId, result: _r, output: _o, content: _c, data: _d, isError: _e, compactedAt, ...otherProps } = part;
+
+		// Determine header color based on state
+		const headerBg = isCompacted
+			? "bg-indigo-500/10"
+			: isError
+			? "bg-red-500/10"
+			: "bg-green-500/10";
+		const headerTextColor = isCompacted
+			? "text-indigo-600"
+			: isError
+			? "text-red-600"
+			: "text-green-600";
+		const iconColor = isCompacted
+			? "text-indigo-500"
+			: isError
+			? "text-red-500"
+			: "text-green-500";
 
 		return (
 			<div className='border rounded-md overflow-hidden'>
-				<div className={cn("px-2 py-1 border-b flex items-center gap-1.5 flex-wrap", isError ? "bg-red-500/10" : "bg-green-500/10")}>
-					<Wrench className={cn("h-3 w-3 shrink-0", isError ? "text-red-500" : "text-green-500")} />
-					<span className={cn("text-[10px] font-medium truncate", isError ? "text-red-600" : "text-green-600")}>
-						Tool Result: {toolName as string}
+				<div className={cn("px-2 py-1 border-b flex items-center gap-1.5 flex-wrap", headerBg)}>
+					{isCompacted ? (
+						<Scissors className={cn("h-3 w-3 shrink-0", iconColor)} />
+					) : (
+						<Wrench className={cn("h-3 w-3 shrink-0", iconColor)} />
+					)}
+					<span className={cn("text-[10px] font-medium truncate", headerTextColor)}>
+						{isCompacted ? "Pruned: " : "Tool Result: "}{toolName as string}
 					</span>
+					{isCompacted && (
+						<span className='text-[9px] text-muted-foreground ml-auto'>
+							(output cleared)
+						</span>
+					)}
 				</div>
 				<div className='p-2 space-y-2 overflow-hidden'>
 					<div className='text-[10px] text-muted-foreground font-mono break-all'>ID: {toolCallId as string}</div>
-					{result !== undefined && (
-						<div>
-							<div className='text-[10px] text-muted-foreground mb-1'>Result:</div>
-							<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-96 overflow-auto'>
-								{formatDataForDisplay(result)}
-							</pre>
+					{isCompacted ? (
+						<div className='text-xs text-muted-foreground italic bg-muted/30 p-2 rounded'>
+							Output was pruned to save context space. See conversation summary for details.
 						</div>
-					)}
-					{/* Show any other properties */}
-					{Object.keys(otherProps).length > 0 && (
-						<div>
-							<div className='text-[10px] text-muted-foreground mb-1'>Other Data:</div>
-							<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-64 overflow-auto'>
-								{formatDataForDisplay(otherProps)}
-							</pre>
-						</div>
-					)}
-					{/* Fallback */}
-					{result === undefined && Object.keys(otherProps).length === 0 && (
-						<div>
-							<div className='text-[10px] text-muted-foreground mb-1'>Full Data:</div>
-							<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-96 overflow-auto'>
-								{formatDataForDisplay(part)}
-							</pre>
-						</div>
+					) : (
+						<>
+							{result !== undefined && (
+								<div>
+									<div className='text-[10px] text-muted-foreground mb-1'>Result:</div>
+									<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-96 overflow-auto'>
+										{formatDataForDisplay(result)}
+									</pre>
+								</div>
+							)}
+							{/* Show any other properties */}
+							{Object.keys(otherProps).length > 0 && (
+								<div>
+									<div className='text-[10px] text-muted-foreground mb-1'>Other Data:</div>
+									<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-64 overflow-auto'>
+										{formatDataForDisplay(otherProps)}
+									</pre>
+								</div>
+							)}
+							{/* Fallback */}
+							{result === undefined && Object.keys(otherProps).length === 0 && (
+								<div>
+									<div className='text-[10px] text-muted-foreground mb-1'>Full Data:</div>
+									<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-96 overflow-auto'>
+										{formatDataForDisplay(part)}
+									</pre>
+								</div>
+							)}
+						</>
 					)}
 				</div>
 			</div>

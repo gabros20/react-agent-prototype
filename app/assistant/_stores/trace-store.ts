@@ -40,7 +40,11 @@ export type TraceEntryType =
 	| "instructions-injected" // Tool instructions injected into system prompt
 	// Context management
 	| "llm-context" // Actual messages sent to LLM (after trimming)
-	| "context-cleanup"; // Tools removed due to message trimming
+	| "context-cleanup" // Tools removed due to message trimming
+	// Compaction events
+	| "compaction-start" // Context compaction started
+	| "compaction-progress" // Compaction in progress (pruning/summarizing)
+	| "compaction-complete"; // Compaction finished with results
 
 export type TraceLevel = "debug" | "info" | "warn" | "error";
 
@@ -888,6 +892,10 @@ export const ENTRY_TYPE_COLORS: Record<TraceEntryType, string> = {
 	// Context management
 	"llm-context": "bg-cyan-500",
 	"context-cleanup": "bg-orange-500",
+	// Compaction
+	"compaction-start": "bg-indigo-600",
+	"compaction-progress": "bg-indigo-500",
+	"compaction-complete": "bg-indigo-400",
 };
 
 export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
@@ -925,6 +933,10 @@ export const ENTRY_TYPE_LABELS: Record<TraceEntryType, string> = {
 	// Context management
 	"llm-context": "LLM Context",
 	"context-cleanup": "Cleanup",
+	// Compaction
+	"compaction-start": "Compacting",
+	"compaction-progress": "Compacting",
+	"compaction-complete": "Compacted",
 };
 
 export function formatDuration(ms: number): string {

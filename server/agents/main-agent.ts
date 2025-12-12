@@ -5,7 +5,8 @@
  * - Starts with searchTools and finalAnswer only
  * - Discovers tools via searchTools calls
  * - Discovered tools + their tool prompts injected via prepareStep
- * - Cross-turn persistence via WorkingContext (handled by ContextManager)
+ * - Cross-turn persistence via WorkingContext
+ * - Context compaction via token-based pruning/summarization (ENABLE_COMPACTION env var)
  *
  * NOTE: Module-level state is a limitation of AI SDK's ToolLoopAgent pattern.
  * prepareStep doesn't have access to experimental_context, so we must store

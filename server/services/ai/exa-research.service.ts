@@ -82,17 +82,28 @@ export class ExaResearchService {
 
 	/**
 	 * Perform a quick search with optional content retrieval
+	 *
+	 * Cost optimization notes:
+	 * - type: "auto" for semantic matching (avoids 3x cost of "deep")
+	 * - useAutoprompt: false saves LLM processing (our queries are already good)
+	 * - livecrawl: "never" avoids extra crawling costs
+	 * - highlights add $0.001/page - minimal but avoid if not needed
 	 */
 	async search(params: ExaSearchRequest): Promise<ExaSearchResponse> {
-		// Default to including highlights for quick context
+		// Cost-optimized defaults:
+		// - type: "auto" for good semantic matching (avoids 3x cost of "deep")
+		// - useAutoprompt: false (our queries are already well-formed)
+		// - livecrawl: defaults to "never" unless specified
 		const searchParams: ExaSearchRequest = {
+			type: "auto", // Good quality without 3x "deep" cost
 			numResults: 5,
-			useAutoprompt: true,
+			useAutoprompt: false, // Skip LLM query enhancement
+			livecrawl: "never", // Avoid crawling costs by default
 			...params,
-			// Include content by default for quick searches
+			// Include minimal highlights for context (still useful for snippets)
 			contents: params.contents || {
 				highlights: {
-					numSentences: 2,
+					numSentences: 1,
 					highlightsPerUrl: 1,
 				},
 			},
@@ -106,6 +117,11 @@ export class ExaResearchService {
 
 	/**
 	 * Quick search helper - simplified interface for common use case
+	 *
+	 * Cost-optimized defaults:
+	 * - Uses "auto" search type (good semantic matching, not 3x "deep" cost)
+	 * - Minimal highlights (2 sentences, 1 per URL)
+	 * - No livecrawl unless explicitly requested
 	 */
 	async quickSearch(
 		query: string,
@@ -116,6 +132,8 @@ export class ExaResearchService {
 			includeDomains?: string[];
 			excludeDomains?: string[];
 			startPublishedDate?: string;
+			/** Override search type if needed (default: "auto") */
+			searchType?: ExaSearchRequest["type"];
 		}
 	): Promise<{
 		results: Array<{
@@ -129,16 +147,18 @@ export class ExaResearchService {
 	}> {
 		const response = await this.search({
 			query,
+			type: options?.searchType || "auto", // Good semantic matching
 			numResults: options?.numResults || 5,
 			category: options?.category,
-			livecrawl: options?.livecrawl || "fallback",
+			livecrawl: options?.livecrawl, // Let search() default to "never"
 			includeDomains: options?.includeDomains,
 			excludeDomains: options?.excludeDomains,
 			startPublishedDate: options?.startPublishedDate,
+			// Minimal highlights - enough for useful snippets
 			contents: {
 				highlights: {
-					numSentences: 3,
-					highlightsPerUrl: 2,
+					numSentences: 2,
+					highlightsPerUrl: 1,
 				},
 			},
 		});

@@ -4,6 +4,10 @@ import type { DrizzleDB } from "../db/client";
 import * as schema from "../db/schema";
 import { WorkingContext, type WorkingContextState } from "../memory";
 
+// ============================================================================
+// Types
+// ============================================================================
+
 export interface CreateSessionInput {
   title?: string;
 }
@@ -12,14 +16,6 @@ export interface UpdateSessionInput {
   title?: string;
   archived?: boolean;
   modelId?: string;
-}
-
-export interface CreateMessageInput {
-  role: "system" | "user" | "assistant" | "tool";
-  content: any; // JSON content (AI SDK format for LLM context)
-  displayContent?: string; // Plain text for UI rendering
-  toolName?: string;
-  stepIdx?: number;
 }
 
 export interface SessionWithMetadata {
@@ -33,6 +29,21 @@ export interface SessionWithMetadata {
   archived?: boolean;
 }
 
+// ============================================================================
+// Session Service
+// ============================================================================
+
+/**
+ * SessionService handles session metadata only.
+ *
+ * Responsibilities:
+ * - Create/update/delete sessions
+ * - Session listing with metadata
+ * - Working context persistence
+ * - Compaction tracking (count, timestamps)
+ *
+ * Message content is handled by MessageStore.
+ */
 export class SessionService {
   constructor(private db: DrizzleDB) {}
 
@@ -55,7 +66,6 @@ export class SessionService {
   /**
    * Ensure session exists (create if not exists)
    * Used by agent routes to create session before tool execution
-   * (Tools like pexels_downloadPhoto need session to exist for FK constraint)
    */
   async ensureSession(sessionId: string): Promise<void> {
     const existing = await this.db.query.sessions.findFirst({
@@ -119,16 +129,11 @@ export class SessionService {
   }
 
   /**
-   * Get session by ID with all messages
+   * Get session by ID (metadata only, use MessageStore for messages)
    */
   async getSessionById(sessionId: string) {
     const session = await this.db.query.sessions.findFirst({
       where: eq(schema.sessions.id, sessionId),
-      with: {
-        messages: {
-          orderBy: schema.messages.createdAt,
-        },
-      },
     });
 
     if (!session) {
@@ -139,7 +144,7 @@ export class SessionService {
   }
 
   /**
-   * Update session (for title changes or archiving)
+   * Update session metadata (title, archived, modelId)
    */
   async updateSession(sessionId: string, input: UpdateSessionInput) {
     const existing = await this.db.query.sessions.findFirst({
@@ -174,70 +179,20 @@ export class SessionService {
     }
 
     // Delete all children explicitly (defense in depth - works regardless of FK pragma state)
+    // messageParts will cascade from messages via FK
     await this.db.delete(schema.conversationLogs).where(eq(schema.conversationLogs.sessionId, sessionId));
+    await this.db.delete(schema.messageParts).where(eq(schema.messageParts.sessionId, sessionId));
     await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
 
-    // Delete session (FK cascade is now also enabled as backup)
+    // Delete session
     await this.db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
 
     return { success: true, deletedId: sessionId };
   }
 
   /**
-   * Add message to session
-   */
-  async addMessage(sessionId: string, input: CreateMessageInput) {
-    // Verify session exists
-    const session = await this.db.query.sessions.findFirst({
-      where: eq(schema.sessions.id, sessionId),
-    });
-
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    // Serialize content: only stringify if not already a string
-    const serializedContent = typeof input.content === 'string'
-      ? input.content
-      : JSON.stringify(input.content);
-
-    const message = {
-      id: randomUUID(),
-      sessionId,
-      role: input.role,
-      content: serializedContent,
-      displayContent: input.displayContent || null, // Plain text for UI rendering
-      toolName: input.toolName || null,
-      stepIdx: input.stepIdx || null,
-      createdAt: new Date(),
-    };
-
-    await this.db.insert(schema.messages).values(message);
-
-    // Update session updatedAt
-    await this.db
-      .update(schema.sessions)
-      .set({ updatedAt: new Date() })
-      .where(eq(schema.sessions.id, sessionId));
-
-    // Generate smart title from first user message
-    const messageCount = await this.db.query.messages.findMany({
-      where: eq(schema.messages.sessionId, sessionId),
-    });
-
-    if (messageCount.length === 1 && input.role === "user") {
-      const smartTitle = this.generateSmartTitle([input.content]);
-      await this.db
-        .update(schema.sessions)
-        .set({ title: smartTitle })
-        .where(eq(schema.sessions.id, sessionId));
-    }
-
-    return message;
-  }
-
-  /**
    * Clear all messages and conversation logs from session (keep session)
+   * Deletes from both messages and messageParts tables
    */
   async clearMessages(sessionId: string) {
     const session = await this.db.query.sessions.findFirst({
@@ -250,6 +205,9 @@ export class SessionService {
 
     // Delete conversation logs
     await this.db.delete(schema.conversationLogs).where(eq(schema.conversationLogs.sessionId, sessionId));
+
+    // Delete message parts first (FK constraint)
+    await this.db.delete(schema.messageParts).where(eq(schema.messageParts.sessionId, sessionId));
 
     // Delete messages
     await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
@@ -267,99 +225,23 @@ export class SessionService {
   }
 
   /**
-   * Load messages as ModelMessage array (for AI SDK v6)
+   * Update session title based on first user message content
    */
-  async loadMessages(sessionId: string): Promise<any[]> {
-    const session = await this.getSessionById(sessionId);
-
-    return session.messages.map((msg: any) => {
-      let content = msg.content;
-
-      // Parse JSON content if it's a string
-      if (typeof content === 'string') {
-        try {
-          content = JSON.parse(content);
-        } catch {
-          // If parsing fails, use as plain string (for user messages)
-          // This handles both valid JSON strings and plain text
-        }
-      }
-
-      return {
-        role: msg.role,
-        content,
-      };
-    });
-  }
-
-  /**
-   * Save messages array (for AI SDK v6 checkpointing)
-   */
-  async saveMessages(sessionId: string, messages: any[]) {
-    // Check if session exists, create if not
-    let session = await this.db.query.sessions.findFirst({
-      where: eq(schema.sessions.id, sessionId),
-    });
-
-    if (!session) {
-      // Create session with the provided sessionId
-      await this.db.insert(schema.sessions).values({
-        id: sessionId,
-        title: 'New Session',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    }
-
-    // Clear existing messages
-    await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
-
-    // Insert all messages
-    for (const msg of messages) {
-      await this.addMessage(sessionId, {
-        role: msg.role,
-        content: msg.content,
-        displayContent: msg.displayContent, // Pass through display text
-        toolName: undefined,
-        stepIdx: undefined
-      });
-    }
-
-    // Update session timestamp
+  async updateTitleFromContent(sessionId: string, content: string): Promise<void> {
+    const smartTitle = this.generateSmartTitle(content);
     await this.db
       .update(schema.sessions)
-      .set({ updatedAt: new Date() })
+      .set({ title: smartTitle })
       .where(eq(schema.sessions.id, sessionId));
-
-    // Generate smart title from first user message
-    const userMessages = messages.filter(m => m.role === 'user');
-    if (userMessages.length > 0) {
-      const smartTitle = this.generateSmartTitle(userMessages);
-      await this.db
-        .update(schema.sessions)
-        .set({ title: smartTitle })
-        .where(eq(schema.sessions.id, sessionId));
-    }
-
-    return { success: true, messageCount: messages.length };
   }
 
   /**
-   * Generate smart title from first user message
+   * Generate smart title from content (first 40 chars)
    */
-  generateSmartTitle(messages: any[]): string {
-    const firstUserMessage = messages.find(
-      (m) => typeof m === "string" || (m && m.role === "user"),
-    );
-
-    if (!firstUserMessage) {
+  private generateSmartTitle(content: string): string {
+    if (!content) {
       return "New Session";
     }
-
-    const content =
-      typeof firstUserMessage === "string"
-        ? firstUserMessage
-        : firstUserMessage.content || "New Session";
 
     // Extract first 40 chars, clean up
     const title = content
@@ -369,6 +251,10 @@ export class SessionService {
 
     return title.length < content.length ? `${title}...` : title;
   }
+
+  // ============================================================================
+  // Working Context
+  // ============================================================================
 
   /**
    * Save working context to session

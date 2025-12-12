@@ -437,6 +437,68 @@ export function createTraceLogger(traceId: string): TraceLogger {
 		},
 
 		// =========================================================================
+		// Compaction Events
+		// =========================================================================
+
+		compactionStart(tokensBefore: number, modelLimit: number) {
+			getStore().addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "compaction-start",
+				level: "info",
+				summary: `Compaction starting: ${formatTokenCount(tokensBefore)} tokens (limit: ${formatTokenCount(modelLimit)})`,
+				input: { tokensBefore, modelLimit },
+			});
+		},
+
+		compactionProgress(stage: 'pruning' | 'summarizing', progress: number) {
+			getStore().addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "compaction-progress",
+				level: "info",
+				summary: `Compacting: ${stage} (${progress}%)`,
+				input: { stage, progress },
+			});
+		},
+
+		compactionComplete(result: {
+			tokensBefore: number;
+			tokensAfter: number;
+			tokensSaved: number;
+			compressionRatio: number;
+			wasPruned: boolean;
+			wasCompacted: boolean;
+			prunedOutputs: number;
+			compactedMessages: number;
+			removedTools: string[];
+		}) {
+			const actions: string[] = [];
+			if (result.wasPruned) actions.push(`pruned ${result.prunedOutputs} outputs`);
+			if (result.wasCompacted) actions.push(`summarized ${result.compactedMessages} msgs`);
+
+			getStore().addEntry({
+				traceId,
+				timestamp: Date.now(),
+				type: "compaction-complete",
+				level: "info",
+				summary: `Compacted: ${formatTokenCount(result.tokensBefore)} → ${formatTokenCount(result.tokensAfter)} (${result.compressionRatio}% saved)`,
+				input: actions.length > 0 ? { actions } : undefined,
+				output: {
+					tokensBefore: result.tokensBefore,
+					tokensAfter: result.tokensAfter,
+					tokensSaved: result.tokensSaved,
+					compressionRatio: result.compressionRatio,
+					wasPruned: result.wasPruned,
+					wasCompacted: result.wasCompacted,
+					prunedOutputs: result.prunedOutputs,
+					compactedMessages: result.compactedMessages,
+					removedTools: result.removedTools,
+				},
+			});
+		},
+
+		// =========================================================================
 		// Working Memory
 		// =========================================================================
 

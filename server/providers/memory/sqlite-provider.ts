@@ -3,6 +3,9 @@
  *
  * Implementation of MemoryProvider using SQLite via Drizzle ORM.
  * This is the default provider for development and single-instance deployments.
+ *
+ * NOTE: Message content is handled by MessageStore. This provider
+ * only handles session metadata and working context.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -15,9 +18,6 @@ import type {
   SessionWithMetadata,
   CreateSessionInput,
   UpdateSessionInput,
-  StoredMessage,
-  NewMessage,
-  ModelMessage,
 } from './types';
 import type { WorkingContextState } from '../../memory';
 
@@ -138,104 +138,17 @@ export class SQLiteMemoryProvider implements MemoryProvider {
   async deleteSession(sessionId: string): Promise<void> {
     // Delete children first (defense in depth)
     await this.db.delete(schema.conversationLogs).where(eq(schema.conversationLogs.sessionId, sessionId));
+    await this.db.delete(schema.messageParts).where(eq(schema.messageParts.sessionId, sessionId));
     await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
     await this.db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId));
-  }
-
-  // ============================================================================
-  // Message Operations
-  // ============================================================================
-
-  async addMessage(sessionId: string, message: NewMessage): Promise<StoredMessage> {
-    // Serialize content
-    const serializedContent = typeof message.content === 'string'
-      ? message.content
-      : JSON.stringify(message.content);
-
-    const stored = {
-      id: randomUUID(),
-      sessionId,
-      role: message.role,
-      content: serializedContent,
-      displayContent: message.displayContent ?? null,
-      toolName: message.toolName ?? null,
-      stepIdx: message.stepIdx ?? null,
-      createdAt: new Date(),
-    };
-
-    await this.db.insert(schema.messages).values(stored);
-
-    // Update session timestamp
-    await this.db
-      .update(schema.sessions)
-      .set({ updatedAt: new Date() })
-      .where(eq(schema.sessions.id, sessionId));
-
-    // Generate smart title from first user message
-    await this.maybeUpdateTitle(sessionId, message);
-
-    return {
-      id: stored.id,
-      sessionId: stored.sessionId,
-      role: stored.role as StoredMessage['role'],
-      content: message.content,
-      displayContent: stored.displayContent,
-      toolName: stored.toolName,
-      stepIdx: stored.stepIdx,
-      createdAt: stored.createdAt,
-    };
-  }
-
-  async loadMessages(sessionId: string): Promise<ModelMessage[]> {
-    const messages = await this.db.query.messages.findMany({
-      where: eq(schema.messages.sessionId, sessionId),
-      orderBy: schema.messages.createdAt,
-    });
-
-    return messages.map((msg) => {
-      let content = msg.content;
-
-      // Parse JSON content if string
-      if (typeof content === 'string') {
-        try {
-          content = JSON.parse(content);
-        } catch {
-          // Keep as string if not valid JSON
-        }
-      }
-
-      return {
-        role: msg.role as ModelMessage['role'],
-        content,
-      };
-    });
-  }
-
-  async saveMessages(sessionId: string, messages: ModelMessage[]): Promise<void> {
-    // Ensure session exists
-    await this.ensureSession(sessionId);
-
-    // Clear existing messages
-    await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
-
-    // Insert all messages
-    for (const msg of messages) {
-      await this.addMessage(sessionId, {
-        role: msg.role,
-        content: msg.content,
-      });
-    }
-
-    // Update session timestamp
-    await this.db
-      .update(schema.sessions)
-      .set({ updatedAt: new Date() })
-      .where(eq(schema.sessions.id, sessionId));
   }
 
   async clearMessages(sessionId: string): Promise<void> {
     // Delete conversation logs
     await this.db.delete(schema.conversationLogs).where(eq(schema.conversationLogs.sessionId, sessionId));
+
+    // Delete message parts first (FK constraint)
+    await this.db.delete(schema.messageParts).where(eq(schema.messageParts.sessionId, sessionId));
 
     // Delete messages
     await this.db.delete(schema.messages).where(eq(schema.messages.sessionId, sessionId));
@@ -273,37 +186,6 @@ export class SQLiteMemoryProvider implements MemoryProvider {
     await this.db
       .update(schema.sessions)
       .set({ workingContext: JSON.stringify(context) })
-      .where(eq(schema.sessions.id, sessionId));
-  }
-
-  // ============================================================================
-  // Private Helpers
-  // ============================================================================
-
-  private async maybeUpdateTitle(sessionId: string, message: NewMessage): Promise<void> {
-    if (message.role !== 'user') return;
-
-    const messageCount = await this.db.query.messages.findMany({
-      where: eq(schema.messages.sessionId, sessionId),
-    });
-
-    // Only update title on first user message
-    if (messageCount.length !== 1) return;
-
-    const content = typeof message.content === 'string'
-      ? message.content
-      : JSON.stringify(message.content);
-
-    const title = content
-      .slice(0, 40)
-      .replace(/\n/g, ' ')
-      .trim();
-
-    const smartTitle = title.length < content.length ? `${title}...` : title;
-
-    await this.db
-      .update(schema.sessions)
-      .set({ title: smartTitle })
       .where(eq(schema.sessions.id, sessionId));
   }
 }

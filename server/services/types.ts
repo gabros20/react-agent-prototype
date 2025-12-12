@@ -16,6 +16,7 @@ import type { ImageService } from './cms/image-service';
 import type { SiteSettingsService } from './cms/site-settings-service';
 import type { ConversationLogService } from './conversation-log-service';
 import type { SessionService } from './session-service';
+import type { MessageStore } from './message-store';
 import type { AgentOrchestrator } from '../execution';
 
 // ============================================================================
@@ -50,6 +51,7 @@ export interface Services {
   // Session Services
   readonly conversationLogService: ConversationLogService;
   readonly sessionService: SessionService;
+  readonly messageStore: MessageStore;
 
   // Agent Orchestrator (created lazily to avoid circular deps)
   readonly agentOrchestrator: AgentOrchestrator;
