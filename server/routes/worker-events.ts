@@ -8,8 +8,9 @@
 import express from "express";
 import { getSubscriber, WorkerEvent } from "../services/worker-events.service";
 import { imageQueue } from "../queues/image-queue";
+import type { Services } from "../services/types";
 
-export function createWorkerEventsRoutes() {
+export function createWorkerEventsRoutes(services: Services) {
 	const router = express.Router();
 
 	// GET /v1/worker-events/stream - SSE stream for worker events
@@ -35,7 +36,7 @@ export function createWorkerEventsRoutes() {
 			try {
 				await subscriber.subscribe();
 			} catch (error) {
-				console.error("[WorkerEvents] Failed to subscribe:", error);
+				services.logger.error("[WorkerEvents] Failed to subscribe", { error: error instanceof Error ? error.message : String(error) });
 				writeSSE("error", { message: "Failed to connect to worker events" });
 				res.end();
 				return;
@@ -62,7 +63,7 @@ export function createWorkerEventsRoutes() {
 				},
 			});
 		} catch (error) {
-			console.warn("[WorkerEvents] Failed to get initial queue status:", error);
+			services.logger.warn("[WorkerEvents] Failed to get initial queue status", { error: error instanceof Error ? error.message : String(error) });
 			writeSSE("connected", {
 				type: "connected",
 				timestamp: Date.now(),
@@ -91,12 +92,12 @@ export function createWorkerEventsRoutes() {
 		req.on("close", () => {
 			subscriber.off("event", eventHandler);
 			clearInterval(heartbeatInterval);
-			console.log("[WorkerEvents] Client disconnected from SSE stream");
+			services.logger.info("[WorkerEvents] Client disconnected from SSE stream");
 		});
 
 		// Handle errors
 		req.on("error", (error) => {
-			console.error("[WorkerEvents] SSE connection error:", error);
+			services.logger.error("[WorkerEvents] SSE connection error", { error: error instanceof Error ? error.message : String(error) });
 			subscriber.off("event", eventHandler);
 			clearInterval(heartbeatInterval);
 		});
@@ -139,7 +140,7 @@ export function createWorkerEventsRoutes() {
 				},
 			});
 		} catch (error) {
-			console.error("[WorkerEvents] Failed to get queue status:", error);
+			services.logger.error("[WorkerEvents] Failed to get queue status", { error: error instanceof Error ? error.message : String(error) });
 			res.status(500).json({
 				success: false,
 				error: "Failed to get queue status",

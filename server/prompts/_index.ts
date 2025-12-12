@@ -6,7 +6,12 @@
  * In prod mode: Caches compiled templates
  *
  * Prompt files use XML format (.xml extension)
+ *
+ * For type-safe prompt building, see: prompts/builder/
  */
+
+// Re-export builder module for convenience
+export * from './builder';
 
 import Handlebars from "handlebars";
 import fs from "node:fs";

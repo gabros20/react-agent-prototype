@@ -3,6 +3,14 @@ import { eq } from "drizzle-orm";
 import type { DrizzleDB } from "../../db/client";
 import * as schema from "../../db/schema";
 import type { VectorIndexService } from "../vector-index";
+import {
+  sectionCache,
+  sectionsByPageCache,
+  templateCache,
+  invalidateSectionCache,
+  invalidateTemplateCache,
+  invalidatePageCache,
+} from "./cache";
 
 export interface CreateSectionTemplateInput {
   key: string;
@@ -110,6 +118,9 @@ export class SectionService {
 
     await this.db.insert(schema.sectionTemplates).values(sectionTemplate);
 
+    // Invalidate template key lookups that might have cached null for this key
+    templateCache.deleteByPrefix('template:key:');
+
     // Index in vector DB
     await this.vectorIndex.add({
       id: sectionTemplate.id,
@@ -152,6 +163,9 @@ export class SectionService {
       .set(updated)
       .where(eq(schema.sectionTemplates.id, id));
 
+    // Invalidate cache
+    invalidateTemplateCache(id);
+
     // Re-index if name/key changed
     if (input.name !== original.name || input.key !== original.key) {
       await this.vectorIndex.update(id, {
@@ -167,17 +181,27 @@ export class SectionService {
   }
 
   async getSectionTemplateById(id: string) {
-    // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-    return await this.db.query.sectionTemplates.findFirst({
-      where: eq(schema.sectionTemplates.id, id),
-    });
+    return templateCache.getOrFetch(
+      `template:id:${id}`,
+      async () => {
+        // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
+        return await this.db.query.sectionTemplates.findFirst({
+          where: eq(schema.sectionTemplates.id, id),
+        });
+      }
+    );
   }
 
   async getSectionTemplateByKey(key: string) {
-    // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-    return await this.db.query.sectionTemplates.findFirst({
-      where: eq(schema.sectionTemplates.key, key),
-    });
+    return templateCache.getOrFetch(
+      `template:key:${key}`,
+      async () => {
+        // @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
+        return await this.db.query.sectionTemplates.findFirst({
+          where: eq(schema.sectionTemplates.key, key),
+        });
+      }
+    );
   }
 
   async listSectionTemplates() {
@@ -187,6 +211,9 @@ export class SectionService {
   async deleteSectionTemplate(id: string) {
     await this.db.delete(schema.sectionTemplates).where(eq(schema.sectionTemplates.id, id));
 
+    // Invalidate cache
+    invalidateTemplateCache(id);
+
     // Remove from vector index
     await this.vectorIndex.delete(id);
   }
@@ -194,6 +221,98 @@ export class SectionService {
   // ===========================================================================
   // Page Section Methods
   // ===========================================================================
+
+  /**
+   * Get a page section by ID
+   */
+  async getPageSectionById(id: string) {
+    return sectionCache.getOrFetch(
+      `section:${id}`,
+      async () => {
+        return await this.db.query.pageSections.findFirst({
+          where: eq(schema.pageSections.id, id),
+          with: {
+            sectionTemplate: true,
+          },
+        });
+      }
+    );
+  }
+
+  /**
+   * Get multiple page sections by IDs
+   */
+  async getPageSectionsByIds(ids: string[]) {
+    if (ids.length === 0) return [];
+
+    const { inArray } = await import('drizzle-orm');
+    return await this.db.query.pageSections.findMany({
+      where: inArray(schema.pageSections.id, ids),
+      with: {
+        sectionTemplate: true,
+      },
+    });
+  }
+
+  /**
+   * Update page section metadata (status, hidden, sortOrder)
+   */
+  async updatePageSection(id: string, updates: {
+    status?: 'published' | 'unpublished' | 'draft';
+    hidden?: boolean;
+    sortOrder?: number;
+  }) {
+    const section = await this.getPageSectionById(id);
+    if (!section) {
+      throw new Error(`Page section with id '${id}' not found`);
+    }
+
+    await this.db
+      .update(schema.pageSections)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schema.pageSections.id, id));
+
+    // Invalidate cache - section cache AND page cache (page includes sections)
+    invalidateSectionCache(id, section.pageId);
+    invalidatePageCache(section.pageId);
+
+    return this.getPageSectionById(id);
+  }
+
+  /**
+   * Delete a page section and its contents
+   */
+  async deletePageSection(id: string) {
+    const section = await this.getPageSectionById(id);
+    if (!section) {
+      throw new Error(`Page section with id '${id}' not found`);
+    }
+
+    // Delete content first (cascade should handle this, but being explicit)
+    await this.db.delete(schema.pageSectionContents)
+      .where(eq(schema.pageSectionContents.pageSectionId, id));
+
+    // Delete the section
+    await this.db.delete(schema.pageSections)
+      .where(eq(schema.pageSections.id, id));
+
+    // Invalidate cache - section cache AND page cache (page includes sections)
+    invalidateSectionCache(id, section.pageId);
+    invalidatePageCache(section.pageId);
+  }
+
+  /**
+   * Delete multiple page sections
+   */
+  async deletePageSections(ids: string[]) {
+    const sections = await this.getPageSectionsByIds(ids);
+
+    for (const section of sections) {
+      await this.deletePageSection(section.id);
+    }
+
+    return sections.length;
+  }
 
   async addSectionToPage(input: AddSectionToPageInput) {
     // Verify page exists
@@ -248,6 +367,10 @@ export class SectionService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    // Invalidate caches - page now has new section
+    invalidatePageCache(input.pageId);
+    sectionsByPageCache.delete(`sections:page:${input.pageId}`);
 
     return pageSection;
   }
@@ -304,6 +427,10 @@ export class SectionService {
         })
         .where(eq(schema.pageSectionContents.id, existing.id));
 
+      // Invalidate cache - section cache AND page cache (page includes section content)
+      invalidateSectionCache(input.pageSectionId, pageSection.pageId);
+      invalidatePageCache(pageSection.pageId);
+
       return { ...existing, content: JSON.stringify(mergedContent), updatedAt: new Date() };
     } else {
       // Create new
@@ -318,6 +445,10 @@ export class SectionService {
 
       await this.db.insert(schema.pageSectionContents).values(newContent);
 
+      // Invalidate cache - section cache AND page cache (page includes section content)
+      invalidateSectionCache(input.pageSectionId, pageSection.pageId);
+      invalidatePageCache(pageSection.pageId);
+
       return newContent;
     }
   }
@@ -329,62 +460,66 @@ export class SectionService {
    * @param localeCode - Locale for content (default: 'en')
    */
   async getPageSections(pageId: string, includeContent = false, localeCode = 'en') {
-    // Verify page exists
-    const page = await this.db.query.pages.findFirst({
-      where: eq(schema.pages.id, pageId),
-    });
+    const cacheKey = `sections:page:${pageId}:${includeContent}:${localeCode}`;
 
-    if (!page) {
-      throw new Error(`Page with id '${pageId}' not found`);
-    }
+    return sectionsByPageCache.getOrFetch(cacheKey, async () => {
+      // Verify page exists
+      const page = await this.db.query.pages.findFirst({
+        where: eq(schema.pages.id, pageId),
+      });
 
-    // Fetch sections with optional content
-    const sections = await this.db.query.pageSections.findMany({
-      where: eq(schema.pageSections.pageId, pageId),
-      with: includeContent ? {
-        sectionTemplate: true,
-        contents: true,
-      } : {
-        sectionTemplate: true,
-      },
-      orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
-    });
-
-    // Format response
-    return sections.map((section: any) => {
-      const base = {
-        id: section.id,
-        sectionTemplateId: section.sectionTemplateId,
-        sectionKey: section.sectionTemplate?.key,
-        sectionName: section.sectionTemplate?.name,
-        sortOrder: section.sortOrder,
-        status: section.status,
-        hidden: section.hidden,
-      };
-
-      if (includeContent && section.contents) {
-        // Find content for requested locale
-        const contentRecord = section.contents.find((c: any) => c.localeCode === localeCode);
-
-        // Parse content if it's a JSON string
-        let parsedContent = {};
-        if (contentRecord?.content) {
-          try {
-            parsedContent = typeof contentRecord.content === 'string'
-              ? JSON.parse(contentRecord.content)
-              : contentRecord.content;
-          } catch (error) {
-            console.error(`Failed to parse content for section ${section.id}:`, error);
-          }
-        }
-
-        return {
-          ...base,
-          content: parsedContent,
-        };
+      if (!page) {
+        throw new Error(`Page with id '${pageId}' not found`);
       }
 
-      return base;
+      // Fetch sections with optional content
+      const sections = await this.db.query.pageSections.findMany({
+        where: eq(schema.pageSections.pageId, pageId),
+        with: includeContent ? {
+          sectionTemplate: true,
+          contents: true,
+        } : {
+          sectionTemplate: true,
+        },
+        orderBy: (ps, { asc }) => [asc(ps.sortOrder)],
+      });
+
+      // Format response
+      return sections.map((section: any) => {
+        const base = {
+          id: section.id,
+          sectionTemplateId: section.sectionTemplateId,
+          sectionKey: section.sectionTemplate?.key,
+          sectionName: section.sectionTemplate?.name,
+          sortOrder: section.sortOrder,
+          status: section.status,
+          hidden: section.hidden,
+        };
+
+        if (includeContent && section.contents) {
+          // Find content for requested locale
+          const contentRecord = section.contents.find((c: any) => c.localeCode === localeCode);
+
+          // Parse content if it's a JSON string
+          let parsedContent = {};
+          if (contentRecord?.content) {
+            try {
+              parsedContent = typeof contentRecord.content === 'string'
+                ? JSON.parse(contentRecord.content)
+                : contentRecord.content;
+            } catch (error) {
+              console.error(`Failed to parse content for section ${section.id}:`, error);
+            }
+          }
+
+          return {
+            ...base,
+            content: parsedContent,
+          };
+        }
+
+        return base;
+      });
     });
   }
 

@@ -1,393 +1,225 @@
 "use client";
 
+/**
+ * useAgent Hook
+ *
+ * Manages agent communication and message streaming.
+ * SSE event handling is delegated to sse-handlers.ts.
+ */
+
 import { useCallback, useState, useRef } from "react";
 import { useChatStore } from "../_stores/chat-store";
 import { useTraceStore, type TraceEntry } from "../_stores/trace-store";
 import { useSessionStore } from "../_stores/session-store";
 import { agentApi, sessionsApi } from "@/lib/api";
 import { debugLogger } from "@/lib/debug-logger";
-import type { SSEEvent } from "@/lib/api";
+import { dispatchSSEEvent, type SSEHandlerContext } from "./sse-handlers";
 import type { TraceLogger } from "@/lib/debug-logger";
 
-// Custom message type that's simpler than UIMessage
+// ============================================================================
+// Types
+// ============================================================================
+
 export interface ChatMessage {
-	id: string;
-	role: "user" | "assistant" | "system";
-	content: string;
-	createdAt: Date;
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: Date;
 }
 
+// ============================================================================
+// Hook
+// ============================================================================
+
 export function useAgent() {
-	// Store selectors
-	const messages = useChatStore((state) => state.messages);
-	const sessionId = useChatStore((state) => state.sessionId);
-	const streamingMessage = useChatStore((state) => state.streamingMessage);
-	const addMessage = useChatStore((state) => state.addMessage);
-	const setIsStreaming = useChatStore((state) => state.setIsStreaming);
-	const setSessionId = useChatStore((state) => state.setSessionId);
-	const setCurrentTraceId = useChatStore((state) => state.setCurrentTraceId);
-	const setAgentStatus = useChatStore((state) => state.setAgentStatus);
-	const startStreamingMessage = useChatStore((state) => state.startStreamingMessage);
-	const appendToStreamingMessage = useChatStore((state) => state.appendToStreamingMessage);
-	const finalizeStreamingMessage = useChatStore((state) => state.finalizeStreamingMessage);
-	const clearStreamingMessage = useChatStore((state) => state.clearStreamingMessage);
-	const loadSessions = useSessionStore((state) => state.loadSessions);
-	const getCurrentSessionModel = useSessionStore((state) => state.getCurrentSessionModel);
+  // Store selectors - using individual selectors to minimize re-renders
+  const messages = useChatStore((s) => s.messages);
+  const sessionId = useChatStore((s) => s.sessionId);
+  const streamingMessage = useChatStore((s) => s.streamingMessage);
+  const isStreaming = useChatStore((s) => s.isStreaming);
 
-	const [error, setError] = useState<Error | null>(null);
+  // Store actions - select individually (function references are stable in Zustand)
+  const addMessage = useChatStore((s) => s.addMessage);
+  const setIsStreaming = useChatStore((s) => s.setIsStreaming);
+  const setSessionId = useChatStore((s) => s.setSessionId);
+  const setCurrentTraceId = useChatStore((s) => s.setCurrentTraceId);
+  const setAgentStatus = useChatStore((s) => s.setAgentStatus);
+  const startStreamingMessage = useChatStore((s) => s.startStreamingMessage);
+  const appendToStreamingMessage = useChatStore((s) => s.appendToStreamingMessage);
+  const finalizeStreamingMessage = useChatStore((s) => s.finalizeStreamingMessage);
+  const clearStreamingMessage = useChatStore((s) => s.clearStreamingMessage);
 
-	// Refs for tracking state across SSE events
-	const traceRef = useRef<TraceLogger | null>(null);
-	const traceStartTimeRef = useRef<number>(0);
-	const userPromptRef = useRef<string>("");
-	const streamingTextRef = useRef<string>("");
+  const loadSessions = useSessionStore((s) => s.loadSessions);
+  const getCurrentSessionModel = useSessionStore((s) => s.getCurrentSessionModel);
 
-	const sendMessage = useCallback(
-		async (prompt: string) => {
-			if (!prompt.trim()) return;
+  const [error, setError] = useState<Error | null>(null);
 
-			setError(null);
-			setIsStreaming(true);
-			setAgentStatus({ state: "thinking" });
+  // Refs for cross-event state
+  const traceRef = useRef<TraceLogger | null>(null);
+  const traceStartTimeRef = useRef<number>(0);
+  const userPromptRef = useRef<string>("");
+  const streamingTextRef = useRef<string>("");
 
-			// Store user prompt for conversation log
-			userPromptRef.current = prompt;
-			traceStartTimeRef.current = Date.now();
-			streamingTextRef.current = "";
+  // Build handler context
+  const buildHandlerContext = useCallback((): SSEHandlerContext => ({
+    trace: traceRef.current,
+    store: {
+      setAgentStatus,
+      startStreamingMessage,
+      appendToStreamingMessage,
+      finalizeStreamingMessage,
+      clearStreamingMessage,
+      setSessionId,
+      setCurrentTraceId,
+    },
+    refs: {
+      streamingText: streamingTextRef,
+    },
+    currentSessionId: sessionId,
+  }), [
+    setAgentStatus,
+    startStreamingMessage,
+    appendToStreamingMessage,
+    finalizeStreamingMessage,
+    clearStreamingMessage,
+    setSessionId,
+    setCurrentTraceId,
+    sessionId,
+  ]);
 
-			// Add user message
-			const userMessage: ChatMessage = {
-				id: crypto.randomUUID(),
-				role: "user",
-				content: prompt,
-				createdAt: new Date(),
-			};
-			addMessage(userMessage as unknown as Parameters<typeof addMessage>[0]);
+  // Initialize trace on first event with traceId
+  const initializeTrace = useCallback((data: Record<string, unknown>): string | undefined => {
+    if (data.traceId && !traceRef.current) {
+      const traceId = data.traceId as string;
+      traceRef.current = debugLogger.trace(traceId);
+      traceRef.current.start({
+        sessionId: sessionId || undefined,
+        userPrompt: userPromptRef.current,
+      });
+      return traceId;
+    }
+    return undefined;
+  }, [sessionId]);
 
-			try {
-				const modelId = getCurrentSessionModel();
-				const stream = await agentApi.stream({
-					sessionId: sessionId || undefined,
-					prompt,
-					modelId: modelId || undefined,
-				});
+  // Handle 'done' event - save conversation log
+  const handleDone = useCallback(async () => {
+    const trace = traceRef.current;
+    if (!trace) return;
 
-				let currentTraceId = "";
-				let assistantText = "";
+    const completedAt = Date.now();
 
-				for await (const event of stream) {
-					const result = processSSEEvent(event, {
-						currentTraceId,
-						assistantText,
-						sessionId,
-					});
-					if (result.traceId) currentTraceId = result.traceId;
-					if (result.text !== undefined) assistantText = result.text;
-				}
-			} catch (err) {
-				const error = err as Error;
-				console.error("Agent error:", error);
-				setError(error);
-				debugLogger.error(error.message, error);
-			} finally {
-				setIsStreaming(false);
-				setAgentStatus(null);
-			}
-		},
-		[sessionId, addMessage, setIsStreaming, setSessionId, setCurrentTraceId, setAgentStatus, clearStreamingMessage, loadSessions, getCurrentSessionModel]
-	);
+    // Complete the trace
+    trace.complete({ metrics: useTraceStore.getState().getMetrics() });
 
-	// Helper to ensure trace is initialized
-	function ensureTrace(
-		d: Record<string, unknown>,
-		state: { currentTraceId: string; sessionId: string | null }
-	): string | undefined {
-		if (d.traceId && !state.currentTraceId) {
-			const traceId = d.traceId as string;
-			traceRef.current = debugLogger.trace(traceId);
-			traceRef.current.start({
-				sessionId: state.sessionId || undefined,
-				userPrompt: userPromptRef.current,
-			});
-			return traceId;
-		}
-		return undefined;
-	}
+    // Get entries and metrics
+    const store = useTraceStore.getState();
+    const entries = store.entriesByTrace[trace.traceId] || [];
+    const metrics = store.getMetrics();
 
-	// Process a single SSE event
-	function processSSEEvent(
-		event: SSEEvent,
-		state: { currentTraceId: string; assistantText: string; sessionId: string | null }
-	): { traceId?: string; text?: string } {
-		const { type, data } = event;
-		const d = data as Record<string, unknown>;
+    // Save to backend
+    const actualSessionId = useChatStore.getState().sessionId;
+    if (actualSessionId) {
+      const modelInfo = store.modelInfoByTrace[trace.traceId];
+      try {
+        await sessionsApi.saveLog(actualSessionId, {
+          userPrompt: userPromptRef.current,
+          entries: entries.map((e: TraceEntry) => ({ ...e })),
+          metrics,
+          modelInfo: modelInfo || undefined,
+          startedAt: new Date(traceStartTimeRef.current).toISOString(),
+          completedAt: new Date(completedAt).toISOString(),
+        });
+        await loadSessions();
+      } catch (err) {
+        console.error("Failed to save conversation log:", err);
+      }
+    }
 
-		// Initialize trace on first event with traceId (could be system-prompt, model-info, etc.)
-		const newTraceId = ensureTrace(d, state);
-		if (newTraceId) {
-			state.currentTraceId = newTraceId;
-		}
+    traceRef.current = null;
+  }, [loadSessions]);
 
-		switch (type) {
-			case "log": {
-				// Process log messages for trace entries
-				const message = (d.message as string) || "";
-				const metadata = d.metadata as Record<string, unknown> | undefined;
-				const trace = traceRef.current;
-				if (!trace) break;
+  // Main send message function
+  const sendMessage = useCallback(async (prompt: string) => {
+    if (!prompt.trim()) return;
 
-				if (message.includes("Extracted entities to working memory")) {
-					trace.workingMemoryUpdate((metadata?.entityCount as number) || 0, metadata);
-				} else if (message.includes("Trimming message history")) {
-					trace.memoryTrimmed((metadata?.originalCount as number) || 0, (metadata?.newCount as number) || 0);
-				} else if (message.includes("Checkpoint saved")) {
-					trace.checkpointSaved((metadata?.stepNumber as number) || 0);
-				} else if (message.includes("Retry")) {
-					trace.retryAttempt(message, metadata);
-				} else if (message.includes("Loaded session history")) {
-					trace.sessionLoaded((metadata?.messageCount as number) || 0);
-				} else if (message.includes("Creating agent")) {
-					trace.systemLog(`Agent created: ${metadata?.toolCount || 0} tools, model: ${metadata?.modelId || "unknown"}`, metadata);
-				} else if ((d.level === "warn" || d.level === "error") && !message.includes("Tool") && !message.includes("failed")) {
-					trace.warn(message, metadata);
-				}
-				break;
-			}
+    // Reset state
+    setError(null);
+    setIsStreaming(true);
+    setAgentStatus({ state: "thinking" });
 
-			case "message-start": {
-				// Start a new streaming message for UI display
-				const messageId = (d.messageId as string) || crypto.randomUUID();
-				startStreamingMessage(messageId);
-				break;
-			}
+    // Store for conversation log
+    userPromptRef.current = prompt;
+    traceStartTimeRef.current = Date.now();
+    streamingTextRef.current = "";
 
-			case "text-delta": {
-				const delta = (d.delta as string) || (d.text as string) || "";
-				streamingTextRef.current += delta;
-				// Update streaming message for real-time UI display
-				appendToStreamingMessage(delta);
-				traceRef.current?.textDelta(delta);
-				return { text: state.assistantText + delta };
-			}
+    // Add user message to chat
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: prompt,
+      createdAt: new Date(),
+    };
+    addMessage(userMessage as Parameters<typeof addMessage>[0]);
 
-			case "message-complete": {
-				// Finalize the streaming message - move to messages array
-				finalizeStreamingMessage();
-				break;
-			}
+    try {
+      const modelId = getCurrentSessionModel();
+      const stream = await agentApi.stream({
+        sessionId: sessionId || undefined,
+        prompt,
+        modelId: modelId || undefined,
+      });
 
-			case "system-prompt": {
-				traceRef.current?.systemPrompt(
-					d.prompt as string,
-					(d.tokens as number) || 0,
-					d.workingMemoryTokens as number | undefined
-				);
-				break;
-			}
+      // Process SSE stream
+      for await (const event of stream) {
+        const { type, data } = event;
+        const eventData = data as Record<string, unknown>;
 
-			case "user-prompt": {
-				traceRef.current?.userPrompt(
-					d.prompt as string,
-					(d.tokens as number) || 0,
-					d.messageHistoryTokens as number | undefined,
-					d.messageCount as number | undefined,
-					d.messages as Array<{ role: string; content: unknown }> | undefined
-				);
-				break;
-			}
+        // Initialize trace on first event with traceId
+        initializeTrace(eventData);
 
-			case "tools-available": {
-				traceRef.current?.toolsAvailable(d.tools as string[]);
-				break;
-			}
+        // Build fresh context for each event (trace may have been initialized)
+        const ctx = buildHandlerContext();
+        ctx.trace = traceRef.current; // Use current trace ref
 
-			case "tools-discovered": {
-				// Handle dynamic tool discovery via tool_search
-				const tools = (d.tools as string[]) || [];
-				traceRef.current?.toolsDiscovered(tools);
-				break;
-			}
+        // Handle 'done' specially - it needs async processing
+        if (type === "done") {
+          await handleDone();
+          continue;
+        }
 
-			case "model-info": {
-				if (d.modelId) {
-					const pricing = d.pricing as { prompt: number; completion: number } | null;
-					traceRef.current?.modelInfo(d.modelId as string, pricing);
-				}
-				break;
-			}
+        // Dispatch to appropriate handler
+        const result = dispatchSSEEvent(type, eventData, ctx);
 
-			case "tool-call": {
-				setAgentStatus({ state: "tool-call", toolName: d.toolName as string });
-				const callId = (d.toolCallId as string) || crypto.randomUUID();
-				traceRef.current?.toolCall(d.toolName as string, d.args, callId);
-				break;
-			}
+        // Handle errors from handlers
+        if (result.error) {
+          setError(result.error);
+        }
+      }
+    } catch (err) {
+      const e = err as Error;
+      console.error("Agent error:", e);
+      setError(e);
+      debugLogger.error(e.message, e);
+    } finally {
+      setIsStreaming(false);
+      setAgentStatus(null);
+    }
+  }, [
+    sessionId,
+    addMessage,
+    setIsStreaming,
+    setAgentStatus,
+    getCurrentSessionModel,
+    initializeTrace,
+    buildHandlerContext,
+    handleDone,
+  ]);
 
-			case "tool-result": {
-				setAgentStatus({ state: "thinking" });
-				const callId = d.toolCallId as string;
-				const result = (d.result as Record<string, unknown>) || {};
-
-				if (result.requiresConfirmation === true) {
-					traceRef.current?.toolConfirmation(callId, d.toolName as string, result);
-				} else {
-					traceRef.current?.toolResult(callId, result);
-				}
-				break;
-			}
-
-			case "tool-error": {
-				setAgentStatus({ state: "thinking" });
-				traceRef.current?.toolError(d.toolCallId as string, (d.error as string) || "Tool execution failed");
-				break;
-			}
-
-			case "step-start": {
-				traceRef.current?.stepStart(d.stepNumber as number, {
-					activeTools: d.activeTools as string[] | undefined,
-					discoveredTools: d.discoveredTools as string[] | undefined,
-				});
-				streamingTextRef.current = "";
-				break;
-			}
-
-			case "instructions-injected": {
-				// Handle injected instructions for debug panel
-				const tools = (d.tools as string[]) || [];
-				const instructions = (d.instructions as string) || "";
-				const stepNumber = d.stepNumber as number;
-				const updatedSystemPrompt = d.updatedSystemPrompt as string | undefined;
-				traceRef.current?.instructionsInjected(stepNumber, tools, instructions, updatedSystemPrompt);
-				break;
-			}
-
-			case "llm-context": {
-				// Actual messages sent to LLM (after trimming)
-				const messages = (d.messages as Array<{ role: string; content: unknown }>) || [];
-				const messageCount = (d.messageCount as number) || messages.length;
-				const tokens = (d.tokens as number) || 0;
-				traceRef.current?.llmContext(messages, messageCount, tokens);
-				break;
-			}
-
-			case "context-cleanup": {
-				// Context cleanup: messages trimmed and/or tools removed
-				const messagesRemoved = (d.messagesRemoved as number) || 0;
-				const removedTools = (d.removedTools as string[]) || [];
-				const activeTools = (d.activeTools as string[]) || [];
-				traceRef.current?.contextCleanup(messagesRemoved, removedTools, activeTools);
-				break;
-			}
-
-			case "step-finish": {
-				const stepNumber = d.stepNumber as number;
-				const finalText = streamingTextRef.current;
-
-				if (finalText) {
-					traceRef.current?.textFinalize(stepNumber, finalText, d.duration as number | undefined);
-				} else {
-					traceRef.current?.textRemoveEmpty(stepNumber);
-				}
-				streamingTextRef.current = "";
-
-				const usage = d.usage as { promptTokens?: number; completionTokens?: number } | undefined;
-				traceRef.current?.stepComplete(stepNumber, {
-					duration: d.duration as number | undefined,
-					tokens: usage ? { input: usage.promptTokens || 0, output: usage.completionTokens || 0 } : undefined,
-				});
-				break;
-			}
-
-			case "step":
-			case "step-complete":
-			case "step-completed":
-				break; // Legacy events - ignore
-
-			case "result": {
-				const traceId = d.traceId as string;
-				setCurrentTraceId(traceId);
-				const text = (d.text as string) || "";
-
-				if (d.sessionId && d.sessionId !== state.sessionId) {
-					setSessionId(d.sessionId as string);
-				}
-
-				// Clear any remaining streaming message (shouldn't happen, but safety net)
-				clearStreamingMessage();
-
-				// NOTE: We no longer add assistant message here
-				// message-complete events handle adding messages during streaming
-
-				const usage = d.usage as { promptTokens?: number; completionTokens?: number; inputTokens?: number; outputTokens?: number } | undefined;
-				const inputTokens = usage?.promptTokens || usage?.inputTokens || 0;
-				const outputTokens = usage?.completionTokens || usage?.outputTokens || 0;
-				traceRef.current?.llmResponse(text, { input: inputTokens, output: outputTokens });
-
-				return { traceId, text };
-			}
-
-			case "error": {
-				traceRef.current?.error((d.error as string) || "Unknown error", d.stack as string | undefined);
-				setError(new Error((d.error as string) || "Unknown error"));
-				break;
-			}
-
-			case "done": {
-				const trace = traceRef.current;
-				if (!trace) break;
-
-				const completedAt = Date.now();
-
-				// Call complete() first - it adds the trace-complete entry
-				// Don't pass entries here - let trace.complete() capture them AFTER adding trace-complete
-				trace.complete({ metrics: useTraceStore.getState().getMetrics() });
-
-				// Now get entries AFTER trace-complete was added
-				const store = useTraceStore.getState();
-				const entries = store.entriesByTrace[trace.traceId] || [];
-				const metrics = store.getMetrics();
-
-				// Save to backend
-				const actualSessionId = useChatStore.getState().sessionId;
-				if (actualSessionId) {
-					const modelInfo = store.modelInfoByTrace[trace.traceId];
-					sessionsApi
-						.saveLog(actualSessionId, {
-							userPrompt: userPromptRef.current,
-							entries: entries.map((e: TraceEntry) => ({ ...e })),
-							metrics,
-							modelInfo: modelInfo || undefined,
-							startedAt: new Date(traceStartTimeRef.current).toISOString(),
-							completedAt: new Date(completedAt).toISOString(),
-						})
-						.then(() => loadSessions())
-						.catch((err) => console.error("Failed to save conversation log:", err));
-				}
-
-				traceRef.current = null;
-				break;
-			}
-
-			case "finish":
-				break; // AI SDK finish event - logged for debugging only
-
-			default:
-				console.warn("Unknown SSE event type:", type);
-		}
-
-		// Return new traceId if we just initialized the trace
-		if (newTraceId) {
-			return { traceId: newTraceId };
-		}
-
-		return {};
-	}
-
-	return {
-		messages,
-		streamingMessage,
-		sendMessage,
-		isStreaming: useChatStore((state) => state.isStreaming),
-		error,
-	};
+  return {
+    messages,
+    streamingMessage,
+    sendMessage,
+    isStreaming,
+    error,
+  };
 }

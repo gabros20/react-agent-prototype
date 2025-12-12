@@ -9,6 +9,7 @@ export type { SearchToolsOutput } from "./searchTools-tool";
 import { tool } from "ai";
 import metadata from "./searchTools-metadata";
 import { schema, outputSchema, execute } from "./searchTools-tool";
+import type { AgentContext } from "../_types/agent-context";
 
 // searchTools is special - it has an outputSchema, so we build it directly
 // instead of using assembleTool
@@ -27,7 +28,8 @@ Examples:
 	inputSchema: schema,
 	outputSchema: outputSchema,
 
-	execute: async (input) => {
-		return execute(input);
+	execute: async (input, { experimental_context }) => {
+		const ctx = experimental_context as AgentContext | undefined;
+		return execute(input, ctx);
 	},
 });

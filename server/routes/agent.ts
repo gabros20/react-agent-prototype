@@ -11,7 +11,7 @@
 
 import express from "express";
 import { z } from "zod";
-import type { ServiceContainer } from "../services/service-container";
+import type { Services } from "../services/types";
 import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 
 // Request schema
@@ -28,7 +28,7 @@ const agentRequestSchema = z.object({
 		.optional(),
 });
 
-export function createAgentRoutes(services: ServiceContainer) {
+export function createAgentRoutes(services: Services) {
 	const router = express.Router();
 
 	// POST /v1/agent/stream - Streaming agent execution
@@ -61,7 +61,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 
 			res.end();
 		} catch (error) {
-			console.error("Route error:", error);
+			services.logger.error("Agent stream route error", { error: error instanceof Error ? error.message : String(error) });
 			res.status(HttpStatus.BAD_REQUEST).json(
 				ApiResponse.error(ErrorCodes.VALIDATION_ERROR, error instanceof Error ? error.message : "Unknown error")
 			);
@@ -82,7 +82,7 @@ export function createAgentRoutes(services: ServiceContainer) {
 
 			res.json(ApiResponse.success(result));
 		} catch (error) {
-			console.error("Route error:", error);
+			services.logger.error("Agent generate route error", { error: error instanceof Error ? error.message : String(error) });
 			res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
 				ApiResponse.error(ErrorCodes.INTERNAL_ERROR, error instanceof Error ? error.message : "Unknown error")
 			);

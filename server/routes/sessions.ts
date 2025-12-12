@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import type { ServiceContainer } from "../services/service-container";
+import type { Services } from "../services/types";
 import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 
 const createSessionSchema = z.object({
@@ -39,7 +39,7 @@ const createConversationLogSchema = z.object({
   completedAt: z.string().transform((s) => new Date(s)).optional(),
 });
 
-export function createSessionRoutes(services: ServiceContainer) {
+export function createSessionRoutes(services: Services) {
   const router = express.Router();
 
   // =========================================================================

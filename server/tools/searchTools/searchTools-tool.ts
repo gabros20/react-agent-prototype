@@ -12,7 +12,8 @@
  */
 
 import { z } from "zod";
-import { smartToolSearchWithConfidence } from "../../services/tool-search";
+import { smartToolSearchWithConfidence } from "../../services/search";
+import type { AgentContext, AgentLogger } from "../_types/agent-context";
 
 // Configuration
 const CONFIG = {
@@ -39,10 +40,18 @@ export const schema = z.object({
 
 export type SearchToolsInput = z.infer<typeof schema>;
 
-export async function execute(input: SearchToolsInput): Promise<SearchToolsOutput> {
+/**
+ * Execute searchTools with optional context for logging.
+ * Context is optional for backward compatibility.
+ */
+export async function execute(
+	input: SearchToolsInput,
+	ctx?: AgentContext
+): Promise<SearchToolsOutput> {
 	const { query, limit = 8 } = input;
+	const logger = ctx?.logger;
 
-	console.log(`[searchTools] Query: "${query}", limit: ${limit}`);
+	logger?.info(`[searchTools] Query: "${query}", limit: ${limit}`);
 
 	// Run hybrid search with related tools expansion
 	const {
@@ -51,13 +60,13 @@ export async function execute(input: SearchToolsInput): Promise<SearchToolsOutpu
 		source,
 	} = await smartToolSearchWithConfidence(query, limit, { expandRelated: true });
 
-	console.log(
+	logger?.info(
 		`[searchTools] Search: confidence=${confidence.toFixed(2)}, source=${source}`
 	);
 
 	// Handle empty or low-confidence results
 	if (searchResults.length === 0 || confidence < CONFIG.MIN_CONFIDENCE) {
-		console.log(
+		logger?.info(
 			`[searchTools] No good matches for "${query}" (confidence: ${confidence.toFixed(2)})`
 		);
 		return {
@@ -68,7 +77,7 @@ export async function execute(input: SearchToolsInput): Promise<SearchToolsOutpu
 
 	// Return all results up to limit - multi-action tasks need multiple tools
 	const tools = searchResults.slice(0, limit).map((t) => t.name);
-	console.log(`[searchTools] Found ${tools.length} tools: [${tools.join(", ")}]`);
+	logger?.info(`[searchTools] Found ${tools.length} tools: [${tools.join(", ")}]`);
 
 	return {
 		tools,

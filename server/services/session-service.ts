@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { count, desc, eq } from "drizzle-orm";
 import type { DrizzleDB } from "../db/client";
 import * as schema from "../db/schema";
-import { WorkingContext, type WorkingContextState } from "./working-memory";
+import { WorkingContext, type WorkingContextState } from "../memory";
 
 export interface CreateSessionInput {
   title?: string;

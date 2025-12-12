@@ -10,9 +10,10 @@ import { createSessionRoutes } from "./routes/sessions";
 import { createWorkerEventsRoutes } from "./routes/worker-events";
 import { createModelsRoutes } from "./routes/models";
 import { createToolRoutes } from "./routes/tools";
-import uploadRoutes from "./routes/upload";
-import imageRoutes from "./routes/images";
-import { ServiceContainer } from "./services/service-container";
+import { createUploadRoutes } from "./routes/upload";
+import { createImageRoutes } from "./routes/images";
+import { createServices } from "./services/create-services";
+import type { Services } from "./services/types";
 import { getSubscriber } from "./services/worker-events.service";
 
 const app = express();
@@ -45,13 +46,14 @@ app.use(corsMiddleware);
 app.use(express.json({ limit: '5mb' })); // Increased for large conversation logs
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
+// Store services for cleanup on shutdown
+let services: Services | null = null;
+
 // Async startup
 async function startServer() {
   try {
-
-    // Initialize services (includes vector index and tool search initialization)
-    // Tool search (BM25 + vector) is now handled by ToolSearchService in ServiceContainer
-    const services = await ServiceContainer.initialize(db);
+    // Initialize services via factory (replaces ServiceContainer singleton)
+    services = await createServices({ db });
     console.log("✓ Services initialized");
 
     // Initialize worker events subscriber for SSE
@@ -60,14 +62,14 @@ async function startServer() {
     console.log("✓ Worker events subscriber initialized");
 
     // Routes
-    app.use("/api", uploadRoutes);
-    app.use("/api", imageRoutes);
+    app.use("/api", createUploadRoutes(services));
+    app.use("/api", createImageRoutes(services));
     app.use("/v1/teams/:team/sites/:site/environments/:env", createCMSRoutes(services));
     app.use("/v1/agent", createAgentRoutes(services));
     app.use("/v1/sessions", createSessionRoutes(services));
     app.use("/v1/models", createModelsRoutes());
     app.use("/v1/tools", createToolRoutes(services));
-    app.use("/v1/worker-events", createWorkerEventsRoutes());
+    app.use("/v1/worker-events", createWorkerEventsRoutes(services));
 
     // Serve uploaded images
     const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");

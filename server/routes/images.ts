@@ -1,12 +1,11 @@
 import express from "express";
-import { db } from "../db/client";
-import { images } from "../db/schema";
-import { eq } from "drizzle-orm";
 import imageProcessingService from "../services/storage/image-processing.service";
 import { searchLimiter } from "../middleware/rate-limit";
 import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 import type { PaginationMeta } from "../types/api-response";
+import type { Services } from "../services/types";
 
+export function createImageRoutes(services: Services) {
 const router = express.Router();
 
 /**
@@ -28,17 +27,15 @@ router.get("/api/images/:id/status", async (req, res) => {
  */
 router.get("/api/images/:id/thumbnail", async (req, res) => {
 	try {
-		const image = await db.query.images.findFirst({
-			where: eq(images.id, req.params.id),
-		});
+		const thumbnailData = await services.imageService.getThumbnail(req.params.id);
 
-		if (!image || !image.thumbnailData) {
+		if (!thumbnailData) {
 			return res.status(404).send("Thumbnail not found");
 		}
 
 		res.set("Content-Type", "image/webp");
 		res.set("Cache-Control", "public, max-age=31536000"); // 1 year
-		res.send(image.thumbnailData);
+		res.send(thumbnailData);
 	} catch (error) {
 		res.status(500).send("Error serving thumbnail");
 	}
@@ -71,10 +68,8 @@ router.get("/api/images/search", searchLimiter, async (req, res) => {
 			return res.status(HttpStatus.BAD_REQUEST).json(ApiResponse.error(ErrorCodes.MISSING_REQUIRED_FIELD, "Query parameter 'q' is required"));
 		}
 
-		const { ServiceContainer } = await import("../services/service-container");
-		const vectorIndex = ServiceContainer.get().vectorIndex;
 		const offset = (page - 1) * limit;
-		const { results, total } = await vectorIndex.searchImages(query, {
+		const { results, total } = await services.vectorIndex.searchImages(query, {
 			limit,
 			offset,
 		});
@@ -95,7 +90,7 @@ router.get("/api/images/search", searchLimiter, async (req, res) => {
 			})
 		);
 	} catch (error) {
-		console.error("Image search error:", error);
+		services.logger.error("Image search error", { error: error instanceof Error ? error.message : String(error) });
 		res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
 			ApiResponse.error(ErrorCodes.INTERNAL_ERROR, error instanceof Error ? error.message : "Search failed")
 		);
@@ -114,9 +109,7 @@ router.post("/api/images/find", async (req, res) => {
 			return res.status(HttpStatus.BAD_REQUEST).json(ApiResponse.error(ErrorCodes.MISSING_REQUIRED_FIELD, "Description field is required"));
 		}
 
-		const { ServiceContainer } = await import("../services/service-container");
-		const vectorIndex = ServiceContainer.get().vectorIndex;
-		const image = await vectorIndex.findImageByDescription(description);
+		const image = await services.vectorIndex.findImageByDescription(description);
 
 		res.json(ApiResponse.success(image));
 	} catch (error) {
@@ -130,7 +123,7 @@ router.post("/api/images/find", async (req, res) => {
  */
 router.delete("/api/images/:id", async (req, res) => {
 	try {
-		await imageProcessingService.deleteImage(req.params.id);
+		await imageProcessingService.deleteImage(req.params.id, services.vectorIndex);
 		res.json(ApiResponse.success({ deleted: true, id: req.params.id }));
 	} catch (error) {
 		res.status(HttpStatus.INTERNAL_SERVER_ERROR).json(
@@ -139,4 +132,5 @@ router.delete("/api/images/:id", async (req, res) => {
 	}
 });
 
-export default router;
+return router;
+}

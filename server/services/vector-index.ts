@@ -344,5 +344,5 @@ export class VectorIndexService {
   }
 }
 
-// No default export - use ServiceContainer.get().vectorIndex instead
-// This ensures a single instance managed by the service container
+// No default export - VectorIndexService is created via createServices() factory
+// This ensures a single instance with proper dependency injection

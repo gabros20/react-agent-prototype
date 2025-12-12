@@ -1,10 +1,10 @@
 /**
  * deleteImage Tool Implementation
+ *
+ * Uses ImageService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { images } from "../../db/schema";
 import imageProcessingService from "../../services/storage/image-processing.service";
 import type { AgentContext } from "../_types/agent-context";
 
@@ -18,16 +18,10 @@ export const schema = z.object({
 export type DeleteImageInput = z.infer<typeof schema>;
 
 export async function execute(input: DeleteImageInput, ctx: AgentContext) {
-	const imagesToDelete: any[] = [];
-	for (const id of input.ids) {
-		const image = await ctx.db.query.images.findFirst({
-			where: eq(images.id, id),
-			with: { metadata: true },
-		});
-		if (image) {
-			imagesToDelete.push(image);
-		}
-	}
+	const imageService = ctx.services.imageService;
+
+	// Get all images to delete via service
+	const imagesToDelete = await imageService.getByIds(input.ids);
 
 	if (imagesToDelete.length === 0) {
 		return { success: false, error: "No images found with provided IDs" };
@@ -40,15 +34,15 @@ export async function execute(input: DeleteImageInput, ctx: AgentContext) {
 			items: imagesToDelete.map((img) => ({
 				id: img.id,
 				filename: img.filename,
-				url:
-					img.cdnUrl ?? (img.filePath ? `/uploads/${img.filePath}` : undefined),
+				url: imageService.getImageUrl(img),
 			})),
 		};
 	}
 
-	const deleted: any[] = [];
+	const deleted: { id: string; filename: string }[] = [];
 	for (const image of imagesToDelete) {
 		try {
+			// Use imageProcessingService for full cleanup (files + DB via service)
 			await imageProcessingService.deleteImage(image.id);
 			deleted.push({ id: image.id, filename: image.filename });
 		} catch {

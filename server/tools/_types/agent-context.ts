@@ -7,8 +7,7 @@
 
 import type { DrizzleDB } from "../../db/client";
 import type { VectorIndexService } from "../../services/vector-index";
-import type { ServiceContainer } from "../../services/service-container";
-import type { SessionService } from "../../services/session-service";
+import type { Services } from "../../services/types";
 
 /**
  * Logger interface for agent context
@@ -47,11 +46,8 @@ export interface AgentContext {
 	traceId: string;
 	sessionId: string;
 
-	// Services
-	services: ServiceContainer;
-
-	// Session service for message persistence
-	sessionService: SessionService;
+	// Services (full services object for tool access)
+	services: Services;
 
 	// CMS Target (for multi-tenant operations)
 	cmsTarget?: {

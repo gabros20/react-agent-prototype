@@ -3,12 +3,11 @@
  *
  * Unified download from Pexels or Unsplash.
  * Downloads external photo to local system.
+ *
+ * Uses ImageService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
-import { images, imageMetadata } from "../../db/schema";
-import { eq } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { getPexelsService } from "../../services/ai/pexels.service";
 import { getUnsplashService } from "../../services/ai/unsplash.service";
 import imageProcessingService from "../../services/storage/image-processing.service";
@@ -25,6 +24,7 @@ export type ImportImageInput = z.infer<typeof schema>;
 
 export async function execute(input: ImportImageInput, ctx: AgentContext) {
 	const sessionId = ctx.sessionId;
+	const imageService = ctx.services.imageService;
 
 	if (!sessionId) {
 		return {
@@ -37,39 +37,26 @@ export async function execute(input: ImportImageInput, ctx: AgentContext) {
 	const photoIdStr = String(input.photoId);
 	const sourceTag = `${input.provider}:${photoIdStr}`;
 
-	// Check for duplicate
-	const existing = await ctx.db.query.imageMetadata.findFirst({
-		where: eq(imageMetadata.source, sourceTag),
-	});
+	// Check for duplicate via service
+	const existingImage = await imageService.findBySource(sourceTag);
 
-	if (existing) {
-		const existingImage = await ctx.db.query.images.findFirst({
-			where: eq(images.id, existing.imageId),
-			with: { metadata: true },
-		});
+	if (existingImage) {
+		const localUrl = imageService.getImageUrl(existingImage);
+		const providerName = input.provider === "pexels" ? "Pexels" : "Unsplash";
 
-		if (existingImage) {
-			const localUrl = existingImage.filePath
-				? `/uploads/${existingImage.filePath}`
-				: undefined;
-
-			const providerName =
-				input.provider === "pexels" ? "Pexels" : "Unsplash";
-
-			return {
-				success: true,
-				isNew: false,
-				imageId: existingImage.id,
-				url: localUrl,
-				filename: existingImage.originalFilename || existingImage.filename,
-				description: existingImage.metadata?.description,
-				photographer:
-					existingImage.metadata?.detailedDescription
-						?.replace("Photo by ", "")
-						.replace(` on ${providerName}`, "") || "Unknown",
-				message: `Photo already in system (duplicate by ${providerName} ID)`,
-			};
-		}
+		return {
+			success: true,
+			isNew: false,
+			imageId: existingImage.id,
+			url: localUrl,
+			filename: existingImage.originalFilename || existingImage.filename,
+			description: existingImage.metadata?.description,
+			photographer:
+				existingImage.metadata?.detailedDescription
+					?.replace("Photo by ", "")
+					.replace(` on ${providerName}`, "") || "Unknown",
+			message: `Photo already in system (duplicate by ${providerName} ID)`,
+		};
 	}
 
 	// Download based on provider
@@ -166,6 +153,8 @@ async function processAndSaveImage(
 	providerName: string,
 	ctx: AgentContext
 ) {
+	const imageService = ctx.services.imageService;
+
 	// Process through image processing service
 	const processResult = await imageProcessingService.processImage({
 		buffer: download.buffer,
@@ -177,28 +166,16 @@ async function processAndSaveImage(
 	// Wait a moment for initial DB record to be created
 	await new Promise((resolve) => setTimeout(resolve, 200));
 
-	// Add/update metadata with attribution
+	// Add/update metadata with attribution via service
 	const attribution = `Photo by ${download.metadata.photographer} on ${providerName}`;
 
-	await ctx.db
-		.insert(imageMetadata)
-		.values({
-			id: randomUUID(),
-			imageId: processResult.imageId,
-			description: download.metadata.alt,
-			detailedDescription: attribution,
-			altText: download.metadata.alt,
-			source: sourceTag,
-			generatedAt: new Date(),
-		})
-		.onConflictDoUpdate({
-			target: imageMetadata.imageId,
-			set: {
-				description: download.metadata.alt,
-				detailedDescription: attribution,
-				source: sourceTag,
-			},
-		});
+	await imageService.upsertMetadata({
+		imageId: processResult.imageId,
+		description: download.metadata.alt,
+		detailedDescription: attribution,
+		altText: download.metadata.alt,
+		source: sourceTag,
+	});
 
 	// Poll for completion (wait for processing to finish)
 	const maxWaitMs = 30000; // 30 seconds
@@ -206,13 +183,10 @@ async function processAndSaveImage(
 	const startTime = Date.now();
 
 	let finalStatus = "processing";
-	let imageRecord: typeof images.$inferSelect | null = null;
+	let imageRecord = await imageService.getStatus(processResult.imageId);
 
 	while (Date.now() - startTime < maxWaitMs) {
-		imageRecord =
-			(await ctx.db.query.images.findFirst({
-				where: eq(images.id, processResult.imageId),
-			})) ?? null;
+		imageRecord = await imageService.getStatus(processResult.imageId);
 
 		if (imageRecord?.status === "completed") {
 			finalStatus = "completed";

@@ -11,7 +11,7 @@ export interface NavigationItem {
 }
 
 export class SiteSettingsService {
-  constructor(public db: DrizzleDB) {}
+  constructor(private db: DrizzleDB) {}
 
   /**
    * Get a setting by key

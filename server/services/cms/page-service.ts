@@ -3,6 +3,7 @@ import { eq, like } from "drizzle-orm";
 import type { DrizzleDB } from "../../db/client";
 import * as schema from "../../db/schema";
 import type { VectorIndexService } from "../vector-index";
+import { pageCache, invalidatePageCache } from "./cache";
 
 export interface CreatePageInput {
 	name: string;
@@ -21,7 +22,7 @@ export interface UpdatePageInput {
 }
 
 export class PageService {
-	constructor(public db: DrizzleDB, private vectorIndex: VectorIndexService) {}
+	constructor(private db: DrizzleDB, private vectorIndex: VectorIndexService) {}
 
 	async createPage(input: CreatePageInput) {
 		// Validation
@@ -50,6 +51,9 @@ export class PageService {
 		};
 
 		await this.db.insert(schema.pages).values(page);
+
+		// Invalidate slug lookups that might have cached null for this slug
+		pageCache.deleteByPrefix('page:slug:');
 
 		// Index in vector DB
 		await this.vectorIndex.add({
@@ -91,6 +95,9 @@ export class PageService {
 
 		await this.db.update(schema.pages).set(updated).where(eq(schema.pages.id, id));
 
+		// Invalidate cache
+		invalidatePageCache(id);
+
 		// Re-index if name/slug changed
 		if (input.name !== original.name || input.slug !== original.slug) {
 			await this.vectorIndex.update(id, {
@@ -106,24 +113,55 @@ export class PageService {
 	}
 
 	async getPageById(id: string) {
-		// @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
-		return await this.db.query.pages.findFirst({
-			where: eq(schema.pages.id, id),
-			with: {
-				pageSections: {
+		return pageCache.getOrFetch(
+			`page:id:${id}`,
+			async () => {
+				// @ts-ignore - Drizzle ORM query.findFirst() has complex overloads that TypeScript cannot infer properly
+				return await this.db.query.pages.findFirst({
+					where: eq(schema.pages.id, id),
 					with: {
-						sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
-						contents: true,
+						pageSections: {
+							with: {
+								sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
+								contents: true,
+							},
+							orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
+						},
 					},
-					orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
-				},
-			},
-		});
+				});
+			}
+		);
 	}
 
 	async getPageBySlug(slug: string, includeContent = false, localeCode = "en") {
-		if (!includeContent) {
-			// Lightweight - only page metadata and section IDs
+		const cacheKey = `page:slug:${slug}:${includeContent}:${localeCode}`;
+
+		return pageCache.getOrFetch(cacheKey, async () => {
+			if (!includeContent) {
+				// Lightweight - only page metadata and section IDs
+				// @ts-ignore - Drizzle ORM query.findFirst() has complex overloads
+				const page = await this.db.query.pages.findFirst({
+					where: eq(schema.pages.slug, slug),
+					with: {
+						pageSections: {
+							with: {
+								sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
+							},
+							orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
+						},
+					},
+				});
+
+				if (!page) return null;
+
+				return {
+					...page,
+					sectionIds: (page as any).pageSections?.map((ps: any) => ps.id) || [],
+					sectionCount: (page as any).pageSections?.length || 0,
+				};
+			}
+
+			// Full fetch - includes all content (original behavior)
 			// @ts-ignore - Drizzle ORM query.findFirst() has complex overloads
 			const page = await this.db.query.pages.findFirst({
 				where: eq(schema.pages.slug, slug),
@@ -131,6 +169,7 @@ export class PageService {
 					pageSections: {
 						with: {
 							sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
+							contents: true,
 						},
 						orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
 					},
@@ -139,52 +178,29 @@ export class PageService {
 
 			if (!page) return null;
 
+			// Format sections with content for requested locale
 			return {
 				...page,
-				sectionIds: (page as any).pageSections?.map((ps: any) => ps.id) || [],
-				sectionCount: (page as any).pageSections?.length || 0,
-			};
-		}
+				pageSections: (page as any).pageSections?.map((ps: any) => {
+					const contentRecord = ps.contents?.find((c: any) => c.localeCode === localeCode);
 
-		// Full fetch - includes all content (original behavior)
-		// @ts-ignore - Drizzle ORM query.findFirst() has complex overloads
-		const page = await this.db.query.pages.findFirst({
-			where: eq(schema.pages.slug, slug),
-			with: {
-				pageSections: {
-					with: {
-						sectionTemplate: true, // RENAMED: sectionDefinition → sectionTemplate
-						contents: true,
-					},
-					orderBy: (ps: any, { asc }: any) => [asc(ps.sortOrder)],
-				},
-			},
-		});
-
-		if (!page) return null;
-
-		// Format sections with content for requested locale
-		return {
-			...page,
-			pageSections: (page as any).pageSections?.map((ps: any) => {
-				const contentRecord = ps.contents?.find((c: any) => c.localeCode === localeCode);
-
-				// Parse content if it's a JSON string
-				let parsedContent = {};
-				if (contentRecord?.content) {
-					try {
-						parsedContent = typeof contentRecord.content === "string" ? JSON.parse(contentRecord.content) : contentRecord.content;
-					} catch (error) {
-						console.error(`Failed to parse content for section ${ps.id}:`, error);
+					// Parse content if it's a JSON string
+					let parsedContent = {};
+					if (contentRecord?.content) {
+						try {
+							parsedContent = typeof contentRecord.content === "string" ? JSON.parse(contentRecord.content) : contentRecord.content;
+						} catch (error) {
+							console.error(`Failed to parse content for section ${ps.id}:`, error);
+						}
 					}
-				}
 
-				return {
-					...ps,
-					content: parsedContent,
-				};
-			}),
-		};
+					return {
+						...ps,
+						content: parsedContent,
+					};
+				}),
+			};
+		});
 	}
 
 	async listPages(query?: string) {
@@ -198,6 +214,9 @@ export class PageService {
 
 	async deletePage(id: string) {
 		await this.db.delete(schema.pages).where(eq(schema.pages.id, id));
+
+		// Invalidate cache
+		invalidatePageCache(id);
 
 		// Remove from vector index
 		await this.vectorIndex.delete(id);

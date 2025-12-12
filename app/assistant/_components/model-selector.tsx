@@ -91,7 +91,9 @@ export function ModelSelector({ disabled = false }: ModelSelectorProps) {
   const models = useModelsStore((state) => state.models);
   const isLoading = useModelsStore((state) => state.isLoading);
   const fetchModels = useModelsStore((state) => state.fetchModels);
-  const { sessions, updateSessionModel } = useSessionStore();
+  // Use individual selectors to prevent re-renders on unrelated state changes
+  const sessions = useSessionStore((state) => state.sessions);
+  const updateSessionModel = useSessionStore((state) => state.updateSessionModel);
   const chatSessionId = useChatStore((state) => state.sessionId);
 
   // Fetch models on mount

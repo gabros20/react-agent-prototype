@@ -1,9 +1,10 @@
 /**
  * deleteSection Tool Implementation
+ *
+ * Uses SectionService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
-import { eq, inArray } from "drizzle-orm";
 import type { AgentContext } from "../_types/agent-context";
 
 export const schema = z.object({
@@ -16,11 +17,8 @@ export const schema = z.object({
 export type DeleteSectionInput = z.infer<typeof schema>;
 
 export async function execute(input: DeleteSectionInput, ctx: AgentContext) {
-	const { pageSections } = await import("../../db/schema");
-
-	const sections = await ctx.db.query.pageSections.findMany({
-		where: inArray(pageSections.id, input.ids),
-	});
+	// Use service to get sections (not direct DB access)
+	const sections = await ctx.services.sectionService.getPageSectionsByIds(input.ids);
 
 	if (sections.length === 0) {
 		return { success: false, error: "No sections found with provided IDs" };
@@ -33,6 +31,7 @@ export async function execute(input: DeleteSectionInput, ctx: AgentContext) {
 		};
 	}
 
+	// Confirmation gate
 	if (!input.confirmed) {
 		return {
 			requiresConfirmation: true,
@@ -41,13 +40,12 @@ export async function execute(input: DeleteSectionInput, ctx: AgentContext) {
 		};
 	}
 
-	for (const sectionId of input.ids) {
-		await ctx.db.delete(pageSections).where(eq(pageSections.id, sectionId));
-	}
+	// Use service to delete sections (handles cache invalidation)
+	const deletedCount = await ctx.services.sectionService.deletePageSections(input.ids);
 
 	return {
 		success: true,
-		message: `Deleted ${input.ids.length} section(s)`,
-		deletedCount: input.ids.length,
+		message: `Deleted ${deletedCount} section(s)`,
+		deletedCount,
 	};
 }

@@ -1,5 +1,7 @@
 /**
  * updateEntry Tool Implementation
+ *
+ * Uses EntryService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
@@ -23,34 +25,39 @@ export const schema = z.object({
 export type UpdateEntryInput = z.infer<typeof schema>;
 
 export async function execute(input: UpdateEntryInput, ctx: AgentContext) {
-	const entry = (await ctx.services.entryService.getEntryContent(
+	const entryService = ctx.services.entryService;
+
+	// Get entry with content via service
+	const entryWithContent = await entryService.getEntryContent(
 		input.id,
 		input.localeCode || "en",
-	)) as any;
-	if (!entry) {
+	);
+
+	if (!entryWithContent) {
 		return { success: false, error: `Entry not found: ${input.id}` };
 	}
 
+	// Update metadata if provided
 	if (input.title || input.status) {
-		await ctx.services.entryService.updateEntryMetadata(input.id, {
+		await entryService.updateEntryMetadata(input.id, {
 			title: input.title,
 			status: input.status,
 		});
 	}
 
+	// Update content if provided
 	if (input.content) {
-		const entryRecord = await ctx.db.query.collectionEntries.findFirst({
-			where: (entries, { eq }) => eq(entries.id, input.id),
-		});
+		// Get full entry record to get collectionId
+		const entryRecord = await entryService.getEntryById(input.id);
 
 		if (entryRecord) {
-			await ctx.services.entryService.upsertEntry({
+			await entryService.upsertEntry({
 				collectionId: entryRecord.collectionId,
-				slug: input.slug || entry.slug,
-				title: input.title || entry.title,
+				slug: input.slug || entryWithContent.slug,
+				title: input.title || entryWithContent.title,
 				localeCode: input.localeCode || "en",
 				content: {
-					...entry.content,
+					...entryWithContent.content,
 					...input.content,
 				},
 			});

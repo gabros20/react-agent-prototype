@@ -1,10 +1,10 @@
 /**
  * updateImage Tool Implementation
+ *
+ * Uses ImageService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { images, imageMetadata } from "../../db/schema";
 import type { AgentContext } from "../_types/agent-context";
 
 export const schema = z.object({
@@ -17,26 +17,24 @@ export const schema = z.object({
 export type UpdateImageInput = z.infer<typeof schema>;
 
 export async function execute(input: UpdateImageInput, ctx: AgentContext) {
-	const image = await ctx.db.query.images.findFirst({
-		where: eq(images.id, input.id),
-		with: { metadata: true },
-	});
+	const imageService = ctx.services.imageService;
+
+	// Check if image exists via service
+	const image = await imageService.getById(input.id);
 
 	if (!image) {
 		return { success: false, error: `Image not found: ${input.id}` };
 	}
 
-	const updates: any = {};
-	if (input.description !== undefined) updates.description = input.description;
-	if (input.tags !== undefined) updates.tags = JSON.stringify(input.tags);
-	if (input.categories !== undefined)
-		updates.categories = JSON.stringify(input.categories);
+	// Update metadata via service
+	const success = await imageService.updateMetadata(input.id, {
+		description: input.description,
+		tags: input.tags,
+		categories: input.categories,
+	});
 
-	if (image.metadata) {
-		await ctx.db
-			.update(imageMetadata)
-			.set(updates)
-			.where(eq(imageMetadata.imageId, input.id));
+	if (!success) {
+		return { success: false, error: "Failed to update image metadata" };
 	}
 
 	return {

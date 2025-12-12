@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import type { ServiceContainer } from "../services/service-container";
+import type { Services } from "../services/types";
 import { getSiteAndEnv } from "../utils/get-context";
 import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 
@@ -55,7 +55,7 @@ const upsertEntrySchema = z.object({
   content: z.record(z.string(), z.any()),
 });
 
-export function createCMSRoutes(services: ServiceContainer) {
+export function createCMSRoutes(services: Services) {
   const router = express.Router();
 
   // =========================================================================
@@ -103,7 +103,7 @@ export function createCMSRoutes(services: ServiceContainer) {
 
       // Get site and environment IDs (using defaults from env vars)
       const { siteId, environmentId } = await getSiteAndEnv(
-        services.pageService.db,
+        services.db,
         process.env.DEFAULT_SITE || "local-site",
         process.env.DEFAULT_ENV || "main",
       );

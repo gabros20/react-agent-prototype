@@ -9,3 +9,6 @@ export * from "./agent-context";
 
 // Tool metadata (for discovery/search)
 export * from "./metadata";
+
+// Tool result types (for consistent error handling)
+export * from "./result";

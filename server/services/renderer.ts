@@ -3,8 +3,7 @@ import path from "node:path";
 import { marked } from "marked";
 import nunjucks from "nunjucks";
 import type { PageService } from "./cms/page-service";
-import { db } from "../db/client";
-import { SiteSettingsService } from "./cms/site-settings-service";
+import type { SiteSettingsService } from "./cms/site-settings-service";
 
 export interface TemplateRegistry {
   [templateKey: string]: { variants: string[]; path: string };
@@ -13,10 +12,11 @@ export interface TemplateRegistry {
 export class RendererService {
   private env: nunjucks.Environment;
   private templateRegistry: TemplateRegistry = {};
-  private siteSettingsService: SiteSettingsService;
 
-  constructor(private templateDir: string) {
-    this.siteSettingsService = new SiteSettingsService(db);
+  constructor(
+    private templateDir: string,
+    private siteSettingsService: SiteSettingsService
+  ) {
     this.env = nunjucks.configure(templateDir, {
       autoescape: true,
       watch: process.env.NODE_ENV === "development",

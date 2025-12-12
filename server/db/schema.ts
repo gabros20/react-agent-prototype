@@ -187,29 +187,6 @@ export const entryContents = sqliteTable("entry_contents", {
 });
 
 // ============================================================================
-// MEDIA
-// ============================================================================
-
-export const media = sqliteTable("media", {
-  id: text("id").primaryKey(),
-  siteId: text("site_id")
-    .notNull()
-    .references(() => sites.id, { onDelete: "cascade" }),
-  environmentId: text("environment_id")
-    .notNull()
-    .references(() => environments.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  path: text("path").notNull(),
-  mimeType: text("mime_type").notNull(),
-  mimeGroup: text("mime_group", { enum: ["image", "video", "audio", "document"] }).notNull(),
-  width: integer("width"),
-  height: integer("height"),
-  duration: integer("duration"),
-  alt: text("alt"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-});
-
-// ============================================================================
 // IMAGES (AI-Powered with Metadata & Embeddings)
 // ============================================================================
 
@@ -310,42 +287,8 @@ export const imageVariants = sqliteTable("image_variants", {
 });
 
 // ============================================================================
-// NAVIGATIONS (Production-aligned with proper tables)
-// ============================================================================
-
-export const navigations = sqliteTable("navigations", {
-  id: text("id").primaryKey(),
-  siteId: text("site_id")
-    .notNull()
-    .references(() => sites.id, { onDelete: "cascade" }),
-  environmentId: text("environment_id")
-    .notNull()
-    .references(() => environments.id, { onDelete: "cascade" }),
-  name: text("name").notNull(), // e.g., "header", "footer", "main"
-  description: text("description"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-});
-
-export const navigationItems = sqliteTable("navigation_items", {
-  id: text("id").primaryKey(),
-  navigationId: text("navigation_id")
-    .notNull()
-    .references(() => navigations.id, { onDelete: "cascade" }),
-  parentId: text("parent_id"), // For nested menus
-  label: text("label").notNull(), // RENAMED: value → label (display text)
-  targetType: text("target_type", {
-    enum: ["page", "entry", "media", "url", "placeholder"], // UPDATED: medium → media
-  }).notNull(),
-  targetId: text("target_id"), // UUID of page/entry/media (RENAMED: targetUuid → targetId)
-  url: text("url"), // For external URLs
-  sortOrder: integer("sort_order").notNull(),
-  visible: integer("visible", { mode: "boolean" }).default(true), // NEW: Item visibility
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-});
-
-// ============================================================================
 // SITE SETTINGS
+// Navigation is stored as JSON in site_settings table under key "navigation"
 // ============================================================================
 
 export const siteSettings = sqliteTable("site_settings", {
@@ -440,15 +383,11 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
   team: one(teams, { fields: [sites.teamId], references: [teams.id] }),
   environments: many(environments),
   pages: many(pages),
-  media: many(media),
-  navigations: many(navigations),
 }));
 
 export const environmentsRelations = relations(environments, ({ one, many }) => ({
   site: one(sites, { fields: [environments.siteId], references: [sites.id] }),
   pages: many(pages),
-  media: many(media),
-  navigations: many(navigations),
   locales: many(environmentLocales),
 }));
 
@@ -549,16 +488,6 @@ export const imageVariantsRelations = relations(imageVariants, ({ one }) => ({
   }),
 }));
 
-export const navigationsRelations = relations(navigations, ({ one, many }) => ({
-  site: one(sites, { fields: [navigations.siteId], references: [sites.id] }),
-  environment: one(environments, { fields: [navigations.environmentId], references: [environments.id] }),
-  items: many(navigationItems),
-}));
-
-export const navigationItemsRelations = relations(navigationItems, ({ one }) => ({
-  navigation: one(navigations, { fields: [navigationItems.navigationId], references: [navigations.id] }),
-}));
-
 // ============================================================================
 // ZOD SCHEMAS FOR VALIDATION
 // ============================================================================
@@ -600,15 +529,6 @@ export const selectCollectionEntrySchema = createSelectSchema(collectionEntries)
 
 export const insertEntryContentSchema = createInsertSchema(entryContents);
 export const selectEntryContentSchema = createSelectSchema(entryContents);
-
-export const insertMediaSchema = createInsertSchema(media);
-export const selectMediaSchema = createSelectSchema(media);
-
-export const insertNavigationSchema = createInsertSchema(navigations);
-export const selectNavigationSchema = createSelectSchema(navigations);
-
-export const insertNavigationItemSchema = createInsertSchema(navigationItems);
-export const selectNavigationItemSchema = createSelectSchema(navigationItems);
 
 export const insertSessionSchema = createInsertSchema(sessions);
 export const selectSessionSchema = createSelectSchema(sessions);

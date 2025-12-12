@@ -6,9 +6,9 @@
  */
 
 import { Router } from "express";
-import type { ServiceContainer } from "../services/service-container";
+import type { Services } from "../services/types";
 
-export function createToolRoutes(services: ServiceContainer) {
+export function createToolRoutes(services: Services) {
 	const router = Router();
 
 	/**
@@ -41,7 +41,7 @@ export function createToolRoutes(services: ServiceContainer) {
 
 			res.json(result);
 		} catch (error: any) {
-			console.error("[tools/search] Error:", error);
+			services.logger.error("[tools/search] Error", { error: error.message });
 			res.status(500).json({ error: error.message });
 		}
 	});
@@ -55,7 +55,7 @@ export function createToolRoutes(services: ServiceContainer) {
 			const tools = services.toolSearch.listTools();
 			res.json({ tools, count: tools.length });
 		} catch (error: any) {
-			console.error("[tools] Error:", error);
+			services.logger.error("[tools] Error", { error: error.message });
 			res.status(500).json({ error: error.message });
 		}
 	});
@@ -69,7 +69,7 @@ export function createToolRoutes(services: ServiceContainer) {
 			const names = services.toolSearch.listToolNames();
 			res.json({ names, count: names.length });
 		} catch (error: any) {
-			console.error("[tools/names] Error:", error);
+			services.logger.error("[tools/names] Error", { error: error.message });
 			res.status(500).json({ error: error.message });
 		}
 	});
@@ -83,7 +83,7 @@ export function createToolRoutes(services: ServiceContainer) {
 			const status = services.toolSearch.getStatus();
 			res.json(status);
 		} catch (error: any) {
-			console.error("[tools/status] Error:", error);
+			services.logger.error("[tools/status] Error", { error: error.message });
 			res.status(500).json({ error: error.message });
 		}
 	});
@@ -104,7 +104,7 @@ export function createToolRoutes(services: ServiceContainer) {
 
 			res.json(tool);
 		} catch (error: any) {
-			console.error("[tools/:name] Error:", error);
+			services.logger.error("[tools/:name] Error", { error: error.message, name: req.params.name });
 			res.status(500).json({ error: error.message });
 		}
 	});
@@ -126,7 +126,7 @@ export function createToolRoutes(services: ServiceContainer) {
 			const relatedTools = services.toolSearch.getRelatedTools(req.params.name);
 			res.json({ tool: req.params.name, relatedTools });
 		} catch (error: any) {
-			console.error("[tools/:name/related] Error:", error);
+			services.logger.error("[tools/:name/related] Error", { error: error.message, name: req.params.name });
 			res.status(500).json({ error: error.message });
 		}
 	});

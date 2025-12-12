@@ -1,10 +1,12 @@
 import express from "express";
 import type { RendererService } from "../services/renderer";
 import type { EntryService } from "../services/cms/entry-service";
+import type { Services } from "../services/types";
 
 export function createPostsRouter(
   renderer: RendererService,
-  entryService: EntryService
+  entryService: EntryService,
+  services: Services
 ) {
   const router = express.Router();
 
@@ -47,7 +49,7 @@ export function createPostsRouter(
 
       res.send(html);
     } catch (error) {
-      console.error("Error rendering post list:", error);
+      services.logger.error("Error rendering post list", { error: error instanceof Error ? error.message : String(error) });
       res.status(500).send(`
         <html>
           <head><title>Server Error</title></head>
@@ -122,7 +124,7 @@ export function createPostsRouter(
 
       res.send(html);
     } catch (error) {
-      console.error("Error rendering post:", error);
+      services.logger.error("Error rendering post", { error: error instanceof Error ? error.message : String(error) });
       res.status(500).send(`
         <html>
           <head><title>Server Error</title></head>

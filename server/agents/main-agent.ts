@@ -6,6 +6,10 @@
  * - Discovers tools via searchTools calls
  * - Discovered tools + their tool prompts injected via prepareStep
  * - Cross-turn persistence via WorkingContext (handled by ContextManager)
+ *
+ * NOTE: Module-level state is a limitation of AI SDK's ToolLoopAgent pattern.
+ * prepareStep doesn't have access to experimental_context, so we must store
+ * state at module level. Each new request overwrites this state via prepareCall.
  */
 
 import { ToolLoopAgent, stepCountIs, hasToolCall, NoSuchToolError, InvalidToolInputError } from "ai";
@@ -13,27 +17,36 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { ALL_TOOLS } from "../tools/_index";
 import { getAgentSystemPrompt } from "./system-prompt";
-import { getToolPrompts } from "../tools/_loaders/tool-prompt-loader";
-import { normalizePromptText } from "../utils/prompt-normalizer";
+import { PromptBuilder, ToolPromptInjector } from "../prompts/builder";
+import { ToolSearchManager, type StepResult } from "../memory/tool-search";
 import type { AgentContext, AgentLogger, StreamWriter } from "../tools/types";
 import type { DrizzleDB } from "../db/client";
-import type { ServiceContainer } from "../services/service-container";
-import type { SessionService } from "../services/session-service";
+import type { Services } from "../services/types";
 import type { VectorIndexService } from "../services/vector-index";
 
-// Module-level store for last injected tool prompts (for SSE emission)
+// ============================================================================
+// Module-Level State (AI SDK limitation - prepareStep lacks context access)
+// ============================================================================
+
+/** Last injected tool prompts (for SSE emission to debug panel) */
 let lastInjectedInstructions: {
 	instructions: string;
 	tools: string[];
 	updatedSystemPrompt: string | null;
 } | null = null;
 
-// Store the base system prompt from prepareCall so prepareStep can build updated version
+/** Base system prompt from prepareCall (used by prepareStep) */
 let currentBaseSystemPrompt: string = "";
 
-// Store discovered tools from working memory (loaded at turn start)
-// This avoids fragile regex parsing from system prompt text
+/** Discovered tools from previous turns (loaded at turn start) */
 let persistedDiscoveredTools: string[] = [];
+
+/** Tool search manager instance (singleton - stateless) */
+const toolSearchManager = new ToolSearchManager();
+
+// ============================================================================
+// Exports for Orchestrator
+// ============================================================================
 
 export function getLastInjectedInstructions() {
 	const result = lastInjectedInstructions;
@@ -58,6 +71,9 @@ export const AGENT_CONFIG = {
 	modelId: "openai/gpt-4o-mini",
 	maxOutputTokens: 4096,
 } as const;
+
+/** Core tools that are always available */
+const CORE_TOOLS = toolSearchManager.getCoreTools();
 
 // ============================================================================
 // Call Options Schema (replaces experimental_context typing)
@@ -87,8 +103,7 @@ export const AgentCallOptionsSchema = z.object({
 	// Runtime-injected services (passed through to tools via experimental_context)
 	// Using z.custom with proper types - validation happens at runtime via TypeScript
 	db: z.custom<DrizzleDB>((val) => val != null),
-	services: z.custom<ServiceContainer>((val) => val != null),
-	sessionService: z.custom<SessionService>((val) => val != null),
+	services: z.custom<Services>((val) => val != null),
 	vectorIndex: z.custom<VectorIndexService>((val) => val != null),
 	logger: z.custom<AgentLogger>((val) => val != null),
 	stream: z.custom<StreamWriter>((val) => val != null).optional(),
@@ -124,7 +139,9 @@ export const cmsAgent = new ToolLoopAgent({
 		persistedDiscoveredTools = options.discoveredTools || [];
 
 		// Dynamic model selection: use requested model or fall back to default
-		const model = options.modelId ? openrouter.languageModel(options.modelId) : openrouter.languageModel(AGENT_CONFIG.modelId);
+		const model = options.modelId
+			? openrouter.languageModel(options.modelId)
+			: openrouter.languageModel(AGENT_CONFIG.modelId);
 
 		return {
 			...settings,
@@ -134,12 +151,11 @@ export const cmsAgent = new ToolLoopAgent({
 			instructions: dynamicInstructions,
 			maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
 			// Start with core tools - others added via prepareStep
-			activeTools: ["searchTools", "finalAnswer", "acknowledgeRequest"] as (keyof typeof ALL_TOOLS)[],
+			activeTools: [...CORE_TOOLS] as (keyof typeof ALL_TOOLS)[],
 			// experimental_context is how tools access runtime services
 			experimental_context: {
 				db: options.db,
 				services: options.services,
-				sessionService: options.sessionService,
 				vectorIndex: options.vectorIndex,
 				logger: options.logger,
 				stream: options.stream,
@@ -155,12 +171,11 @@ export const cmsAgent = new ToolLoopAgent({
 	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasToolCall("finalAnswer")],
 
 	// Dynamic tool availability via prepareStep
-	prepareStep: async ({ stepNumber, steps }: { stepNumber: number; steps: any[] }) => {
+	prepareStep: async ({ stepNumber, steps }: { stepNumber: number; steps: StepResult[] }) => {
 		type ToolName = keyof typeof ALL_TOOLS;
 
-		// Get tools from current execution steps
-		const { extractToolsFromSteps } = await import("../tools/_utils/step-extraction");
-		const fromCurrentSteps = extractToolsFromSteps(steps);
+		// Extract tools from current execution steps using ToolSearchManager
+		const fromCurrentSteps = toolSearchManager.extractFromSteps(steps);
 
 		// Combine: persisted tools (previous turns) + current step discoveries
 		const discoveredTools = [...new Set([...persistedDiscoveredTools, ...fromCurrentSteps])] as ToolName[];
@@ -172,23 +187,18 @@ export const cmsAgent = new ToolLoopAgent({
 			);
 		}
 
-		// Core tools always available
-		const coreTools: ToolName[] = ["searchTools", "finalAnswer", "acknowledgeRequest"];
+		// Build tool prompts using ToolPromptInjector (deduplicates automatically)
+		const toolsNeedingProtocols = [...new Set([...CORE_TOOLS, ...discoveredTools])];
+		const injector = new ToolPromptInjector()
+			.addCoreTools([...CORE_TOOLS])
+			.addDiscoveredTools(discoveredTools);
+		const toolInstructions = injector.build();
 
-		// Build tool prompts for all core + discovered tools up-front so every step (including 0/1)
-		// has the protocols injected. This keeps the image URL rule and other gotchas always in context.
-		const toolsNeedingProtocols = [...new Set([...coreTools, ...discoveredTools])];
-		const toolInstructions = getToolPrompts(toolsNeedingProtocols);
-
-		// Replace the tool-calling instructions placeholder in the base system prompt
-		const updatedContent = toolInstructions
-			? currentBaseSystemPrompt.replace(
-					/<tool-usage-instructions>[\s\S]*?<\/tool-usage-instructions>/g,
-					`<tool-usage-instructions>\n${toolInstructions}\n</tool-usage-instructions>`
-			  )
-			: currentBaseSystemPrompt;
-
-		const normalizedContent = normalizePromptText(updatedContent);
+		// Build updated prompt using PromptBuilder (type-safe, no regex)
+		const normalizedContent = PromptBuilder
+			.fromTemplate(currentBaseSystemPrompt)
+			.withToolInstructions(toolInstructions)
+			.build();
 
 		// Store for SSE emission (debug panel)
 		if (toolInstructions) {
@@ -203,7 +213,7 @@ export const cmsAgent = new ToolLoopAgent({
 		// This ensures the user sees acknowledgment before any action is taken
 		if (stepNumber === 0) {
 			return {
-				activeTools: coreTools,
+				activeTools: [...CORE_TOOLS] as ToolName[],
 				toolChoice: { type: "tool" as const, toolName: "acknowledgeRequest" as const },
 				instructions: normalizedContent,
 			};
@@ -213,7 +223,7 @@ export const cmsAgent = new ToolLoopAgent({
 		// Agent can use searchTools to find capabilities
 		if (stepNumber === 1 && discoveredTools.length === 0) {
 			return {
-				activeTools: coreTools,
+				activeTools: [...CORE_TOOLS] as ToolName[],
 				toolChoice: "auto" as const,
 				instructions: normalizedContent,
 			};
@@ -221,18 +231,13 @@ export const cmsAgent = new ToolLoopAgent({
 
 		// Phase 2: Execution (tools discovered)
 		// All discovered tools available, plus core tools
-		const activeTools = [...coreTools, ...discoveredTools] as ToolName[];
+		const activeTools = [...new Set([...CORE_TOOLS, ...discoveredTools])] as ToolName[];
 
-		const result = {
+		return {
 			activeTools,
 			toolChoice: "auto" as const,
 			instructions: normalizedContent,
 		};
-
-		// Note: Message trimming is now handled by ContextManager in orchestrator
-		// for coordinated cleanup of messages AND discovered tools
-
-		return result;
 	},
 
 	// Step completion callback for telemetry
@@ -243,7 +248,7 @@ export const cmsAgent = new ToolLoopAgent({
 	},
 
 	// Handle malformed tool calls - let model retry naturally
-	experimental_repairToolCall: async ({ toolCall, tools, error }) => {
+	experimental_repairToolCall: async ({ toolCall, error }) => {
 		// Don't attempt to fix unknown tool names
 		if (NoSuchToolError.isInstance(error)) {
 			console.warn(`[repairToolCall] Unknown tool: ${toolCall.toolName}`);

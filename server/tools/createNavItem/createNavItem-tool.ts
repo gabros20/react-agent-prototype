@@ -1,9 +1,10 @@
 /**
  * createNavItem Tool Implementation
+ *
+ * Uses SiteSettingsService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
-import { SiteSettingsService } from "../../services/cms/site-settings-service";
 import type { AgentContext } from "../_types/agent-context";
 
 export const schema = z.object({
@@ -15,7 +16,7 @@ export const schema = z.object({
 export type CreateNavItemInput = z.infer<typeof schema>;
 
 export async function execute(input: CreateNavItemInput, ctx: AgentContext) {
-	const siteSettingsService = new SiteSettingsService(ctx.db);
+	const siteSettingsService = ctx.services.siteSettingsService;
 
 	try {
 		const updatedItems = await siteSettingsService.addNavigationItem({

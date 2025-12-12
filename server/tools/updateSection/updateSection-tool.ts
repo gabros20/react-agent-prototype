@@ -1,9 +1,10 @@
 /**
  * updateSection Tool Implementation
+ *
+ * Uses SectionService and ImageService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 import type { AgentContext } from "../_types/agent-context";
 
 export const schema = z
@@ -42,38 +43,37 @@ export const schema = z
 export type UpdateSectionInput = z.infer<typeof schema>;
 
 export async function execute(input: UpdateSectionInput, ctx: AgentContext) {
-	const { pageSections, images, sectionTemplates } = await import(
-		"../../db/schema"
-	);
-
-	const section = await ctx.db.query.pageSections.findFirst({
-		where: eq(pageSections.id, input.pageSectionId),
-	});
+	// Use service to get section (not direct DB access)
+	const section = await ctx.services.sectionService.getPageSectionById(input.pageSectionId);
 
 	if (!section) {
 		return { success: false, error: "Section not found" };
 	}
 
+	// Update metadata fields via service
 	if (
 		input.status !== undefined ||
 		input.hidden !== undefined ||
 		input.sortOrder !== undefined
 	) {
-		const updates: any = {};
+		const updates: {
+			status?: 'published' | 'unpublished' | 'draft';
+			hidden?: boolean;
+			sortOrder?: number;
+		} = {};
 		if (input.status !== undefined) updates.status = input.status;
 		if (input.hidden !== undefined) updates.hidden = input.hidden;
 		if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
 
-		await ctx.db
-			.update(pageSections)
-			.set(updates)
-			.where(eq(pageSections.id, input.pageSectionId));
+		await ctx.services.sectionService.updatePageSection(input.pageSectionId, updates);
 	}
 
+	// Handle image attachment
 	if (input.imageId && input.imageField) {
-		const sectionTemplate = await ctx.db.query.sectionTemplates.findFirst({
-			where: eq(sectionTemplates.id, section.sectionTemplateId),
-		});
+		// Get section template to validate image field
+		const sectionTemplate = await ctx.services.sectionService.getSectionTemplateById(
+			section.sectionTemplateId
+		);
 
 		if (sectionTemplate) {
 			const fields =
@@ -103,16 +103,14 @@ export async function execute(input: UpdateSectionInput, ctx: AgentContext) {
 			}
 		}
 
-		const image = await ctx.db.query.images.findFirst({
-			where: eq(images.id, input.imageId),
-			with: { metadata: true },
-		});
+		// Get image via ImageService
+		const image = await ctx.services.imageService.getById(input.imageId);
 
 		if (!image || !image.filePath) {
 			return { success: false, error: "Image not found or has no file path" };
 		}
 
-		const imageUrl = `/uploads/${image.filePath}`;
+		const imageUrl = ctx.services.imageService.getImageUrl(image) || `/uploads/${image.filePath}`;
 		const altText = image.metadata?.description || image.originalFilename;
 
 		const contentUpdate = {
@@ -134,6 +132,7 @@ export async function execute(input: UpdateSectionInput, ctx: AgentContext) {
 		};
 	}
 
+	// Update content via service
 	if (input.content) {
 		await ctx.services.sectionService.syncPageContents({
 			pageSectionId: input.pageSectionId,

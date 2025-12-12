@@ -7,6 +7,7 @@ import imageStorageService from "./image-storage.service";
 import { generateSHA256 } from "../../utils/hash";
 import type { SaveImageResult } from "./image-storage.service";
 import type { ImageMetadata } from "../ai/metadata-generation.service";
+import type { VectorIndexService } from "../vector-index";
 
 export interface ImageProcessingResult {
 	imageId: string;
@@ -238,8 +239,10 @@ export class ImageProcessingService {
 
 	/**
 	 * Delete image and clean up all references
+	 * @param imageId - The image ID to delete
+	 * @param vectorIndex - Optional vector index service for cleaning up embeddings
 	 */
-	async deleteImage(imageId: string): Promise<void> {
+	async deleteImage(imageId: string, vectorIndex?: VectorIndexService): Promise<void> {
 		const image = await db.query.images.findFirst({
 			where: eq(images.id, imageId),
 		});
@@ -253,13 +256,13 @@ export class ImageProcessingService {
 			await this.storage.deleteImage(image.filePath);
 		}
 
-		// Delete from vector index if available
-		try {
-			const { ServiceContainer } = await import("../service-container");
-			const vectorIndex = ServiceContainer.get().vectorIndex;
-			await vectorIndex.deleteImage(imageId);
-		} catch (error) {
-			console.warn("Failed to delete from vector index:", error);
+		// Delete from vector index if provided
+		if (vectorIndex) {
+			try {
+				await vectorIndex.deleteImage(imageId);
+			} catch (error) {
+				console.warn("Failed to delete from vector index:", error);
+			}
 		}
 
 		// Database delete cascades to metadata and variants

@@ -1,8 +1,8 @@
 /**
  * searchWeb Tool Metadata
  *
- * Unified web search with mode selection (quick/deep).
- * Replaces: web_quickSearch, web_deepResearch
+ * Unified web search with dual-provider fallback (Tavily + Exa).
+ * Uses both providers by default for resilience.
  */
 
 import { defineToolMetadata } from "../_types/metadata";
@@ -10,7 +10,7 @@ import { defineToolMetadata } from "../_types/metadata";
 export default defineToolMetadata({
 	name: "searchWeb",
 	description:
-		"Web search. mode: quick (facts) or deep (research with AI answer).",
+		"Web search with fallback. Uses Tavily+Exa for resilience. mode: quick/deep, provider: tavily/exa/both",
 	phrases: [
 		"search web",
 		"web search",
@@ -27,6 +27,8 @@ export default defineToolMetadata({
 		"who is",
 		"when did",
 		"how to",
+		"tavily search",
+		"exa search",
 	],
 	relatedTools: ["fetchContent"],
 	riskLevel: "safe",

@@ -3,7 +3,7 @@ import path from "node:path";
 import express from "express";
 import { db } from "./db/client";
 import { RendererService } from "./services/renderer";
-import { ServiceContainer } from "./services/service-container";
+import { createServices } from "./services/create-services";
 import { createPostsRouter } from "./routes/posts";
 
 const app = express();
@@ -12,10 +12,10 @@ const TEMPLATE_DIR = process.env.TEMPLATE_DIR || path.join(__dirname, "templates
 
 async function startPreviewServer() {
   try {
-    const services = await ServiceContainer.initialize(db);
+    const services = await createServices({ db });
     console.log("✓ Services initialized for preview");
 
-    const renderer = new RendererService(TEMPLATE_DIR);
+    const renderer = new RendererService(TEMPLATE_DIR, services.siteSettingsService);
     console.log("✓ Renderer initialized");
 
     // Request logging middleware
@@ -75,7 +75,7 @@ async function startPreviewServer() {
     });
 
     // Posts routes
-    app.use("/posts", createPostsRouter(renderer, services.entryService));
+    app.use("/posts", createPostsRouter(renderer, services.entryService, services));
 
     // Static files
     app.use("/assets", express.static(path.join(TEMPLATE_DIR, "assets")));

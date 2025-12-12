@@ -4,7 +4,7 @@
 **Organization**: 12 layers (Foundation → Advanced) with 72 topics total  
 **Grounding**: Research papers, production systems, proven implementations from this codebase
 
-**Last Updated**: 2025-12-04
+**Last Updated**: 2025-12-11
 **Status**: 🚧 In Progress
 
 ---
@@ -93,7 +93,21 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
-**Latest Updates** (2025-12-04):
+**Latest Updates** (2025-12-11):
+
+**Layer 4: Memory & State - Working Memory** (6/6 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
+
+_Memory Systems Overview_ (1/1 - ✅ COMPLETE):
+
+-   ✅ 4.0.1 Memory Systems Overview - **RESTRUCTURED!** CoALA framework, Mem0 benchmarks (26% accuracy, 91% latency), hybrid storage
+
+_Working Memory (Short-Term)_ (5/5 - ✅ COMPLETE):
+
+-   ✅ 4.1.1 Working Memory Concept - **RESTRUCTURED!** RAM analogy, 0.2ms access, 90% token savings, AI SDK v6 integration
+-   ✅ 4.1.2 Entity Extraction - **RESTRUCTURED!** Rule-based vs LLM-based, PARSE (64.7% accuracy), 96% memory savings
+-   ✅ 4.1.3 Sliding Window Management - **RESTRUCTURED!** FIFO eviction, 96% cost reduction, Azure 5-turn recommendation
+-   ✅ 4.1.4 Reference Resolution - **RESTRUCTURED!** Coreference (83.3 F1-score), recency heuristics, LLM fallback
+-   ✅ 4.1.5 Universal Working Memory - **RESTRUCTURED!** Complete TypeScript implementation, AI SDK v6 patterns
 
 **Layer 3: Agent Architecture** (17/20 topics - 🚧 85% COMPLETE - Restructured Dec 2025):
 
@@ -119,13 +133,13 @@ _Tool Calling & Execution_ (5/5 - ✅ COMPLETE):
 -   ✅ 3.3.4 Result Validation - **RESTRUCTURED!** Read-after-write verification, schema validation, 60% silent failure detection
 -   ✅ 3.3.5 Tool Composition - **RESTRUCTURED!** Sequential, parallel, map-reduce, conditional, hybrid patterns
 
-_Loop Control & Convergence_ (4/5 - 🚧 80% COMPLETE):
+_Loop Control & Convergence_ (4/5 - 🚧 80% COMPLETE - Restructured Dec 2025):
 
--   ✅ 3.4.1 Max Steps - **RESTRUCTURED!** AI SDK v6 `stopWhen: stepCountIs()`, adaptive limits, checkpoints
--   ✅ 3.4.2 Convergence Detection - **RESTRUCTURED!** Multi-criteria detection, finish tools, goal-state verification
--   ✅ 3.4.3 Stuck Detection - **RESTRUCTURED!** Exact repetition, progress-based, composite detectors, HITL recovery
+-   ✅ 3.4.1 Max Steps - **RESTRUCTURED!** AI SDK v6 `stopWhen: stepCountIs()`, REFRAIN 20-55% token reduction, adaptive/progressive limits, checkpoints
+-   ✅ 3.4.2 Convergence Detection - **RESTRUCTURED!** 96.5% converge within 3 iterations, multi-criteria detection, finish tools, goal-state verification (ReflAct 93.3%)
+-   ✅ 3.4.3 Stuck Detection - **RESTRUCTURED!** 60% failures involve loops, exact repetition, progress-based, composite detectors, Autono adaptive abandonment, HITL recovery
 -   ⏳ 3.4.4 Loop State Machine - _Pending_
--   ✅ 3.4.5 Early Exit - **RESTRUCTURED!** Entropy-based, progress-based, Stop-RAG pattern, exit framework
+-   ✅ 3.4.5 Early Exit - **RESTRUCTURED!** 20-55% token reduction (REFRAIN), entropy-based (HALT-CoT 15-30%), progress-based, Stop-RAG (4.7× efficiency)
 
 **Layer 1: Prompt Engineering** (14/14 topics - ✅ 100% COMPLETE):
 
@@ -492,39 +506,46 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 3.3 Tool Calling & Execution
 
--   [3.3.1 Tool Definition (Zod Schemas, Descriptions)](./kb/3-agents/3.3.1-tool-definition.md) ✅
+-   [3.3.1 Tool Definition (Zod Schemas, Descriptions)](./3-agents/3.3.1-tool-definition.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: AI SDK v6 `inputSchema` pattern, Zod schemas, rich descriptions, execution flow
--   [3.3.2 Tool Registry & Metadata](./kb/3-agents/3.3.2-tool-registry.md) ✅
+    -   **Includes**: AI SDK v6 `inputSchema` pattern, Zod schemas, 60-80% error reduction with clear schemas
+    -   **Research**: Scalifiai (Oct 2025), QuotientAI (May 2025), AI SDK v6 documentation
+-   [3.3.2 Tool Registry & Metadata](./3-agents/3.3.2-tool-registry.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: Centralized catalog, TOOL_METADATA pattern, dynamic discovery, type-safe registry
-    -   **Codebase Example**: `server/tools/all-tools.ts` (TOOL_METADATA)
--   [3.3.3 Context Injection (experimental_context)](./kb/3-agents/3.3.3-context-injection.md) ✅
+    -   **Includes**: 79% enterprises adopting registries (2025), centralized catalog, 30-50% duplication reduction, MCP integration
+    -   **Research**: Collibra (Oct 2025), LiangjunJiang (Sep 2025), Solo.io AgentRegistry (Nov 2025)
+-   [3.3.3 Context Injection (experimental_context)](./3-agents/3.3.3-context-injection.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: AI SDK v6 `experimental_context`, AgentContext interface, context factory pattern
--   [3.3.4 Result Validation](./kb/3-agents/3.3.4-result-validation.md) ✅
+    -   **Includes**: AI SDK v6 `experimental_context`, AgentContext interface, context factory, 70-90% testability improvement
+    -   **Research**: AG2 documentation (Apr 2025), MCP protocol
+-   [3.3.4 Result Validation](./3-agents/3.3.4-result-validation.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: Read-after-write verification, schema validation, business rule checks, 60% silent failure detection
--   [3.3.5 Tool Composition Patterns](./kb/3-agents/3.3.5-composition.md) ✅
+    -   **Includes**: 60% of failures are silent, read-after-write verification, 85% error reduction (VeriGuard)
+    -   **Research**: VeriGuard (Oct 2025), EviBound (Oct 2025 - 0% hallucination), VerifiAgent (Apr 2025)
+-   [3.3.5 Tool Composition Patterns](./3-agents/3.3.5-composition.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: Sequential, parallel, map-reduce, conditional, hybrid patterns
+    -   **Includes**: 2-5× speedup with parallel, sequential/parallel/map-reduce/conditional/hybrid patterns
+    -   **Research**: AI SDK v6 multi-step, LightcapAI monoidal structures (Nov 2025), Skywork.ai orchestration (Sep 2025)
 
 #### 3.4 Loop Control & Convergence
 
--   [3.4.1 Max Steps Limits](./kb/3-agents/3.4.1-max-steps.md) ✅
+-   [3.4.1 Max Steps Limits](./3-agents/3.4.1-max-steps.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: AI SDK v6 `stopWhen: stepCountIs()`, adaptive limits, progressive limits with checkpoints
--   [3.4.2 Convergence Detection](./kb/3-agents/3.4.2-convergence.md) ✅
+    -   **Includes**: AI SDK v6 `stopWhen: stepCountIs()`, REFRAIN 20-55% token reduction, adaptive/progressive limits, checkpoints
+    -   **Research**: REFRAIN (Oct 2025), LangChain max_iterations, AutoGen patterns
+-   [3.4.2 Convergence Detection](./3-agents/3.4.2-convergence.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: Multi-criteria detection, explicit finish tools, goal-state verification, AI SDK v6 stop conditions
-    -   **Research**: AgentFlow (Stanford 2024)
--   [3.4.3 Stuck Detection](./kb/3-agents/3.4.3-stuck-detection.md) ✅
+    -   **Includes**: 96.5% converge within 3 iterations, multi-criteria detection, explicit finish tools, goal-state verification
+    -   **Research**: Plan Verification (2025), ReflAct (May 2025 - 93.3% success), HALT-CoT (Jul 2025)
+-   [3.4.3 Stuck Detection](./3-agents/3.4.3-stuck-detection.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: Exact repetition, progress-based, composite detectors, HITL recovery, Autono adaptive abandonment
--   [3.4.4 Loop State Machine](./kb/3-agents/3.4.4-state-machine.md) ⏳
--   [3.4.5 Early Exit Strategies](./kb/3-agents/3.4.5-early-exit.md) ✅
+    -   **Includes**: 60% failures involve loops, exact repetition, progress-based, composite detectors, HITL recovery
+    -   **Research**: Autono Framework (Apr 2025), ReflAct (May 2025), browser-use patterns
+-   [3.4.4 Loop State Machine](./3-agents/3.4.4-state-machine.md) ⏳
+-   [3.4.5 Early Exit Strategies](./3-agents/3.4.5-early-exit.md) ✅
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
-    -   **Includes**: Entropy-based exit, progress-based exit, Stop-RAG pattern, exit decision framework
+    -   **Includes**: 20-55% token reduction (REFRAIN), entropy-based (HALT-CoT 15-30%), progress-based, Stop-RAG (4.7× efficiency)
+    -   **Research**: REFRAIN (Oct 2025), HALT-CoT (Jul 2025), S-GRPO (May 2025), Stop-RAG (Oct 2025)
 
 ---
 
@@ -534,29 +555,56 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 #### 4.0 Memory Systems Overview
 
--   [4.0.1 Memory Systems Overview - Memory in AI Agents](./kb/4-memory/4.0.1-memory-systems-overview.md) ✅
-    -   **Status**: Complete - Comprehensive introduction to memory architectures in AI agents
-    -   **Includes**: CoALA framework (Working, Semantic, Episodic, Procedural), Letta/MemGPT, Mem0, hybrid storage patterns
-    -   **Research**: CoALA (2024), Letta (2024-2025), Mem0 (2025), Graphiti
+-   [4.0.1 Memory Systems Overview](./4-memory/4.0.1-memory-systems-overview.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: CoALA framework (Working, Semantic, Episodic, Procedural), Mem0 benchmarks (26% accuracy, 91% latency reduction)
+    -   **Research**: CoALA (2024), Mem0 (2025), Letta/MemGPT, JetBrains Research (Dec 2025)
 
 #### 4.1 Working Memory (Short-Term)
 
--   [4.1.1 Working Memory Concept (RAM Analogy)](./kb/4-memory/4.1.1-working-memory-concept.md) ⏳
--   [4.1.2 Entity Extraction from Tool Results](./kb/4-memory/4.1.2-entity-extraction.md) ⏳
-    -   **Codebase Example**: `server/services/working-memory/entity-extractor.ts`
--   [4.1.3 Sliding Window (Recent N Entities)](./kb/4-memory/4.1.3-sliding-window.md) ⏳
--   [4.1.4 Reference Resolution ("this page", "that entry")](./kb/4-memory/4.1.4-reference-resolution.md) ⏳
--   [4.1.5 Implementation: Universal Working Memory](./kb/4-memory/4.1.5-universal-implementation.md) ⏳
-    -   **Research**: Mem0, A-MEM, AWS AgentCore
+-   [4.1.1 Working Memory Concept](./4-memory/4.1.1-working-memory-concept.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: RAM analogy, 26% accuracy improvement (Mem0), 91% latency reduction, CoALA framework
+    -   **Research**: Mem0 (2025), CoALA (2024), Azure OpenAI patterns, Letta/MemGPT
+-   [4.1.2 Entity Extraction](./4-memory/4.1.2-entity-extraction.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Rule-based vs LLM-based extraction, 96% memory savings, PARSE (64.7% accuracy)
+    -   **Research**: PARSE/Amazon (2024), LQCA framework (2025), Triplex (2024)
+-   [4.1.3 Sliding Window Management](./4-memory/4.1.3-sliding-window.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: FIFO eviction, 96% cost reduction, 5-turn Azure recommendation, turn/token/hybrid patterns
+    -   **Research**: Azure OpenAI (2025), LangChain, Strands Agents SDK
+-   [4.1.4 Reference Resolution](./4-memory/4.1.4-reference-resolution.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Coreference resolution (83.3 F1-score), recency heuristics, type+distance, LLM fallback
+    -   **Research**: CorefBERT (2021), LQCA framework (2025), ACL 2024 coreference research
+-   [4.1.5 Universal Working Memory Implementation](./4-memory/4.1.5-universal-working-memory.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Complete TypeScript implementation, 0.2ms lookup, 90% token reduction, AI SDK v6 integration
+    -   **Research**: Mem0 (2025), AWS AgentCore, A-MEM, CoALA (2024)
 
-#### 4.2 Subgoal Memory (Medium-Term)
+#### 4.2 Subgoal Memory (Medium-Term) (5/5 - ✅ COMPLETE - Restructured Dec 2025)
 
--   [4.2.1 HiAgent Hierarchical Memory](./kb/4-memory/4.2.1-hiagent.md) ⏳
-    -   **Research**: HiAgent (2024) - 2x success rate, 3.8 fewer steps
--   [4.2.2 Compression Triggers (80% Context Capacity)](./kb/4-memory/4.2.2-compression-triggers.md) ⏳
--   [4.2.3 Subgoal Detection Patterns](./kb/4-memory/4.2.3-subgoal-detection.md) ⏳
--   [4.2.4 Summarization Strategies](./kb/4-memory/4.2.4-summarization.md) ⏳
--   [4.2.5 10:1 Compression Ratios](./kb/4-memory/4.2.5-compression-ratios.md) ⏳
+-   [4.2.1 HiAgent Hierarchical Memory](./4-memory/4.2.1-hiagent-hierarchical-memory.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: 2× success rate improvement, 10:1 compression ratio, subgoal-based chunking, AI SDK v6 integration
+    -   **Research**: HiAgent (ACL 2025), CoALA (2024), Context Engineering (2025)
+-   [4.2.2 Compression Triggers](./4-memory/4.2.2-compression-triggers.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: 80% capacity rule, token/event/time/hybrid triggers, emergency fallbacks
+    -   **Research**: LangChain Context Engineering (2025), Dynamic Memory Compression (ICML 2024)
+-   [4.2.3 Subgoal Detection](./4-memory/4.2.3-subgoal-detection.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: LLM-based (95% accuracy) vs heuristic (60-70%), hybrid approach, AI SDK v6 generateObject
+    -   **Research**: HiAgent (ACL 2025), ReAcTree (ICLR 2025), SelfGoal (2024)
+-   [4.2.4 Summarization Strategies](./4-memory/4.2.4-summarization-strategies.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: Outcome-focused (10:1 compression), extractive/abstractive/hybrid, batch summarization
+    -   **Research**: HiAgent (ACL 2025), Mem0 (2025), LangChain Context Engineering
+-   [4.2.5 Compression Ratios](./4-memory/4.2.5-compression-ratios.md) ✅
+    -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
+    -   **Includes**: 10:1 target ratio, multi-level compression (50:1+), adaptive compression, monitoring
+    -   **Research**: HiAgent (ACL 2025), Dynamic Memory Compression (ICML 2024)
 
 #### 4.3 Long-Term Memory (Persistent)
 

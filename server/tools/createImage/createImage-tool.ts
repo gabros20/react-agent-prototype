@@ -4,11 +4,11 @@
  * Upload new image via buffer. Returns imageId after processing.
  * Note: This is primarily used internally by importImage and file upload routes.
  * Direct agent calls are less common - agents typically use browseImages + importImage.
+ *
+ * Uses ImageService for all database operations (no direct DB access).
  */
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { images } from "../../db/schema";
 import imageProcessingService from "../../services/storage/image-processing.service";
 import type { AgentContext } from "../_types/agent-context";
 
@@ -26,6 +26,7 @@ export type CreateImageInput = z.infer<typeof schema>;
 
 export async function execute(input: CreateImageInput, ctx: AgentContext) {
 	const sessionId = ctx.sessionId;
+	const imageService = ctx.services.imageService;
 
 	if (!sessionId) {
 		return {
@@ -56,13 +57,10 @@ export async function execute(input: CreateImageInput, ctx: AgentContext) {
 		const startTime = Date.now();
 
 		let finalStatus = "processing";
-		let imageRecord: typeof images.$inferSelect | null = null;
+		let imageRecord = await imageService.getStatus(processResult.imageId);
 
 		while (Date.now() - startTime < maxWaitMs) {
-			imageRecord =
-				(await ctx.db.query.images.findFirst({
-					where: eq(images.id, processResult.imageId),
-				})) ?? null;
+			imageRecord = await imageService.getStatus(processResult.imageId);
 
 			if (imageRecord?.status === "completed") {
 				finalStatus = "completed";
