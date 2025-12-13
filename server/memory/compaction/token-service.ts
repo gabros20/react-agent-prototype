@@ -237,3 +237,37 @@ export function calculateContextUsagePercent(
   const usable = limits.contextLimit - reserve;
   return (currentTokens / usable) * 100;
 }
+
+// ============================================================================
+// Provider Token Overflow Check
+// ============================================================================
+
+/**
+ * Provider-reported tokens for compaction decisions.
+ * This is the source of truth - no local estimation needed.
+ */
+export interface ProviderTokens {
+  input: number;
+  output: number;
+}
+
+/**
+ * Check if context is overflowing using provider-reported tokens.
+ *
+ * Following OpenCode pattern: use provider tokens as source of truth.
+ * Formula: (input + output) > (contextLimit - maxOutput) * threshold
+ *
+ * @param tokens - Provider-reported tokens from last assistant message
+ * @param limits - Model context limits
+ * @param threshold - Compaction trigger threshold (default: COMPACTION_THRESHOLD)
+ * @returns true if compaction should be triggered
+ */
+export function isOverflowFromProviderTokens(
+  tokens: ProviderTokens,
+  limits: ModelLimits,
+  threshold = COMPACTION_THRESHOLD
+): boolean {
+  const used = tokens.input + tokens.output;
+  const usable = limits.contextLimit - limits.maxOutput;
+  return used > usable * threshold;
+}

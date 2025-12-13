@@ -58,6 +58,8 @@ export {
   calculateAvailableTokens,
   isApproachingOverflow,
   calculateContextUsagePercent,
+  isOverflowFromProviderTokens,
+  type ProviderTokens,
 } from './token-service';
 
 // Tool pruner

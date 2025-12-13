@@ -836,9 +836,17 @@ export const useTraceStore = create<TraceState>((set, get) => ({
 			if (entry.type === "tool-call" && entry.error) {
 				metrics.errorCount++;
 			}
-			if (entry.tokens) {
-				metrics.tokens.input += entry.tokens.input;
-				metrics.tokens.output += entry.tokens.output;
+		}
+
+		// Token count: use LAST entry with tokens (typically llm-response)
+		// This represents the actual context window usage, not cumulative across steps
+		// Each step's input tokens include the full context, so summing would be wrong
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const entry = entries[i];
+			if (entry.tokens && entry.tokens.input > 0) {
+				metrics.tokens.input = entry.tokens.input;
+				metrics.tokens.output = entry.tokens.output;
+				break;
 			}
 		}
 

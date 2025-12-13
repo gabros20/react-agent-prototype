@@ -41,6 +41,11 @@ export interface SaveMessageResult {
   tokens: number;
 }
 
+export interface ProviderTokens {
+  input: number;
+  output: number;
+}
+
 // ============================================================================
 // Message Store
 // ============================================================================
@@ -60,9 +65,15 @@ export class MessageStore {
    * We use sequential inserts without transaction wrapper for now.
    * The trade-off is potential partial writes, but this is acceptable
    * since message loss is recoverable (user can re-send).
+   *
+   * @param message - The rich message to save
+   * @param providerTokens - Optional provider-reported tokens (for assistant messages)
    */
-  async saveRichMessage(message: RichMessage): Promise<SaveMessageResult> {
-    // Calculate total tokens for the message
+  async saveRichMessage(
+    message: RichMessage,
+    providerTokens?: ProviderTokens
+  ): Promise<SaveMessageResult> {
+    // Calculate total tokens for the message (local estimate)
     const tokens = countMessageTokens(message);
 
     // Determine display content for UI
@@ -85,6 +96,7 @@ export class MessageStore {
       content: JSON.stringify(content),
       displayContent,
       tokens,
+      providerTokens: providerTokens || null, // Provider-reported tokens for compaction decisions
       isSummary: message.role === "assistant" && "isSummary" in message ? (message as AssistantMessage).isSummary : false,
       isCompactionTrigger: message.role === "user" && "isCompactionTrigger" in message ? (message as UserMessage).isCompactionTrigger : false,
       createdAt: new Date(message.createdAt),
@@ -230,6 +242,37 @@ export class MessageStore {
       compactedParts,
       summaryCount,
     };
+  }
+
+  /**
+   * Get provider-reported tokens from the last assistant message
+   *
+   * Used for compaction decisions - provider tokens are the source of truth
+   * for context window usage. Returns null if no assistant messages exist
+   * (new session = 0 tokens = full context available).
+   */
+  async getLastAssistantTokens(sessionId: string): Promise<ProviderTokens | null> {
+    // Find the last assistant message that HAS provider tokens
+    // This handles multi-step tool loops where multiple assistant messages exist
+    // but only the final one has the cumulative token count
+    const { isNotNull } = await import("drizzle-orm");
+
+    const lastAssistantWithTokens = await this.db.query.messages.findFirst({
+      where: and(
+        eq(schema.messages.sessionId, sessionId),
+        eq(schema.messages.role, "assistant"),
+        isNotNull(schema.messages.providerTokens)
+      ),
+      orderBy: desc(schema.messages.createdAt),
+    });
+
+    if (!lastAssistantWithTokens?.providerTokens) {
+      return null;
+    }
+
+    // Type assertion - schema ensures correct shape
+    const tokens = lastAssistantWithTokens.providerTokens as { input: number; output: number };
+    return tokens;
   }
 
   // ============================================================================

@@ -95,12 +95,20 @@ export function TraceHeader({ className }: TraceHeaderProps) {
 				totals.totalDuration += log.metrics.totalDuration || 0;
 				totals.toolCallCount += log.metrics.toolCallCount || 0;
 				totals.stepCount += log.metrics.stepCount || 0;
-				totals.tokens.input += log.metrics.tokens?.input || 0;
-				totals.tokens.output += log.metrics.tokens?.output || 0;
+				// Cost is cumulative across all conversations (total API spend)
 				totals.cost += log.metrics.cost || 0;
 				totals.errorCount += log.metrics.errorCount || 0;
 			}
 			eventCount += log.entries?.length || 0;
+		}
+
+		// Tokens: use LAST conversation's tokens (current context window usage)
+		// This matches the compaction indicator - shows what's actually in context now
+		const sortedLogs = [...allLogs].sort((a, b) => a.conversationIndex - b.conversationIndex);
+		const lastLog = sortedLogs[sortedLogs.length - 1];
+		if (lastLog?.metrics?.tokens) {
+			totals.tokens.input = lastLog.metrics.tokens.input || 0;
+			totals.tokens.output = lastLog.metrics.tokens.output || 0;
 		}
 
 		return { metrics: totals, totalEventCount: eventCount };

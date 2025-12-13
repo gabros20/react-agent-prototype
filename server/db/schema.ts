@@ -328,7 +328,11 @@ export const messages = sqliteTable("messages", {
   toolName: text("tool_name"),
   stepIdx: integer("step_idx"),
   // Compaction tracking
-  tokens: integer("tokens").default(0), // Cached token count
+  tokens: integer("tokens").default(0), // Local token estimate (legacy)
+  providerTokens: text("provider_tokens", { mode: "json" }).$type<{
+    input: number;
+    output: number;
+  } | null>(), // Provider-reported tokens (source of truth for compaction)
   isSummary: integer("is_summary", { mode: "boolean" }).default(false), // Is this a compaction summary?
   isCompactionTrigger: integer("is_compaction_trigger", { mode: "boolean" }).default(false), // Is this a compaction trigger user msg?
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

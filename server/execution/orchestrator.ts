@@ -124,7 +124,8 @@ export class AgentOrchestrator {
           responseData.messages,
           workingContext,
           logger,
-          result.displayTexts // Pass streamed text for merging into assistant messages
+          result.displayTexts, // Pass streamed text for merging into assistant messages
+          result.usage as { promptTokens?: number; completionTokens?: number } // Provider tokens for compaction
         );
       } catch (saveError) {
         // Log but don't fail - user already has their response
@@ -184,14 +185,16 @@ export class AgentOrchestrator {
       stepsCount: result.steps?.length || 0,
     });
 
-    // Save session data
+    // Save session data with provider tokens
     await this.contextCoordinator.saveSessionData(
       resolved.sessionId,
       context.previousMessages,
       resolved.prompt,
       result.response.messages,
       workingContext,
-      logger
+      logger,
+      undefined, // displayTexts (streaming only)
+      result.usage as { promptTokens?: number; completionTokens?: number } // Provider tokens for compaction
     );
 
     return {

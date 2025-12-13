@@ -67,6 +67,8 @@ export {
   calculateAvailableTokens,
   isApproachingOverflow,
   calculateContextUsagePercent,
+  isOverflowFromProviderTokens,
+  type ProviderTokens,
   // Tool pruner
   pruneToolOutputs,
   needsPruning,

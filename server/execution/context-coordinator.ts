@@ -23,10 +23,11 @@ import {
   richMessagesToModel,
   modelMessageToRich,
   type RichMessage,
+  isOverflowFromProviderTokens,
 } from '../memory';
 import { getModelLimits } from '../memory/compaction/token-service';
-import { countChatTokens } from '../../lib/tokenizer';
 import { getSiteAndEnv } from '../utils/get-context';
+import type { ProviderTokens } from '../services/message-store';
 // NOTE: createContextRestorationMessages removed - the condition for using it never fired
 // (new sessions have empty workingContext, existing sessions have messages)
 import type { AgentLogger } from '../tools/types';
@@ -149,16 +150,57 @@ export class ContextCoordinator {
     const compactionDisabled = !ENABLE_COMPACTION;
     const maxAttemptsReached = (session.compactionCount || 0) >= MAX_COMPACTION_ATTEMPTS;
 
-    if (compactionDisabled || maxAttemptsReached) {
+    // Get model limits (use session's stored context length if available)
+    const modelLimits = getModelLimits(options.modelId, session.modelContextLength);
+
+    // Provider-anchored compaction decision (OpenCode pattern)
+    // Get provider-reported tokens from last assistant message - this is the source of truth
+    const lastProviderTokens = await this.deps.messageStore.getLastAssistantTokens(options.sessionId);
+
+    // Skip compaction check entirely for new sessions (0 messages = full context available)
+    if (!lastProviderTokens) {
+      logger.info('New session or no provider tokens, skipping compaction check', {
+        sessionId: options.sessionId,
+        messageCount: previousMessages.length,
+      });
+
+      return {
+        context: {
+          messages,
+          workingMemoryString: workingContext.toContextString(),
+          discoveredTools: workingContext.getDiscoveredTools(),
+          previousMessages,
+          trimInfo: {
+            messagesRemoved: 0,
+            turnsRemoved: 0,
+            invalidTurnsRemoved: 0,
+            removedTools: [],
+            activeTools: workingContext.getDiscoveredTools(),
+          },
+        },
+        workingContext,
+      };
+    }
+
+    // Check overflow using provider tokens
+    const shouldCompact = isOverflowFromProviderTokens(lastProviderTokens, modelLimits);
+
+    if (compactionDisabled || maxAttemptsReached || !shouldCompact) {
       if (maxAttemptsReached) {
         logger.warn('Maximum compaction attempts reached, using full history', {
           sessionId: options.sessionId,
           compactionCount: session.compactionCount,
           maxAttempts: MAX_COMPACTION_ATTEMPTS,
         });
-      } else {
+      } else if (compactionDisabled) {
         logger.info('Compaction disabled, using full history', {
           messageCount: messages.length,
+        });
+      } else {
+        logger.info('Context within limits, no compaction needed', {
+          providerTokens: lastProviderTokens,
+          contextLimit: modelLimits.contextLimit,
+          threshold: 0.9,
         });
       }
 
@@ -180,21 +222,19 @@ export class ContextCoordinator {
       };
     }
 
-    // Get model limits for compaction start event (use session's stored context length if available)
-    const modelLimits = getModelLimits(options.modelId, session.modelContextLength);
-
-    // Emit compaction start event with actual token count
+    // Emit compaction start event with provider-reported token count
     if (emitter) {
-      // Convert messages to format countChatTokens expects
-      const messagesForTokenCount = (messages as { role: string; content: unknown }[]).map((m) => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-      }));
-      const actualTokens = countChatTokens(messagesForTokenCount);
-      emitter.emitCompactionStart(actualTokens, modelLimits.contextLimit);
+      const providerTokenCount = lastProviderTokens.input + lastProviderTokens.output;
+      emitter.emitCompactionStart(providerTokenCount, modelLimits.contextLimit);
     }
 
-    // Compaction enabled - prepare context with pruning and summarization
+    logger.info('Compaction triggered by provider tokens', {
+      providerTokens: lastProviderTokens,
+      contextLimit: modelLimits.contextLimit,
+      usable: modelLimits.contextLimit - modelLimits.maxOutput,
+    });
+
+    // Compaction enabled and needed - prepare context with pruning and summarization
     let preparedMessages: typeof messages;
     let result: ContextPrepareResult;
 
@@ -391,6 +431,8 @@ export class ContextCoordinator {
    * messages. The actual text content comes from text-delta stream events and is
    * captured in displayTexts. We merge displayTexts into the first assistant message
    * that only has tool-calls (no text content).
+   *
+   * @param usage - Provider-reported token usage (stored on last assistant message for compaction decisions)
    */
   async saveSessionData(
     sessionId: string,
@@ -399,7 +441,8 @@ export class ContextCoordinator {
     responseMessages: ModelMessage[],
     workingContext: WorkingContext,
     logger: AgentLogger,
-    displayTexts?: string[]
+    displayTexts?: string[],
+    usage?: { promptTokens?: number; completionTokens?: number }
   ): Promise<void> {
     try {
       // Convert and save user message as RichMessage
@@ -472,9 +515,47 @@ export class ContextCoordinator {
         }
       }
 
-      // Save all response messages in parallel for performance
-      // Each message has its own transaction, so partial failures are isolated
-      await Promise.all(richMessages.map(msg => this.deps.messageStore.saveRichMessage(msg)));
+      // Save all response messages
+      // Provider tokens go on the LAST assistant message (OpenCode pattern)
+      // AI SDK uses inputTokens/outputTokens, not promptTokens/completionTokens
+      const usageObj = usage as { inputTokens?: number; outputTokens?: number; promptTokens?: number; completionTokens?: number } | undefined;
+      const inputTokens = usageObj?.inputTokens ?? usageObj?.promptTokens;
+      const outputTokens = usageObj?.outputTokens ?? usageObj?.completionTokens;
+
+      const providerTokens: ProviderTokens | undefined = inputTokens !== undefined && outputTokens !== undefined
+        ? { input: inputTokens, output: outputTokens }
+        : undefined;
+
+      if (providerTokens) {
+        logger.info('Provider tokens extracted from usage', { providerTokens });
+      } else {
+        logger.warn('No provider tokens in usage', { usage });
+      }
+
+      // Find the last assistant message index to attach provider tokens
+      let lastAssistantIdx = -1;
+      for (let i = richMessages.length - 1; i >= 0; i--) {
+        if (richMessages[i].role === 'assistant') {
+          lastAssistantIdx = i;
+          break;
+        }
+      }
+
+      // Save messages - provider tokens go on last assistant message
+      await Promise.all(richMessages.map((msg, idx) => {
+        const isLastAssistant = idx === lastAssistantIdx && providerTokens;
+        return this.deps.messageStore.saveRichMessage(
+          msg,
+          isLastAssistant ? providerTokens : undefined
+        );
+      }));
+
+      if (providerTokens && lastAssistantIdx >= 0) {
+        logger.info('Saved provider tokens on assistant message', {
+          messageId: richMessages[lastAssistantIdx].id,
+          providerTokens,
+        });
+      }
 
       // Save working context and update session timestamp in parallel
       await Promise.all([

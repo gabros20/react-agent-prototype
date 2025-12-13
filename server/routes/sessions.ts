@@ -240,19 +240,31 @@ export function createSessionRoutes(services: Services) {
   });
 
   // GET /v1/sessions/:id/context-stats - Get context usage statistics
+  // Uses provider-reported tokens as source of truth (OpenCode pattern)
   router.get("/:id/context-stats", async (req, res, next) => {
     try {
       const session = await services.sessionService.getSessionById(req.params.id);
       const modelId = (req.query.modelId as string) || session.modelId || "anthropic/claude-3.5-sonnet";
       const messageStore = services.messageStore;
 
-      // Load rich messages directly from MessageStore (includes parts with compactedAt)
-      const richMessages = await messageStore.loadRichMessages(req.params.id);
-      const currentTokens = countTotalTokens(richMessages);
+      // Get provider tokens from last assistant message (source of truth)
+      const lastProviderTokens = await messageStore.getLastAssistantTokens(req.params.id);
+
+      // Provider tokens or 0 for new sessions - no local fallback needed
+      // Context window = input tokens only (output doesn't count against context limit)
+      const currentTokens = lastProviderTokens
+        ? lastProviderTokens.input
+        : 0;
+
       // Use session's stored context length (from OpenRouter) if available
       const limits = getModelLimits(modelId, session.modelContextLength);
       const availableTokens = limits.contextLimit - limits.maxOutput;
-      const usagePercent = Math.round((currentTokens / availableTokens) * 100);
+      const usagePercent = currentTokens > 0
+        ? Math.round((currentTokens / availableTokens) * 100)
+        : 0;
+
+      // Load messages for count and compacted parts (lightweight query)
+      const richMessages = await messageStore.loadRichMessages(req.params.id);
 
       // Count tool results that are already compacted (use compactedAt field directly)
       let compactedResults = 0;
@@ -277,6 +289,8 @@ export function createSessionRoutes(services: Services) {
         compactedResults,
         isApproachingLimit: usagePercent > 80,
         isOverLimit: usagePercent > 95,
+        // Include provider token breakdown for debugging
+        providerTokens: lastProviderTokens || null,
       }));
     } catch (error) {
       next(error);
