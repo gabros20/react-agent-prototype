@@ -18,7 +18,7 @@ interface SessionState {
   loadSession: (sessionId: string) => Promise<Session | null>;
   createSession: (title?: string) => Promise<string>;
   updateSession: (sessionId: string, title: string) => Promise<void>;
-  updateSessionModel: (sessionId: string, modelId: string) => Promise<void>;
+  updateSessionModel: (sessionId: string, modelId: string, modelContextLength?: number) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<string | null>;
   clearHistory: (sessionId: string) => Promise<void>;
   setCurrentSessionId: (sessionId: string | null) => void;
@@ -101,14 +101,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  // Update session model
-  updateSessionModel: async (sessionId: string, modelId: string) => {
+  // Update session model (with optional context length from OpenRouter)
+  updateSessionModel: async (sessionId: string, modelId: string, modelContextLength?: number) => {
     try {
-      await sessionsApi.update(sessionId, { modelId });
+      await sessionsApi.update(sessionId, { modelId, modelContextLength });
 
       set((state) => ({
         sessions: state.sessions.map((session) =>
-          session.id === sessionId ? { ...session, modelId, updatedAt: new Date() } : session
+          session.id === sessionId
+            ? { ...session, modelId, modelContextLength: modelContextLength ?? null, updatedAt: new Date() }
+            : session
         ),
       }));
     } catch (error) {

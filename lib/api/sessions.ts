@@ -12,6 +12,7 @@ export interface SessionMetadata {
   id: string;
   title: string;
   modelId: string | null;
+  modelContextLength: number | null;
   messageCount: number;
   lastActivity: Date;
   createdAt: Date;
@@ -22,6 +23,7 @@ export interface Session {
   id: string;
   title: string;
   modelId: string | null;
+  modelContextLength: number | null;
   createdAt: Date;
   updatedAt: Date;
   messages: Message[];
@@ -38,7 +40,7 @@ export interface MessagePart {
   // Tool call part
   toolCallId?: string;
   toolName?: string;
-  args?: unknown;
+  input?: unknown;
   // Tool result part
   output?: unknown;
   isError?: boolean;
@@ -71,6 +73,7 @@ export interface UpdateSessionInput {
   title?: string;
   archived?: boolean;
   modelId?: string;
+  modelContextLength?: number;
 }
 
 export interface ConversationLogInput {
@@ -96,6 +99,7 @@ interface RawSessionMetadata {
   id: string;
   title: string;
   modelId: string | null;
+  modelContextLength: number | null;
   messageCount: number;
   lastActivity: string;
   createdAt: string;
@@ -108,7 +112,7 @@ interface RawMessagePart {
   text?: string;
   toolCallId?: string;
   toolName?: string;
-  args?: unknown;
+  input?: unknown;
   output?: unknown;
   isError?: boolean;
   compactedAt?: number | null;
@@ -118,6 +122,7 @@ interface RawSession {
   id: string;
   title: string;
   modelId: string | null;
+  modelContextLength: number | null;
   createdAt: string;
   updatedAt: string;
   messages: Array<{

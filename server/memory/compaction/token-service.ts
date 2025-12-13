@@ -13,12 +13,30 @@ import type {
 } from './types';
 
 // ============================================================================
-// Model Limits Registry
+// Compaction Defaults (centralized for easy testing/tuning)
+// ============================================================================
+
+/** Default context limit when model info unavailable */
+export const DEFAULT_CONTEXT_LIMIT = 16_000;
+
+/** Default max output tokens */
+export const DEFAULT_MAX_OUTPUT = 4_096;
+
+/**
+ * Compaction trigger threshold (0.0 - 1.0)
+ * When context usage exceeds this % of available space, compaction kicks in.
+ * Lower = more aggressive compaction, Higher = later compaction
+ */
+export const COMPACTION_THRESHOLD = 0.9;
+
+// ============================================================================
+// Model Limits Registry (fallback when session context length unavailable)
 // ============================================================================
 
 /**
  * Known model context limits.
  * Uses OpenRouter model ID format.
+ * NOTE: Prefer using session's modelContextLength from OpenRouter API.
  */
 const MODEL_LIMITS: Record<string, ModelLimits> = {
   // OpenAI
@@ -48,16 +66,28 @@ const MODEL_LIMITS: Record<string, ModelLimits> = {
   'deepseek/deepseek-chat': { contextLimit: 64_000, maxOutput: 8_192 },
   'deepseek/deepseek-coder': { contextLimit: 64_000, maxOutput: 8_192 },
   'deepseek/deepseek-r1': { contextLimit: 64_000, maxOutput: 8_192 },
-
-  // Default fallback
-  'default': { contextLimit: 16_000, maxOutput: 4_096 },
 };
 
 /**
- * Get model limits, with fallback to default
+ * Get model limits with fallback chain:
+ * 1. Session's modelContextLength (from OpenRouter API) - most accurate
+ * 2. Hardcoded MODEL_LIMITS lookup (for known models)
+ * 3. DEFAULT_CONTEXT_LIMIT (safe fallback)
+ *
+ * @param modelId - Model identifier (e.g., 'openai/gpt-4o-mini')
+ * @param sessionContextLength - Context length from session (from OpenRouter)
  */
-export function getModelLimits(modelId: string): ModelLimits {
-  // Try exact match first
+export function getModelLimits(modelId: string, sessionContextLength?: number | null): ModelLimits {
+  // Priority 1: Use session's stored context length (from OpenRouter)
+  if (sessionContextLength && sessionContextLength > 0) {
+    return {
+      contextLimit: sessionContextLength,
+      // Estimate max output as 1/8 of context, capped at 16K
+      maxOutput: Math.min(Math.floor(sessionContextLength / 8), 16_384),
+    };
+  }
+
+  // Priority 2: Try exact match in hardcoded table
   if (MODEL_LIMITS[modelId]) {
     return MODEL_LIMITS[modelId];
   }
@@ -80,7 +110,8 @@ export function getModelLimits(modelId: string): ModelLimits {
     return MODEL_LIMITS['google/gemini-1.5-pro'];
   }
 
-  return MODEL_LIMITS['default'];
+  // Priority 3: Fallback defaults
+  return { contextLimit: DEFAULT_CONTEXT_LIMIT, maxOutput: DEFAULT_MAX_OUTPUT };
 }
 
 // ============================================================================
@@ -97,8 +128,8 @@ export function countPartTokens(part: MessagePart): number {
       return countTokens(part.text);
 
     case 'tool-call':
-      // Tool name + JSON args
-      return countTokens(part.toolName) + countTokens(JSON.stringify(part.args));
+      // Tool name + JSON input
+      return countTokens(part.toolName) + countTokens(JSON.stringify(part.input));
 
     case 'tool-result':
       // If compacted, output is just a placeholder
@@ -167,9 +198,10 @@ export function countTokensWithModelAdjustment(text: string, modelId: string): n
 export function calculateAvailableTokens(
   modelId: string,
   currentTokens: number,
-  outputReserve?: number
+  outputReserve?: number,
+  sessionContextLength?: number | null
 ): number {
-  const limits = getModelLimits(modelId);
+  const limits = getModelLimits(modelId, sessionContextLength);
   const reserve = outputReserve ?? limits.maxOutput;
   const usable = limits.contextLimit - reserve;
   return usable - currentTokens;
@@ -182,9 +214,10 @@ export function isApproachingOverflow(
   modelId: string,
   currentTokens: number,
   outputReserve?: number,
-  threshold = 0.9 // 90% of available space
+  sessionContextLength?: number | null,
+  threshold = COMPACTION_THRESHOLD
 ): boolean {
-  const limits = getModelLimits(modelId);
+  const limits = getModelLimits(modelId, sessionContextLength);
   const reserve = outputReserve ?? limits.maxOutput;
   const usable = limits.contextLimit - reserve;
   return currentTokens > usable * threshold;
@@ -196,9 +229,10 @@ export function isApproachingOverflow(
 export function calculateContextUsagePercent(
   modelId: string,
   currentTokens: number,
-  outputReserve?: number
+  outputReserve?: number,
+  sessionContextLength?: number | null
 ): number {
-  const limits = getModelLimits(modelId);
+  const limits = getModelLimits(modelId, sessionContextLength);
   const reserve = outputReserve ?? limits.maxOutput;
   const usable = limits.contextLimit - reserve;
   return (currentTokens / usable) * 100;

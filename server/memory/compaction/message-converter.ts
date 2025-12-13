@@ -73,14 +73,39 @@ function createUserMessage(
   msg: ModelMessage,
   base: { id: string; sessionId: string; createdAt: number }
 ): UserMessage {
-  let textParts: TextPart[] = [];
+  const textParts: TextPart[] = [];
 
   if (typeof msg.content === "string") {
-    textParts = [{ id: randomUUID(), type: "text", text: msg.content }];
+    textParts.push({ id: randomUUID(), type: "text", text: msg.content });
   } else if (Array.isArray(msg.content)) {
-    textParts = msg.content
-      .filter((p): p is { type: "text"; text: string } => p !== null && typeof p === "object" && "type" in p && p.type === "text")
-      .map((p) => ({ id: randomUUID(), type: "text" as const, text: p.text }));
+    for (const part of msg.content) {
+      if (part === null) continue;
+      if (typeof part !== "object" || !("type" in part)) continue;
+
+      switch (part.type) {
+        case "text":
+          if ("text" in part && typeof part.text === "string") {
+            textParts.push({ id: randomUUID(), type: "text", text: part.text });
+          }
+          break;
+
+        case "image":
+        case "file":
+          // Multimodal content - store as text placeholder
+          // UserMessage.parts only supports TextPart[], so we can't store rich content
+          console.warn(`[message-converter] User message has unsupported "${part.type}" content - storing placeholder`);
+          textParts.push({
+            id: randomUUID(),
+            type: "text",
+            text: `[${part.type} content - not yet supported]`,
+          });
+          break;
+
+        default:
+          console.warn(`[message-converter] Unknown user content part type: ${(part as { type: string }).type}`);
+          break;
+      }
+    }
   }
 
   const message: UserMessage = {
@@ -117,14 +142,14 @@ function createAssistantMessage(
             if (
               "toolCallId" in part &&
               "toolName" in part &&
-              "args" in part
+              "input" in part
             ) {
               parts.push({
                 id: randomUUID(),
                 type: "tool-call",
                 toolCallId: part.toolCallId as string,
                 toolName: part.toolName as string,
-                args: part.args,
+                input: part.input ?? {},
               });
             }
             break;
@@ -134,6 +159,34 @@ function createAssistantMessage(
               parts.push({ id: randomUUID(), type: "reasoning", text: part.text });
             }
             break;
+
+          // AI SDK types we don't fully support yet - convert to text representations
+          // These are edge cases (multimodal, human-in-the-loop) that can be added later
+          case "image":
+          case "file":
+            // Multimodal content - store as text placeholder for now
+            console.warn(`[message-converter] Unsupported part type "${part.type}" - storing as text placeholder`);
+            parts.push({
+              id: randomUUID(),
+              type: "text",
+              text: `[${part.type} content - not yet supported]`,
+            });
+            break;
+
+          case "tool-approval-request":
+          case "tool-approval-response":
+            // Human-in-the-loop approval - log and skip (these are transient)
+            console.warn(`[message-converter] Skipping transient part type: ${part.type}`);
+            break;
+
+          default:
+            // Unknown type - log for debugging
+            console.warn(`[message-converter] Unknown part type in createAssistantMessage: ${(part as { type: string }).type}`);
+            break;
+
+          // Note: "step-start" is a stream event type, NOT a message content part type.
+          // It won't appear in ModelMessage.content, only in fullStream events.
+          // Our RichMessage supports it for internal tracking but AI SDK doesn't include it in messages.
         }
       }
     }
@@ -223,7 +276,7 @@ export function richMessageToModel(msg: RichMessage): ModelMessage {
                 type: "tool-call",
                 toolCallId: tc.toolCallId,
                 toolName: tc.toolName,
-                args: tc.args,
+                input: tc.input ?? {},
               };
 
             case "reasoning":
@@ -233,7 +286,14 @@ export function richMessageToModel(msg: RichMessage): ModelMessage {
               // Convert marker to text for the LLM
               return { type: "text", text: (part as any).summary };
 
+            case "step-start":
+              // Step markers are internal - skip for LLM context
+              // (AI SDK handles step boundaries internally)
+              return null;
+
             default:
+              // Unknown part type - log and skip
+              console.warn(`[message-converter] Unknown part type in richMessageToModel: ${part.type}`);
               return null;
           }
         }).filter(Boolean) as any[],

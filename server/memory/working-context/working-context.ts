@@ -8,6 +8,7 @@
  */
 
 import type { Entity, WorkingContextState, ToolUsageRecord } from './types';
+import { VALID_TOOL_NAMES } from '../../tools/_index';
 
 const MAX_ENTITIES = 10;
 const MAX_DISCOVERED_TOOLS = 20;
@@ -65,11 +66,23 @@ export class WorkingContext {
     return this.entityOrder.map(id => this.entitiesById.get(id)!);
   }
 
-  /** Add discovered tools (from searchTools results) */
+  /** Add discovered tools (from searchTools results) with validation */
   addDiscoveredTools(tools: string[]): void {
     const sizeBefore = this.discoveredTools.size;
+    let invalidTools: string[] = [];
+
     for (const tool of tools) {
-      this.discoveredTools.add(tool);
+      // Validate tool name exists in known tools
+      if (VALID_TOOL_NAMES.has(tool)) {
+        this.discoveredTools.add(tool);
+      } else {
+        invalidTools.push(tool);
+      }
+    }
+
+    // Log invalid tools for debugging (don't throw - graceful degradation)
+    if (invalidTools.length > 0) {
+      console.warn(`[WorkingContext] Invalid tool names ignored: ${invalidTools.join(', ')}`);
     }
 
     // Trim if too many (keep most recent by converting to array, trimming, and back)
@@ -98,6 +111,24 @@ export class WorkingContext {
       }
     }
     if (removed) {
+      this._version++;
+    }
+  }
+
+  /** Full reset - clear all state (called after compaction) */
+  clear(): void {
+    this.entitiesById.clear();
+    this.entityOrder = [];
+    this.discoveredTools.clear();
+    this.usedTools.clear();
+    this._version++;
+    this._cachedContextString = null;
+  }
+
+  /** Clear only discovered tools (alternative to full clear) */
+  clearDiscoveredTools(): void {
+    if (this.discoveredTools.size > 0) {
+      this.discoveredTools.clear();
       this._version++;
     }
   }

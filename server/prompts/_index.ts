@@ -1,19 +1,20 @@
 /**
  * Prompt Loader
  *
- * Centralized loading of all prompt files with hot-reload support.
+ * Loads tool prompt files with hot-reload support.
  * In dev mode: Always reads fresh from disk
- * In prod mode: Caches compiled templates
+ * In prod mode: Caches content
  *
  * Prompt files use XML format (.xml extension)
  *
- * For type-safe prompt building, see: prompts/builder/
+ * NOTE: Agent system prompt is now STATIC and loaded via system-prompt.ts.
+ * Tool guidance is injected as conversation messages via tool-guidance-messages.ts.
  */
 
-// Re-export builder module for convenience
-export * from './builder';
+// Re-export only actively used builder exports
+// ToolPromptInjector is used by tool-guidance-messages.ts
+export { ToolPromptInjector, getToolPrompt, getToolPrompts } from "./_builder";
 
-import Handlebars from "handlebars";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,63 +24,8 @@ const __dirname = path.dirname(__filename);
 
 const isDev = process.env.NODE_ENV !== "production";
 
-// Cache for compiled templates (production only)
-const templateCache = new Map<string, ReturnType<typeof Handlebars.compile>>();
-
-/**
- * Load a prompt file from disk
- */
-function loadPromptFile(relativePath: string): string {
-	const fullPath = path.join(__dirname, relativePath);
-	if (!fs.existsSync(fullPath)) {
-		throw new Error(`Prompt file not found: ${fullPath}`);
-	}
-	return fs.readFileSync(fullPath, "utf-8");
-}
-
-/**
- * Get a compiled Handlebars template for a prompt file
- * In dev mode: Always recompiles from disk (hot-reload)
- * In prod mode: Returns cached compiled template
- */
-function getCompiledTemplate(
-	relativePath: string,
-): ReturnType<typeof Handlebars.compile> {
-	// Dev mode: always read fresh
-	if (isDev) {
-		const content = loadPromptFile(relativePath);
-		return Handlebars.compile(content);
-	}
-
-	// Prod mode: use cache
-	if (!templateCache.has(relativePath)) {
-		const content = loadPromptFile(relativePath);
-		templateCache.set(relativePath, Handlebars.compile(content));
-	}
-	return templateCache.get(relativePath)!;
-}
-
-// ============================================================================
-// Agent Prompts
-// ============================================================================
-
-export interface AgentPromptContext {
-	currentDate: string;
-	workingMemory?: string;
-	activeProtocols?: string;
-}
-
-/**
- * Load the main agent prompt with context variables
- */
-export function loadAgentPrompt(context: AgentPromptContext): string {
-	const template = getCompiledTemplate("agent/main-agent-prompt.xml");
-	return template({
-		...context,
-		workingMemory: context.workingMemory || "",
-		activeProtocols: context.activeProtocols || "",
-	});
-}
+// Cache for prompt content (production only)
+const promptCache = new Map<string, string>();
 
 // ============================================================================
 // Tool Prompts
@@ -97,23 +43,24 @@ export function loadToolPrompt(toolName: string): string | null {
 		return null; // Tool doesn't have a prompt file (schema + description are sufficient)
 	}
 
-	// Dev mode: always read fresh
+	// Dev mode: always read fresh (hot-reload)
 	if (isDev) {
 		return fs.readFileSync(fullPath, "utf-8");
 	}
 
-	// Prod mode: use simple string cache (not Handlebars, tool prompts are static)
+	// Prod mode: cache content
 	const cacheKey = `tool:${toolName}`;
-	if (!templateCache.has(cacheKey)) {
-		const content = fs.readFileSync(fullPath, "utf-8");
-		templateCache.set(cacheKey, (() => content) as any);
+	if (!promptCache.has(cacheKey)) {
+		promptCache.set(cacheKey, fs.readFileSync(fullPath, "utf-8"));
 	}
-	return fs.readFileSync(fullPath, "utf-8");
+	return promptCache.get(cacheKey)!;
 }
 
 /**
- * Load prompts for multiple tools, formatted for injection into activeProtocols
+ * Load prompts for multiple tools
  * Only loads prompts that exist - tools without prompts are skipped
+ *
+ * Used by tool-guidance-messages.ts to inject tool guidance as conversation messages.
  */
 export function loadToolPrompts(toolNames: string[]): string {
 	return toolNames
@@ -147,10 +94,10 @@ export function listToolPrompts(): string[] {
 // ============================================================================
 
 /**
- * Clear the template cache (useful for testing or forcing reload)
+ * Clear the prompt cache (useful for testing or forcing reload)
  */
 export function clearPromptCache(): void {
-	templateCache.clear();
+	promptCache.clear();
 }
 
 /**

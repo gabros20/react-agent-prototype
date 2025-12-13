@@ -10,8 +10,8 @@
  * Business logic is delegated to specialized modules.
  */
 
-import { cmsAgent, AGENT_CONFIG, getLastInjectedInstructions, type AgentCallOptions } from '../agents/main-agent';
-import { getSystemPrompt } from '../agents/system-prompt';
+import { cmsAgent, AGENT_CONFIG, type AgentCallOptions } from '../agents/main-agent';
+import { getStaticSystemPrompt } from '../agents/system-prompt';
 import { SSEEventEmitter, type SSEWriter } from '../events';
 import { countTokens, countChatTokens } from '../../lib/tokenizer';
 import { getModelPricing } from '../services/openrouter-pricing';
@@ -76,7 +76,7 @@ export class AgentOrchestrator {
       });
 
       // Build agent options
-      const agentOptions = this.buildAgentOptions(resolved, context, logger, {
+      const agentOptions = this.buildAgentOptions(resolved, context, logger, emitter, {
         write: (event) => {
           const eventType = (event as { type?: string }).type || 'step';
           writeSSE(eventType, event);
@@ -106,19 +106,7 @@ export class AgentOrchestrator {
         finishReason: result.finishReason,
       });
 
-      // Save session data
-      const combinedDisplayContent = result.displayTexts.join('\n\n').trim() || result.finalText;
-      await this.contextCoordinator.saveSessionData(
-        resolved.sessionId,
-        context.previousMessages,
-        resolved.prompt,
-        responseData.messages,
-        workingContext,
-        logger,
-        combinedDisplayContent
-      );
-
-      // Emit final events
+      // Emit final events BEFORE save (so client gets response even if save fails)
       emitter.emitResult(
         result.finalText,
         result.toolCalls,
@@ -126,6 +114,26 @@ export class AgentOrchestrator {
         result.finishReason,
         result.usage as { promptTokens?: number; completionTokens?: number; totalTokens?: number }
       );
+
+      // Save session data (non-critical - log error but don't fail the request)
+      try {
+        await this.contextCoordinator.saveSessionData(
+          resolved.sessionId,
+          context.previousMessages,
+          resolved.prompt,
+          responseData.messages,
+          workingContext,
+          logger,
+          result.displayTexts // Pass streamed text for merging into assistant messages
+        );
+      } catch (saveError) {
+        // Log but don't fail - user already has their response
+        logger.error('Failed to save session data', {
+          traceId: resolved.traceId,
+          error: (saveError as Error).message,
+        });
+      }
+
       emitter.emitDone();
     } catch (error) {
       logger.error('Agent execution error', {
@@ -134,6 +142,8 @@ export class AgentOrchestrator {
         stack: (error as Error).stack,
       });
       emitter.emitError((error as Error).message);
+      // Always emit done so client knows stream is complete (even on error)
+      emitter.emitDone();
     }
   }
 
@@ -201,6 +211,7 @@ export class AgentOrchestrator {
     resolved: { sessionId: string; traceId: string; modelId: string; cmsTarget: { siteId: string; environmentId: string } },
     context: { workingMemoryString: string; discoveredTools: string[] },
     logger: AgentLogger,
+    emitter?: SSEEventEmitter,
     stream?: { write: (event: unknown) => void }
   ): AgentCallOptions {
     return {
@@ -215,6 +226,10 @@ export class AgentOrchestrator {
       vectorIndex: this.deps.vectorIndex,
       logger,
       stream,
+      // Callback for SSE emission when tool instructions are injected
+      onInstructionsInjected: emitter
+        ? (data) => emitter.emitInstructionsInjected(data.tools, data.instructions, data.stepNumber)
+        : undefined,
     };
   }
 
@@ -223,12 +238,11 @@ export class AgentOrchestrator {
     context: { messages: unknown[]; workingMemoryString: string; previousMessages: unknown[]; trimInfo: { messagesRemoved: number; turnsRemoved: number; invalidTurnsRemoved: number; removedTools: string[]; activeTools: string[] } },
     emitter: SSEEventEmitter
   ): Promise<void> {
-    // System prompt
-    const systemPrompt = getSystemPrompt({
-      currentDate: new Date().toISOString(),
-      workingMemory: context.workingMemoryString,
-    });
+    // System prompt (STATIC - no dynamic content injected)
+    // Working memory is now injected as conversation messages, not in system prompt
+    const systemPrompt = getStaticSystemPrompt();
     const systemPromptTokens = countTokens(systemPrompt);
+    // Working memory tokens now tracked separately (it's in conversation messages, not system prompt)
     const workingMemoryTokens = context.workingMemoryString ? countTokens(context.workingMemoryString) : 0;
     emitter.emitSystemPrompt(systemPrompt, systemPrompt.length, systemPromptTokens, context.workingMemoryString, workingMemoryTokens);
 

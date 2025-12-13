@@ -73,11 +73,11 @@ export interface TraceLogger {
 	/**
 	 * Log a tool call - returns the entry ID for later updates
 	 * @param name Tool name
-	 * @param args Tool arguments
+	 * @param input Tool input parameters
 	 * @param callId Unique identifier for this tool call
 	 * @returns Entry ID
 	 */
-	toolCall(name: string, args: unknown, callId: string): string;
+	toolCall(name: string, input: unknown, callId: string): string;
 
 	/**
 	 * Log successful tool result - updates the original tool-call entry

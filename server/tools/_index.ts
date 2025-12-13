@@ -116,3 +116,7 @@ export const ALL_TOOLS = {
 
 // Type helper
 export type ToolName = keyof typeof ALL_TOOLS;
+
+// Export set of valid tool names for validation in other modules
+// Cast to Set<string> for broader compatibility with validation functions
+export const VALID_TOOL_NAMES: Set<string> = new Set(Object.keys(ALL_TOOLS));

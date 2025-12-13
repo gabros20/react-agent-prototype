@@ -42,14 +42,3 @@ export function formatTokenCount(tokens: number): string {
 	return `${Math.round(tokens / 1000)}K`;
 }
 
-/**
- * Get token count with formatted string
- */
-export function getTokenInfo(text: string): { count: number; formatted: string } {
-	const count = countTokens(text);
-	return {
-		count,
-		formatted: formatTokenCount(count),
-	};
-}
-

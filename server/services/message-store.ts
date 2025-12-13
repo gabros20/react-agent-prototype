@@ -54,6 +54,12 @@ export class MessageStore {
 
   /**
    * Save a rich message with parts to the database
+   *
+   * NOTE: SQLite with better-sqlite3 doesn't support async transactions
+   * (drizzle-orm's tx.insert() returns void, not a promise in sync mode).
+   * We use sequential inserts without transaction wrapper for now.
+   * The trade-off is potential partial writes, but this is acceptable
+   * since message loss is recoverable (user can re-send).
    */
   async saveRichMessage(message: RichMessage): Promise<SaveMessageResult> {
     // Calculate total tokens for the message
@@ -71,7 +77,7 @@ export class MessageStore {
     // Convert parts to AI SDK format for the content field
     const content = this.partsToAISDKContent(message);
 
-    // Insert the message
+    // Insert the message first
     await this.db.insert(schema.messages).values({
       id: message.id,
       sessionId: message.sessionId,
@@ -84,7 +90,7 @@ export class MessageStore {
       createdAt: new Date(message.createdAt),
     });
 
-    // Insert message parts
+    // Insert message parts sequentially
     for (let i = 0; i < message.parts.length; i++) {
       const part = message.parts[i];
       const partTokens = countPartTokens(part);
@@ -93,7 +99,7 @@ export class MessageStore {
         id: part.id,
         messageId: message.id,
         sessionId: message.sessionId,
-        type: part.type as "text" | "tool-call" | "tool-result" | "compaction-marker",
+        type: part.type as "text" | "tool-call" | "tool-result" | "compaction-marker" | "reasoning" | "step-start",
         content: JSON.stringify(this.partToStorageFormat(part)),
         tokens: partTokens,
         compactedAt: isToolResultPart(part) && part.compactedAt ? part.compactedAt : null,
@@ -243,23 +249,38 @@ export class MessageStore {
     if (message.role === "assistant") {
       // Assistant messages: array of parts
       return message.parts.map((part) => {
-        if (part.type === "text") {
-          return { type: "text", text: (part as TextPart).text };
+        switch (part.type) {
+          case "text":
+            return { type: "text", text: (part as TextPart).text };
+
+          case "tool-call": {
+            const tc = part as ToolCallPart;
+            return {
+              type: "tool-call",
+              toolCallId: tc.toolCallId,
+              toolName: tc.toolName,
+              input: tc.input ?? {},
+            };
+          }
+
+          case "compaction-marker": {
+            const cm = part as CompactionMarkerPart;
+            return { type: "text", text: cm.summary };
+          }
+
+          case "reasoning":
+            // Extended thinking from o1/deepseek models
+            return { type: "reasoning", text: (part as { text: string }).text };
+
+          case "step-start":
+            // Internal marker - skip for AI SDK content
+            return null;
+
+          default:
+            // Unknown type - log and skip
+            console.warn(`[MessageStore] Unknown part type in partsToAISDKContent: ${part.type}`);
+            return null;
         }
-        if (part.type === "tool-call") {
-          const tc = part as ToolCallPart;
-          return {
-            type: "tool-call",
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            args: tc.args,
-          };
-        }
-        if (part.type === "compaction-marker") {
-          const cm = part as CompactionMarkerPart;
-          return { type: "text", text: cm.summary };
-        }
-        return null;
       }).filter(Boolean);
     }
 
@@ -300,7 +321,7 @@ export class MessageStore {
           ...base,
           toolCallId: tc.toolCallId,
           toolName: tc.toolName,
-          args: tc.args,
+          input: tc.input,
         };
 
       case "tool-result":
@@ -324,8 +345,24 @@ export class MessageStore {
           originalTokens: cm.originalTokens,
         };
 
-      default:
+      case "reasoning":
+        // ReasoningPart from models with extended thinking (o1, deepseek-r1)
+        return {
+          ...base,
+          text: (part as { text: string }).text,
+        };
+
+      case "step-start":
+        // StepStartPart is a marker with no additional data
         return base;
+
+      default: {
+        // Log unexpected part types for debugging
+        // Cast to any for error logging since we've handled all known types
+        const unknownPart = part as unknown as { type: string };
+        console.warn(`[MessageStore] Unknown part type in partToStorageFormat: ${unknownPart.type}`);
+        return base;
+      }
     }
   }
 
@@ -344,7 +381,7 @@ export class MessageStore {
       tokens: dbMessage.tokens || 0,
     };
 
-    // Convert parts from DB format
+    // Convert parts from DB format (AI SDK v6 format with 'input' field)
     const parts = dbMessage.parts.map((dbPart) => {
       const content = typeof dbPart.content === "string"
         ? JSON.parse(dbPart.content)

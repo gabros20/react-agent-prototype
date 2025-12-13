@@ -213,7 +213,7 @@ export class CompactionService {
 
               case "tool-call": {
                 const tc = part as ToolCallPart;
-                return `[Called ${tc.toolName} with: ${JSON.stringify(tc.args)}]`;
+                return `[Called ${tc.toolName} with: ${JSON.stringify(tc.input)}]`;
               }
 
               case "tool-result": {

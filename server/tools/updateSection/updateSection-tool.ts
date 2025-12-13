@@ -76,10 +76,18 @@ export async function execute(input: UpdateSectionInput, ctx: AgentContext) {
 		);
 
 		if (sectionTemplate) {
-			const fields =
-				typeof sectionTemplate.fields === "string"
-					? JSON.parse(sectionTemplate.fields)
-					: sectionTemplate.fields;
+			let fields: { rows?: { slots?: { type: string; key: string }[] }[] } | null = null;
+			try {
+				fields =
+					typeof sectionTemplate.fields === "string"
+						? JSON.parse(sectionTemplate.fields)
+						: sectionTemplate.fields;
+			} catch (parseError) {
+				return {
+					success: false,
+					error: `Failed to parse section template fields: ${(parseError as Error).message}`,
+				};
+			}
 
 			const imageFields: string[] = [];
 			if (fields?.rows) {

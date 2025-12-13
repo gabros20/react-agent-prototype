@@ -16,12 +16,14 @@ export interface UpdateSessionInput {
   title?: string;
   archived?: boolean;
   modelId?: string;
+  modelContextLength?: number;
 }
 
 export interface SessionWithMetadata {
   id: string;
   title: string;
   modelId: string | null;
+  modelContextLength: number | null;
   messageCount: number;
   lastActivity: Date;
   createdAt: Date;
@@ -120,6 +122,7 @@ export class SessionService {
         id: session.id,
         title: session.title,
         modelId: session.modelId,
+        modelContextLength: session.modelContextLength,
         messageCount,
         lastActivity,
         createdAt: session.createdAt,

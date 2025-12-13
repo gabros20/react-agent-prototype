@@ -25,14 +25,23 @@ export interface SSEEvent {
   data: unknown;
 }
 
+export interface SSEParseError {
+  rawData: string;
+  error: Error;
+}
+
+export type OnSSEParseError = (error: SSEParseError) => void;
+
 // ============================================================================
 // SSE Parser
 // ============================================================================
 
 /**
  * Parse SSE chunk into events
+ * @param chunk - Raw SSE chunk string
+ * @param onError - Optional callback for parse errors (errors are logged if not provided)
  */
-export function parseSSEChunk(chunk: string): SSEEvent[] {
+export function parseSSEChunk(chunk: string, onError?: OnSSEParseError): SSEEvent[] {
   const events: SSEEvent[] = [];
   const lines = chunk.split("\n\n");
 
@@ -49,9 +58,14 @@ export function parseSSEChunk(chunk: string): SSEEvent[] {
         type: eventType,
         data: JSON.parse(dataStr),
       });
-    } catch {
-      // Skip malformed JSON
-      console.warn("Failed to parse SSE data:", dataStr);
+    } catch (e) {
+      // Call error callback or log warning
+      const error = e instanceof Error ? e : new Error(String(e));
+      if (onError) {
+        onError({ rawData: dataStr, error });
+      } else {
+        console.warn("Failed to parse SSE data:", dataStr.slice(0, 200));
+      }
     }
   }
 
@@ -60,9 +74,12 @@ export function parseSSEChunk(chunk: string): SSEEvent[] {
 
 /**
  * Create an async iterable from SSE stream
+ * @param stream - Response body stream
+ * @param onError - Optional callback for parse errors
  */
 export async function* createSSEReader(
-  stream: ReadableStream<Uint8Array>
+  stream: ReadableStream<Uint8Array>,
+  onError?: OnSSEParseError
 ): AsyncGenerator<SSEEvent> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -80,7 +97,7 @@ export async function* createSSEReader(
       buffer = lines.pop() || "";
 
       for (const line of lines) {
-        const events = parseSSEChunk(line + "\n\n");
+        const events = parseSSEChunk(line + "\n\n", onError);
         for (const event of events) {
           yield event;
         }
@@ -89,7 +106,7 @@ export async function* createSSEReader(
 
     // Process any remaining buffer
     if (buffer.trim()) {
-      const events = parseSSEChunk(buffer);
+      const events = parseSSEChunk(buffer, onError);
       for (const event of events) {
         yield event;
       }

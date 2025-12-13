@@ -1,11 +1,15 @@
 /**
- * Context Coordinator
+ * Context Coordinator (Cache-Safe Architecture)
  *
  * Handles context lifecycle:
  * - Session management
  * - Working context loading/saving
  * - Message loading and compaction
  * - CMS target resolution
+ * - Context injection via messages (preserves LLM cache)
+ *
+ * IMPORTANT: Dynamic content is injected as conversation messages,
+ * NOT into the system prompt. This preserves LLM prefix caching.
  *
  * Extracted from orchestrator.ts for single responsibility.
  */
@@ -21,7 +25,10 @@ import {
   type RichMessage,
 } from '../memory';
 import { getModelLimits } from '../memory/compaction/token-service';
+import { countChatTokens } from '../../lib/tokenizer';
 import { getSiteAndEnv } from '../utils/get-context';
+// NOTE: createContextRestorationMessages removed - the condition for using it never fired
+// (new sessions have empty workingContext, existing sessions have messages)
 import type { AgentLogger } from '../tools/types';
 import type { SSEEventEmitter } from '../events';
 import type {
@@ -31,6 +38,9 @@ import type {
   PreparedContext,
 } from './types';
 import { AGENT_CONFIG } from '../agents/main-agent';
+
+// Maximum compaction attempts per session to prevent infinite loops
+const MAX_COMPACTION_ATTEMPTS = 10;
 
 // ============================================================================
 // Context Coordinator
@@ -128,17 +138,29 @@ export class ContextCoordinator {
     // Load previous messages
     const previousMessages = await this.loadPreviousMessages(options.sessionId, logger);
 
-    // Build messages array with current prompt
-    const messages: ModelMessage[] = [
-      ...previousMessages,
-      { role: 'user', content: options.prompt },
-    ];
+    // Build messages array
+    let messages: ModelMessage[] = [...previousMessages];
 
-    // If compaction disabled, return full history (no trimming, no compaction)
-    if (!ENABLE_COMPACTION) {
-      logger.info('Compaction disabled, using full history', {
-        messageCount: messages.length,
-      });
+    // Add current user prompt
+    messages.push({ role: 'user', content: options.prompt });
+
+    // Check if compaction is disabled or max attempts reached
+    const session = await this.deps.sessionService.getSessionById(options.sessionId);
+    const compactionDisabled = !ENABLE_COMPACTION;
+    const maxAttemptsReached = (session.compactionCount || 0) >= MAX_COMPACTION_ATTEMPTS;
+
+    if (compactionDisabled || maxAttemptsReached) {
+      if (maxAttemptsReached) {
+        logger.warn('Maximum compaction attempts reached, using full history', {
+          sessionId: options.sessionId,
+          compactionCount: session.compactionCount,
+          maxAttempts: MAX_COMPACTION_ATTEMPTS,
+        });
+      } else {
+        logger.info('Compaction disabled, using full history', {
+          messageCount: messages.length,
+        });
+      }
 
       return {
         context: {
@@ -158,36 +180,79 @@ export class ContextCoordinator {
       };
     }
 
-    // Get model limits for compaction start event
-    const modelLimits = getModelLimits(options.modelId);
+    // Get model limits for compaction start event (use session's stored context length if available)
+    const modelLimits = getModelLimits(options.modelId, session.modelContextLength);
 
-    // Emit compaction start event
+    // Emit compaction start event with actual token count
     if (emitter) {
-      const estimatedTokens = messages.length * 500; // Rough estimate before actual count
-      emitter.emitCompactionStart(estimatedTokens, modelLimits.contextLimit);
+      // Convert messages to format countChatTokens expects
+      const messagesForTokenCount = (messages as { role: string; content: unknown }[]).map((m) => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      }));
+      const actualTokens = countChatTokens(messagesForTokenCount);
+      emitter.emitCompactionStart(actualTokens, modelLimits.contextLimit);
     }
 
     // Compaction enabled - prepare context with pruning and summarization
-    const { messages: preparedMessages, result } = await prepareContextForLLM(
-      messages,
-      {
-        sessionId: options.sessionId,
-        modelId: options.modelId,
-        onProgress: (status) => {
-          logger.info('Compaction progress', { status });
-          // Emit progress events
-          if (emitter) {
-            if (status === 'checking-overflow') {
-              emitter.emitCompactionProgress('pruning', 10);
-            } else if (status === 'pruning') {
-              emitter.emitCompactionProgress('pruning', 50);
-            } else if (status === 'summarizing') {
-              emitter.emitCompactionProgress('summarizing', 75);
+    let preparedMessages: typeof messages;
+    let result: ContextPrepareResult;
+
+    try {
+      const compactionResult = await prepareContextForLLM(
+        messages,
+        {
+          sessionId: options.sessionId,
+          modelId: options.modelId,
+          sessionContextLength: session.modelContextLength, // Use stored context length from OpenRouter
+          onProgress: (status) => {
+            logger.info('Compaction progress', { status });
+            // Emit progress events
+            if (emitter) {
+              if (status === 'checking-overflow') {
+                emitter.emitCompactionProgress('pruning', 10);
+              } else if (status === 'pruning') {
+                emitter.emitCompactionProgress('pruning', 50);
+              } else if (status === 'summarizing') {
+                emitter.emitCompactionProgress('summarizing', 75);
+              }
             }
-          }
-        },
+          },
+        }
+      );
+      preparedMessages = compactionResult.messages;
+      result = compactionResult.result;
+    } catch (compactionError) {
+      // Compaction failed - fall back to full messages without compaction
+      // This prevents LLM API failures from crashing the entire request
+      logger.error('Compaction failed, using full messages', {
+        sessionId: options.sessionId,
+        error: (compactionError as Error).message,
+      });
+      if (emitter) {
+        emitter.emitLog('error', `Compaction failed: ${(compactionError as Error).message}`, {
+          sessionId: options.sessionId,
+        });
       }
-    );
+
+      // Return context without compaction (may exceed token limit, but LLM will handle truncation)
+      return {
+        context: {
+          messages,
+          workingMemoryString: workingContext.toContextString(),
+          discoveredTools: workingContext.getDiscoveredTools(),
+          previousMessages,
+          trimInfo: {
+            messagesRemoved: 0,
+            turnsRemoved: 0,
+            invalidTurnsRemoved: 0,
+            removedTools: [],
+            activeTools: workingContext.getDiscoveredTools(),
+          },
+        },
+        workingContext,
+      };
+    }
 
     // Log and emit compaction results
     if (result.wasPruned || result.wasCompacted) {
@@ -217,6 +282,16 @@ export class ContextCoordinator {
       // Update session compaction tracking if summarization occurred
       if (result.wasCompacted) {
         await this.updateSessionCompactionTracking(options.sessionId, logger);
+
+        // Clear only discovered tools after compaction - agent will rediscover via searchTools
+        // Preserve entities since they may still be relevant (pages, sections being worked on)
+        // Summary prose contains conversation context, but entity IDs are still useful
+        workingContext.clearDiscoveredTools();
+        await this.deps.sessionService.saveWorkingContext(options.sessionId, workingContext);
+        logger.info('Cleared discovered tools after compaction (entities preserved)', {
+          sessionId: options.sessionId,
+          entitiesRemaining: workingContext.size(),
+        });
       }
     }
 
@@ -310,7 +385,12 @@ export class ContextCoordinator {
   /**
    * Save session data after execution using MessageStore
    *
-   * Converts ModelMessage to RichMessage and saves with parts
+   * Converts ModelMessage to RichMessage and saves with parts.
+   *
+   * IMPORTANT: AI SDK's responseMessages only contain tool-call parts for assistant
+   * messages. The actual text content comes from text-delta stream events and is
+   * captured in displayTexts. We merge displayTexts into the first assistant message
+   * that only has tool-calls (no text content).
    */
   async saveSessionData(
     sessionId: string,
@@ -319,7 +399,7 @@ export class ContextCoordinator {
     responseMessages: ModelMessage[],
     workingContext: WorkingContext,
     logger: AgentLogger,
-    displayContent?: string
+    displayTexts?: string[]
   ): Promise<void> {
     try {
       // Convert and save user message as RichMessage
@@ -334,18 +414,73 @@ export class ContextCoordinator {
         await this.deps.sessionService.updateTitleFromContent(sessionId, userPrompt);
       }
 
-      // Convert and save response messages (assistant + tool messages)
-      for (const msg of responseMessages) {
-        // Convert ModelMessage to RichMessage with parts
-        const richMessage = modelMessageToRich(msg, sessionId);
-        await this.deps.messageStore.saveRichMessage(richMessage);
+      // Convert response messages to RichMessage format
+      const richMessages = responseMessages.map(msg => modelMessageToRich(msg, sessionId));
+
+      // Merge displayTexts into assistant messages that are missing text content
+      // AI SDK only includes tool-calls in responseMessages, text comes from stream
+      if (displayTexts && displayTexts.length > 0) {
+        const combinedText = displayTexts.join('\n\n').trim();
+
+        if (combinedText) {
+          // Find first assistant message without text parts and add the display text
+          let textMerged = false;
+          for (const msg of richMessages) {
+            if (msg.role === 'assistant') {
+              const hasTextPart = msg.parts.some(p => p.type === 'text');
+              if (!hasTextPart) {
+                // Add text part at the beginning of the message
+                const { randomUUID } = await import('crypto');
+                msg.parts.unshift({
+                  id: randomUUID(),
+                  type: 'text',
+                  text: combinedText,
+                });
+                logger.info('Merged streamed text into assistant message', {
+                  messageId: msg.id,
+                  textLength: combinedText.length,
+                  toolCallCount: msg.parts.filter(p => p.type === 'tool-call').length,
+                });
+                textMerged = true;
+                break;
+              }
+            }
+          }
+
+          // If no suitable assistant message found, create a new one with just the text
+          // This handles edge case where LLM outputs text but no tool calls
+          if (!textMerged) {
+            const { randomUUID } = await import('crypto');
+            const textOnlyMessage = {
+              id: randomUUID(),
+              sessionId,
+              role: 'assistant' as const,
+              parts: [{
+                id: randomUUID(),
+                type: 'text' as const,
+                text: combinedText,
+              }],
+              createdAt: Date.now(),
+              tokens: 0,
+            };
+            richMessages.push(textOnlyMessage);
+            logger.info('Created text-only assistant message from streamed text', {
+              messageId: textOnlyMessage.id,
+              textLength: combinedText.length,
+            });
+          }
+        }
       }
 
-      // Save working context (still via SessionService - it handles session metadata)
-      await this.deps.sessionService.saveWorkingContext(sessionId, workingContext);
+      // Save all response messages in parallel for performance
+      // Each message has its own transaction, so partial failures are isolated
+      await Promise.all(richMessages.map(msg => this.deps.messageStore.saveRichMessage(msg)));
 
-      // Update session timestamp
-      await this.deps.sessionService.updateSession(sessionId, {});
+      // Save working context and update session timestamp in parallel
+      await Promise.all([
+        this.deps.sessionService.saveWorkingContext(sessionId, workingContext),
+        this.deps.sessionService.updateSession(sessionId, {}),
+      ]);
 
       logger.info('Saved session data via MessageStore', {
         sessionId,

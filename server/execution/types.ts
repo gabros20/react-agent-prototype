@@ -96,7 +96,7 @@ export interface StreamProcessingResult {
   toolCalls: Array<{
     toolName: string;
     toolCallId: string;
-    args: unknown;
+    input: unknown;
   }>;
   toolResults: Array<{
     toolCallId: string;
@@ -115,11 +115,18 @@ export interface StreamProcessingResult {
 
 /**
  * Result from context preparation
+ *
+ * NOTE: Cache-safe architecture - working memory is now injected as
+ * conversation messages (in `messages`), not via `workingMemoryString`.
+ * The workingMemoryString field is deprecated but kept for backward compatibility.
  */
 export interface PreparedContext {
-  /** Messages to send to the agent (trimmed) */
+  /** Messages to send to the agent (includes context restoration if needed) */
   messages: ModelMessage[];
-  /** Working memory string for prompt injection */
+  /**
+   * @deprecated Working memory is now injected as conversation messages.
+   * This field is kept for backward compatibility but should not be used.
+   */
   workingMemoryString: string;
   /** Discovered tools from working context */
   discoveredTools: string[];

@@ -118,12 +118,8 @@ export function handleUserPrompt(
   );
 }
 
-export function handleToolsAvailable(
-  data: Record<string, unknown>,
-  ctx: SSEHandlerContext
-): void {
-  ctx.trace?.toolsAvailable(data.tools as string[]);
-}
+// NOTE: tools-available event removed - backend never emits it
+// Tool availability is now tracked via tools-discovered event
 
 export function handleToolsDiscovered(
   data: Record<string, unknown>,
@@ -149,7 +145,7 @@ export function handleToolCall(
 ): void {
   ctx.store.setAgentStatus({ state: "tool-call", toolName: data.toolName as string });
   const callId = (data.toolCallId as string) || crypto.randomUUID();
-  ctx.trace?.toolCall(data.toolName as string, data.args, callId);
+  ctx.trace?.toolCall(data.toolName as string, data.input, callId);
 }
 
 export function handleToolResult(
@@ -356,7 +352,35 @@ export type SSEEventType =
  * @param ctx - Handler context with trace, store, and refs
  * @returns Handler result (may contain traceId, text, or error)
  */
+/**
+ * Dispatch SSE events to appropriate handlers with error boundary.
+ * If a handler throws, the error is logged and the stream continues.
+ * This prevents a single malformed event from crashing the entire stream.
+ */
 export function dispatchSSEEvent(
+  eventType: string,
+  data: Record<string, unknown>,
+  ctx: SSEHandlerContext
+): SSEHandlerResult {
+  try {
+    return dispatchSSEEventUnsafe(eventType, data, ctx);
+  } catch (error) {
+    // Log the error but don't crash the stream
+    console.error(`[SSE] Handler error for event "${eventType}":`, error);
+    // Log to trace store for visibility in debug panel using systemLog
+    ctx.trace?.systemLog(`SSE handler error for "${eventType}": ${(error as Error).message}`, {
+      eventType,
+      errorStack: (error as Error).stack,
+      truncatedData: JSON.stringify(data).slice(0, 200),
+    });
+    return {};
+  }
+}
+
+/**
+ * Internal dispatcher without error boundary (for testability)
+ */
+function dispatchSSEEventUnsafe(
   eventType: string,
   data: Record<string, unknown>,
   ctx: SSEHandlerContext
@@ -378,9 +402,6 @@ export function dispatchSSEEvent(
       break;
     case "user-prompt":
       handleUserPrompt(data, ctx);
-      break;
-    case "tools-available":
-      handleToolsAvailable(data, ctx);
       break;
     case "tools-discovered":
       handleToolsDiscovered(data, ctx);

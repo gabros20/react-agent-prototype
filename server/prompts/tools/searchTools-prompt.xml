@@ -1,5 +1,9 @@
 <searchTools>
-- STOP after ONE search - discovered tools are now active, USE THEM
-- Never call searchTools twice in a row - if tools returned, call one of them next
-- Search by CAPABILITY keywords ("create post", "list pages") not content
+- Keywords: ACTION VERB + ENTITY ("create post", "upload image", "search page")
+- Variants match: "uploading" finds "upload", "images" finds "image"
+- BATCH all needs into ONE search: "create post upload image publish"
+- If tools found → STOP searching, use them
+- If nothing found → try alternate keywords (2 attempts max)
+  - **BAD:** "create post" then "image update" (redundant when first found tools)
+  - **GOOD:** "create post update image publish" (one batched search)
 </searchTools>

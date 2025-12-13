@@ -307,6 +307,7 @@ export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   modelId: text("model_id").default("openai/gpt-4o-mini"), // Selected model for this session
+  modelContextLength: integer("model_context_length"), // Model's context window from OpenRouter
   workingContext: text("working_context", { mode: "json" }), // Working memory storage
   // Compaction tracking
   compactionCount: integer("compaction_count").default(0), // How many times compaction occurred
@@ -342,7 +343,7 @@ export const messageParts = sqliteTable("message_parts", {
   sessionId: text("session_id")
     .notNull()
     .references(() => sessions.id, { onDelete: "cascade" }),
-  type: text("type", { enum: ["text", "tool-call", "tool-result", "compaction-marker"] }).notNull(),
+  type: text("type", { enum: ["text", "tool-call", "tool-result", "compaction-marker", "reasoning", "step-start"] }).notNull(),
   content: text("content", { mode: "json" }).notNull(), // JSON content based on type
   tokens: integer("tokens").default(0),
   compactedAt: integer("compacted_at"), // Unix timestamp if compacted

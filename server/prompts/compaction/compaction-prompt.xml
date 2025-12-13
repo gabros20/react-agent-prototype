@@ -4,14 +4,22 @@ You are summarizing a CMS agent conversation to help continue it in a new contex
 The AI continuing this conversation will NOT have access to the original messages.
 Your summary becomes the starting context - make it actionable and specific.
 
+IMPORTANT: Describe WHAT was done, not HOW. Do not mention tool names.
+
+❌ "Used updateSectionContent to change the hero title"
+✅ "Changed the hero title on Home page to 'Welcome'"
+
+❌ "Called searchImages and attachImage to add a photo"
+✅ "Added a mountain landscape image to the hero section"
+
 Provide a detailed but concise summary that captures:
 
 ## What Was Accomplished
-- Pages created/modified (include IDs and slugs)
-- Sections added/updated (include section types: hero, features, cta, etc.)
+- Pages created/modified (include names and slugs)
+- Sections added/updated (describe the content, not the tools)
 - Content written or edited
 - Site settings changed (navigation, header, footer)
-- Images uploaded or attached
+- Images added or changed
 
 ## Current State
 - Which page/section is being worked on now
@@ -30,9 +38,8 @@ Provide a detailed but concise summary that captures:
 - Unresolved questions or decisions
 
 ## Technical Context
-- Relevant IDs (pageId, sectionId, postId, imageId)
+- Relevant IDs (pageId, sectionId, postId) for continuing work
 - Error states if any occurred
-- Tool calls that were in progress
 
 Be specific. Use actual names, IDs, and values. Don't summarize with vague phrases.
 Keep under 2000 tokens while preserving all critical context.

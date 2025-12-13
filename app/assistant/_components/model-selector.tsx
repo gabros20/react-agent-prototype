@@ -141,7 +141,10 @@ export function ModelSelector({ disabled = false }: ModelSelectorProps) {
   const handleModelSelect = async (modelId: string) => {
     if (!chatSessionId) return;
     try {
-      await updateSessionModel(chatSessionId, modelId);
+      // Find the model to get its context length
+      const selectedModel = models.find((m) => m.id === modelId);
+      const contextLength = selectedModel?.contextLength;
+      await updateSessionModel(chatSessionId, modelId, contextLength);
       setOpen(false);
     } catch (error) {
       console.error('Failed to update model:', error);

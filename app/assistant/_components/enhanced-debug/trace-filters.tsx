@@ -15,10 +15,11 @@ import { sessionsApi } from "@/lib/api";
 
 // Group entry types for better UX
 const TYPE_GROUPS = {
-	LLM: ["system-prompt", "tools-available", "model-info", "prompt-sent", "llm-response"] as TraceEntryType[],
-	Tools: ["tool-call", "confirmation-required"] as TraceEntryType[],
+	LLM: ["system-prompt", "user-prompt", "tools-available", "model-info", "prompt-sent", "llm-response", "llm-context", "text-streaming"] as TraceEntryType[],
+	Tools: ["tool-call", "tools-discovered", "active-tools-changed", "instructions-injected", "confirmation-required"] as TraceEntryType[],
 	Flow: ["trace-start", "step-start", "step-complete", "trace-complete"] as TraceEntryType[],
-	Memory: ["working-memory-update", "memory-trimmed", "session-loaded", "checkpoint-saved"] as TraceEntryType[],
+	Context: ["working-memory-update", "memory-trimmed", "context-cleanup", "compaction-start", "compaction-progress", "compaction-complete"] as TraceEntryType[],
+	Session: ["session-loaded", "checkpoint-saved"] as TraceEntryType[],
 	Approval: ["approval-request", "approval-response"] as TraceEntryType[],
 	Jobs: ["job-queued", "job-progress", "job-complete", "job-failed"] as TraceEntryType[],
 	System: ["system-log", "retry-attempt", "error"] as TraceEntryType[],

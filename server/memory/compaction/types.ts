@@ -78,8 +78,8 @@ export interface ToolCallPart extends BaseMessagePart {
   type: 'tool-call';
   toolCallId: string;
   toolName: string;
-  /** Arguments of the tool call (AI SDK v6 uses 'args') */
-  args: unknown;
+  /** Input parameters for the tool call (matches AI SDK v6 naming) */
+  input: unknown;
 }
 
 export interface ToolResultPart extends BaseMessagePart {

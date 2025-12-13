@@ -79,7 +79,7 @@ export function createTraceLogger(traceId: string): TraceLogger {
 		// Tool Lifecycle
 		// =========================================================================
 
-		toolCall(name: string, args: unknown, callId: string): string {
+		toolCall(name: string, input: unknown, callId: string): string {
 			const timestamp = Date.now();
 			toolTimings.set(callId, timestamp);
 
@@ -93,7 +93,7 @@ export function createTraceLogger(traceId: string): TraceLogger {
 				toolName: name,
 				toolCallId: callId,
 				summary: `Calling ${name}`,
-				input: args,
+				input,
 			});
 
 			return entryId;

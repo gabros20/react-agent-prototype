@@ -22,6 +22,7 @@ import {
   getModelLimits,
   countTotalTokens,
   isApproachingOverflow,
+  COMPACTION_THRESHOLD,
 } from "./token-service";
 import { pruneToolOutputs, needsPruning } from "./tool-pruner";
 import { getCompactionService } from "./compaction-service";
@@ -39,6 +40,8 @@ export interface ContextPrepareOptions {
   sessionId: string;
   /** Model ID for context limits */
   modelId: string;
+  /** Model context length from session (from OpenRouter) */
+  sessionContextLength?: number | null;
   /** Configuration overrides */
   config?: Partial<CompactionConfig>;
   /** Callback for progress/status updates */
@@ -53,15 +56,16 @@ export interface ContextPrepareOptions {
 export function checkOverflow(
   messages: RichMessage[],
   modelId: string,
-  outputReserve?: number
+  outputReserve?: number,
+  sessionContextLength?: number | null
 ): OverflowCheckResult {
-  const limits = getModelLimits(modelId);
+  const limits = getModelLimits(modelId, sessionContextLength);
   const reserve = outputReserve ?? limits.maxOutput;
   const currentTokens = countTotalTokens(messages);
   const usable = limits.contextLimit - reserve;
 
   return {
-    isOverflow: currentTokens > usable * 0.9, // 90% threshold
+    isOverflow: currentTokens > usable * COMPACTION_THRESHOLD,
     currentTokens,
     availableTokens: usable - currentTokens,
     modelLimit: limits.contextLimit,
@@ -87,7 +91,7 @@ export async function prepareContext(
   modelMessages: ModelMessage[],
   options: ContextPrepareOptions
 ): Promise<ContextPrepareResult> {
-  const { sessionId, modelId, config = {}, onProgress, force = false } = options;
+  const { sessionId, modelId, sessionContextLength, config = {}, onProgress, force = false } = options;
   const cfg = { ...DEFAULT_COMPACTION_CONFIG, ...config };
 
   // Track debug info
@@ -104,7 +108,7 @@ export async function prepareContext(
   const tokensBefore = countTotalTokens(messages);
 
   // Step 2: Check if we're approaching overflow (or forced)
-  const overflowCheck = checkOverflow(messages, modelId, cfg.outputReserve);
+  const overflowCheck = checkOverflow(messages, modelId, cfg.outputReserve, sessionContextLength);
 
   if (!overflowCheck.isOverflow && !force) {
     // No action needed
@@ -137,7 +141,7 @@ export async function prepareContext(
   const tokensAfterPrune = countTotalTokens(messages);
 
   // Step 4: Check if still overflowing after pruning
-  const postPruneCheck = checkOverflow(messages, modelId, cfg.outputReserve);
+  const postPruneCheck = checkOverflow(messages, modelId, cfg.outputReserve, sessionContextLength);
 
   if (!postPruneCheck.isOverflow) {
     // Pruning was enough

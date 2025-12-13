@@ -43,7 +43,7 @@ export interface ToolCallEvent extends BaseStreamEvent {
   type: 'tool-call';
   toolName: string;
   toolCallId: string;
-  args: unknown;
+  input: unknown;
 }
 
 export interface ToolResultEvent extends BaseStreamEvent {
@@ -174,7 +174,7 @@ export interface ResultEvent extends BaseStreamEvent {
   toolCalls: Array<{
     toolName: string;
     toolCallId: string;
-    args: unknown;
+    input: unknown;
   }>;
   toolResults: Array<{
     toolCallId: string;
@@ -202,14 +202,20 @@ export interface ErrorEvent extends BaseStreamEvent {
 }
 
 // ============================================================================
-// Injection Events (Debug)
+// Tool Discovery Events (Debug)
 // ============================================================================
 
-export interface ToolInjectionEvent extends BaseStreamEvent {
-  type: 'tool-injection';
+export interface ToolsDiscoveredEvent extends BaseStreamEvent {
+  type: 'tools-discovered';
+  tools: string[];
+}
+
+export interface InstructionsInjectedEvent extends BaseStreamEvent {
+  type: 'instructions-injected';
   tools: string[];
   instructions: string;
   stepNumber: number;
+  updatedSystemPrompt?: string;
 }
 
 // ============================================================================
@@ -272,7 +278,8 @@ export type StreamEvent =
   | ResultEvent
   | DoneEvent
   | ErrorEvent
-  | ToolInjectionEvent
+  | ToolsDiscoveredEvent
+  | InstructionsInjectedEvent
   | CompactionStartEvent
   | CompactionProgressEvent
   | CompactionCompleteEvent;

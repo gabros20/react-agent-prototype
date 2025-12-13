@@ -19,6 +19,7 @@ const updateSessionSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   archived: z.boolean().optional(),
   modelId: z.string().optional(),
+  modelContextLength: z.number().int().positive().optional(),
 });
 
 const createMessageSchema = z.object({
@@ -241,13 +242,15 @@ export function createSessionRoutes(services: Services) {
   // GET /v1/sessions/:id/context-stats - Get context usage statistics
   router.get("/:id/context-stats", async (req, res, next) => {
     try {
-      const modelId = (req.query.modelId as string) || "anthropic/claude-3.5-sonnet";
+      const session = await services.sessionService.getSessionById(req.params.id);
+      const modelId = (req.query.modelId as string) || session.modelId || "anthropic/claude-3.5-sonnet";
       const messageStore = services.messageStore;
 
       // Load rich messages directly from MessageStore (includes parts with compactedAt)
       const richMessages = await messageStore.loadRichMessages(req.params.id);
       const currentTokens = countTotalTokens(richMessages);
-      const limits = getModelLimits(modelId);
+      // Use session's stored context length (from OpenRouter) if available
+      const limits = getModelLimits(modelId, session.modelContextLength);
       const availableTokens = limits.contextLimit - limits.maxOutput;
       const usagePercent = Math.round((currentTokens / availableTokens) * 100);
 

@@ -33,6 +33,15 @@ export function createAgentRoutes(services: Services) {
 
 	// POST /v1/agent/stream - Streaming agent execution
 	router.post("/stream", async (req, res) => {
+		// Track if client is still connected
+		let clientDisconnected = false;
+
+		// Handle client disconnect - stop processing
+		res.on("close", () => {
+			clientDisconnected = true;
+			services.logger.info("Client disconnected from SSE stream");
+		});
+
 		try {
 			const input = agentRequestSchema.parse(req.body);
 
@@ -41,9 +50,22 @@ export function createAgentRoutes(services: Services) {
 			res.setHeader("Cache-Control", "no-cache");
 			res.setHeader("Connection", "keep-alive");
 
+			// Guarded SSE write - checks if client still connected
 			const writeSSE = (event: string, data: unknown) => {
-				res.write(`event: ${event}\n`);
-				res.write(`data: ${JSON.stringify(data)}\n\n`);
+				if (clientDisconnected || res.writableEnded) {
+					return; // Client gone, skip write
+				}
+				try {
+					res.write(`event: ${event}\n`);
+					res.write(`data: ${JSON.stringify(data)}\n\n`);
+				} catch (writeError) {
+					// Write failed (client disconnected or buffer full)
+					services.logger.warn("SSE write failed", {
+						event,
+						error: writeError instanceof Error ? writeError.message : String(writeError),
+					});
+					clientDisconnected = true;
+				}
 			};
 
 			// Delegate to orchestrator - consume generator to trigger stream processing
@@ -56,15 +78,35 @@ export function createAgentRoutes(services: Services) {
 				},
 				writeSSE
 			)) {
-				// Generator yields void, all events sent via writeSSE callback
+				// Check for client disconnect between iterations
+				if (clientDisconnected) {
+					services.logger.info("Stopping stream processing - client disconnected");
+					break;
+				}
 			}
 
-			res.end();
+			if (!res.writableEnded) {
+				res.end();
+			}
 		} catch (error) {
 			services.logger.error("Agent stream route error", { error: error instanceof Error ? error.message : String(error) });
-			res.status(HttpStatus.BAD_REQUEST).json(
-				ApiResponse.error(ErrorCodes.VALIDATION_ERROR, error instanceof Error ? error.message : "Unknown error")
-			);
+
+			// If SSE headers already sent, emit error event instead of JSON
+			if (res.headersSent) {
+				if (!res.writableEnded && !clientDisconnected) {
+					try {
+						res.write(`event: error\n`);
+						res.write(`data: ${JSON.stringify({ message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+						res.end();
+					} catch {
+						// Ignore write errors during error handling
+					}
+				}
+			} else {
+				res.status(HttpStatus.BAD_REQUEST).json(
+					ApiResponse.error(ErrorCodes.VALIDATION_ERROR, error instanceof Error ? error.message : "Unknown error")
+				);
+			}
 		}
 	});
 

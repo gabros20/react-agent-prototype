@@ -388,10 +388,10 @@ function PartView({ part, index }: { part: Record<string, unknown>; index: numbe
 
 	// Tool call part
 	if (type === "tool-call") {
-		// Args might be stored under different keys
-		const args = part.args ?? part.input ?? part.arguments ?? part.parameters;
+		// AI SDK v6 uses 'input' for tool call parameters
+		const input = part.input;
 		// Get all other properties for display
-		const { type: _, toolName, toolCallId, args: _a, input: _i, arguments: _ar, parameters: _p, ...otherProps } = part;
+		const { type: _, toolName, toolCallId, input: _i, ...otherProps } = part;
 
 		return (
 			<div className='border rounded-md overflow-hidden'>
@@ -401,11 +401,11 @@ function PartView({ part, index }: { part: Record<string, unknown>; index: numbe
 				</div>
 				<div className='p-2 space-y-2 overflow-hidden'>
 					<div className='text-[10px] text-muted-foreground font-mono break-all'>ID: {toolCallId as string}</div>
-					{args !== undefined && (
+					{input !== undefined && (
 						<div>
-							<div className='text-[10px] text-muted-foreground mb-1'>Arguments:</div>
+							<div className='text-[10px] text-muted-foreground mb-1'>Input:</div>
 							<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-96 overflow-auto'>
-								{formatDataForDisplay(args)}
+								{formatDataForDisplay(input)}
 							</pre>
 						</div>
 					)}
@@ -418,8 +418,8 @@ function PartView({ part, index }: { part: Record<string, unknown>; index: numbe
 							</pre>
 						</div>
 					)}
-					{/* Fallback: show full object if no args found */}
-					{args === undefined && Object.keys(otherProps).length === 0 && (
+					{/* Fallback: show full object if no input found */}
+					{input === undefined && Object.keys(otherProps).length === 0 && (
 						<div>
 							<div className='text-[10px] text-muted-foreground mb-1'>Full Data:</div>
 							<pre className='text-xs whitespace-pre-wrap break-all font-mono bg-muted/50 p-2 rounded max-h-96 overflow-auto'>

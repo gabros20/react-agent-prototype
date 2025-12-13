@@ -25,7 +25,8 @@ import type {
   ResultEvent,
   DoneEvent,
   ErrorEvent,
-  ToolInjectionEvent,
+  ToolsDiscoveredEvent,
+  InstructionsInjectedEvent,
   CompactionStartEvent,
   CompactionProgressEvent,
   CompactionCompleteEvent,
@@ -99,12 +100,12 @@ export class SSEEventEmitter {
     });
   }
 
-  emitToolCall(toolName: string, toolCallId: string, args: unknown): void {
+  emitToolCall(toolName: string, toolCallId: string, input: unknown): void {
     this.emit<ToolCallEvent>('tool-call', {
       type: 'tool-call',
       toolName,
       toolCallId,
-      args,
+      input,
       timestamp: this.timestamp(),
     });
   }
@@ -234,7 +235,7 @@ export class SSEEventEmitter {
 
   emitResult(
     text: string,
-    toolCalls: Array<{ toolName: string; toolCallId: string; args: unknown }>,
+    toolCalls: Array<{ toolName: string; toolCallId: string; input: unknown }>,
     toolResults: Array<{ toolCallId: string; toolName: string; result: unknown }>,
     finishReason: string,
     usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
@@ -270,12 +271,25 @@ export class SSEEventEmitter {
     });
   }
 
-  emitToolInjection(tools: string[], instructions: string, stepNumber: number): void {
-    this.emit<ToolInjectionEvent>('tool-injection', {
-      type: 'tool-injection',
+  // ============================================================================
+  // Tool Discovery Events
+  // ============================================================================
+
+  emitToolsDiscovered(tools: string[]): void {
+    this.emit<ToolsDiscoveredEvent>('tools-discovered', {
+      type: 'tools-discovered',
+      tools,
+      timestamp: this.timestamp(),
+    });
+  }
+
+  emitInstructionsInjected(tools: string[], instructions: string, stepNumber: number, updatedSystemPrompt?: string): void {
+    this.emit<InstructionsInjectedEvent>('instructions-injected', {
+      type: 'instructions-injected',
       tools,
       instructions,
       stepNumber,
+      updatedSystemPrompt,
       timestamp: this.timestamp(),
     });
   }

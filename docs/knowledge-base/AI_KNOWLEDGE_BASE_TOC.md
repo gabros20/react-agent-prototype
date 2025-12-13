@@ -75,17 +75,17 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 87/88 topics (99%)
+**Completion**: 108/109 topics (99%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
 | Layer 0: Foundations                 | 3      | ✅ Complete    | 13/13 (100%) |
 | Layer 1: Prompt Engineering          | 3      | ✅ Complete    | 14/14 (100%) |
 | Layer 2: Context Engineering         | 3      | ✅ Complete    | 13/13 (100%) |
-| Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 17/20 (85%)  |
+| Layer 3: Agent Architecture          | 4      | 🚧 In Progress | 18/20 (90%)  |
 | Layer 4: Memory & State              | 5      | ✅ Complete    | 21/21 (100%) |
 | Layer 5: Retrieval & RAG             | 4      | ✅ Complete    | 20/20 (100%) |
-| Layer 6: Planning & Orchestration    | 4      | ⏳ Pending     | 0/20         |
+| Layer 6: Planning & Orchestration    | 4      | ✅ Complete    | 20/20 (100%) |
 | Layer 7: Error Recovery & Resilience | 5      | ⏳ Pending     | 0/20         |
 | Layer 8: Tool Design Patterns        | 4      | ⏳ Pending     | 0/20         |
 | Layer 9: Human-in-the-Loop           | 3      | ⏳ Pending     | 0/15         |
@@ -94,6 +94,40 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
 **Latest Updates** (2025-12-12):
+
+**Layer 6: Planning & Orchestration** (20/20 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
+
+_Plan-and-Execute (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 6.1.1 Separation - **NEW!** Planner-Executor-Replanner pattern, ReWOO (5× token efficiency), AI SDK v6 ToolLoopAgent
+-   ✅ 6.1.2 Alternatives - **NEW!** Multi-plan generation, constrained/score-based selection, 40% dead-end reduction
+-   ✅ 6.1.3 Feasibility - **NEW!** Multi-dimension scoring (tool/param/resource/permission), pre-execution validation
+-   ✅ 6.1.4 Fallbacks - **NEW!** Error-type registry, alternative plan switching, graceful degradation, human escalation
+-   ✅ 6.1.5 Implementation - **NEW!** Complete AI SDK v6 patterns, Planner-Worker-Solver, variable substitution (#E1, #E2)
+
+_Reflexion (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 6.2.1 Reflexion Loop - **NEW!** Generate→Critique→Refine, +22% AlfWorld, +20% HotPotQA, episodic memory
+-   ✅ 6.2.2 Quality Scoring - **NEW!** LLM-as-judge, rubric-based (5-dimension), hybrid scoring, calibration techniques
+-   ✅ 6.2.3 Iteration Limits - **NEW!** 2-3 iterations optimal, combined stopping criteria, diminishing returns research
+-   ✅ 6.2.4 Adaptive Reflection - **NEW!** Complexity classification (simple/moderate/complex/critical), adaptive config
+-   ✅ 6.2.5 Research Findings - **NEW!** Self-correction limits (Huang 2024), external feedback essential, benchmark synthesis
+
+_Tree of Thoughts (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 6.3.1 Multi-Path - **NEW!** ToT (4%→74% Game of 24), LATS (92.7% HumanEval), Self-Consistency (+17.9% GSM8K)
+-   ✅ 6.3.2 Branching - **NEW!** Fixed K-way, adaptive, constrained branching, K=3-5 optimal
+-   ✅ 6.3.3 Pruning - **NEW!** Score-based, depth-limited, beam pruning, 60-80% node reduction
+-   ✅ 6.3.4 Best-First - **NEW!** Priority queue implementation, A* variant, 50% fewer nodes explored
+-   ✅ 6.3.5 When to Use - **NEW!** Decision framework, cost-benefit (10-50× cost for 70% improvement), CoT threshold
+
+_Preflight Validation (5/5 - ✅ COMPLETE)_:
+
+-   ✅ 6.4.1 Check Before Execute - **NEW!** 70-80% failure prevention, tool/param/resource/auth checks, suggestions
+-   ✅ 6.4.2 Resource Existence - **NEW!** Automatic reference extraction, fuzzy matching, cached checks
+-   ✅ 6.4.3 Constraints - **NEW!** Uniqueness, state transitions, relationships, business invariants
+-   ✅ 6.4.4 Schema Compatibility - **NEW!** Zod validation, transformations, refinements, early return pattern
+-   ✅ 6.4.5 Suggestions - **NEW!** Fuzzy matching, recent resources, corrective actions, 60-70% auto-recovery
 
 **Layer 5: RAG & Retrieval** (20/20 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
 
@@ -186,6 +220,7 @@ _Tool Calling & Execution_ (5/5 - ✅ COMPLETE):
 -   ✅ 3.3.3 Context Injection - **RESTRUCTURED!** `experimental_context`, AgentContext interface, context factory
 -   ✅ 3.3.4 Result Validation - **RESTRUCTURED!** Read-after-write verification, schema validation, 60% silent failure detection
 -   ✅ 3.3.5 Tool Composition - **RESTRUCTURED!** Sequential, parallel, map-reduce, conditional, hybrid patterns
+-   ✅ 3.3.6 Dynamic Tool Search - **NEW!** Anthropic Tool Search Tool, 34-94% token savings, semantic/BM25/hybrid search, Spring AI patterns
 
 _Loop Control & Convergence_ (4/5 - 🚧 80% COMPLETE - Restructured Dec 2025):
 
@@ -584,6 +619,10 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
     -   **Status**: ✅ Complete - Restructured to new template format (Dec 2025)
     -   **Includes**: 2-5× speedup with parallel, sequential/parallel/map-reduce/conditional/hybrid patterns
     -   **Research**: AI SDK v6 multi-step, LightcapAI monoidal structures (Nov 2025), Skywork.ai orchestration (Sep 2025)
+-   [3.3.6 Dynamic Tool Search](./3-agents/3.3.6-tool-search.md) ✅
+    -   **Status**: ✅ Complete - NEW (Dec 2025)
+    -   **Includes**: Anthropic Tool Search Tool, deferred loading, semantic/BM25/hybrid search, Spring AI patterns
+    -   **Research**: Anthropic (Nov 2025), Spring AI Tzolov (Dec 2025), Stacklok MCP Optimizer (2025), Arcade benchmarks (2025)
 
 #### 3.4 Loop Control & Convergence
 
@@ -814,39 +853,57 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 **Goal**: Implement planning patterns for complex multi-step tasks
 
-#### 6.1 Plan-and-Execute
+#### 6.1 Plan-and-Execute (5/5 - ✅ COMPLETE)
 
--   [6.1.1 Separate Planning from Execution](./kb/6-planning/6.1.1-separation.md) ⏳
--   [6.1.2 Generate Alternative Plans](./kb/6-planning/6.1.2-alternatives.md) ⏳
+-   [6.1.1 Separate Planning from Execution](./6-planning/6.1.1-separation.md) ✅
+    -   **Research**: ReWOO (5× token efficiency), Plan-and-Solve (Wang 2023), LLMCompiler (Kim 2024)
+-   [6.1.2 Generate Alternative Plans](./6-planning/6.1.2-alternatives.md) ✅
     -   **Research**: LangChain (2024) - 40% reduction in dead ends
--   [6.1.3 Feasibility Scoring](./kb/6-planning/6.1.3-feasibility.md) ⏳
--   [6.1.4 Fallback Strategies](./kb/6-planning/6.1.4-fallbacks.md) ⏳
--   [6.1.5 Implementation Patterns](./kb/6-planning/6.1.5-implementation.md) ⏳
+-   [6.1.3 Feasibility Scoring](./6-planning/6.1.3-feasibility.md) ✅
+    -   Multi-dimension validation (tool/param/resource/permission)
+-   [6.1.4 Fallback Strategies](./6-planning/6.1.4-fallbacks.md) ✅
+    -   Error-type registry, graceful degradation, human escalation
+-   [6.1.5 Implementation Patterns](./6-planning/6.1.5-implementation.md) ✅
+    -   AI SDK v6 ToolLoopAgent, Planner-Worker-Solver pattern
 
-#### 6.2 Reflexion (Self-Critique)
+#### 6.2 Reflexion (Self-Critique) (5/5 - ✅ COMPLETE)
 
--   [6.2.1 Generate → Critique → Refine Loop](./kb/6-planning/6.2.1-reflexion-loop.md) ⏳
-    -   **Research**: Reflexion (Shinn et al. 2023) - 20% accuracy improvement
--   [6.2.2 Quality Scoring](./kb/6-planning/6.2.2-quality-scoring.md) ⏳
--   [6.2.3 Iteration Limits (2-3 Max)](./kb/6-planning/6.2.3-iteration-limits.md) ⏳
--   [6.2.4 Adaptive Reflection (Complexity Heuristic)](./kb/6-planning/6.2.4-adaptive.md) ⏳
--   [6.2.5 Research Findings](./kb/6-planning/6.2.5-research.md) ⏳
+-   [6.2.1 Generate → Critique → Refine Loop](./6-planning/6.2.1-reflexion-loop.md) ✅
+    -   **Research**: Reflexion (Shinn 2023) - +22% AlfWorld, +20% HotPotQA, +11% HumanEval
+-   [6.2.2 Quality Scoring](./6-planning/6.2.2-quality-scoring.md) ✅
+    -   LLM-as-judge, rubric-based (5-dimension), hybrid scoring
+-   [6.2.3 Iteration Limits (2-3 Max)](./6-planning/6.2.3-iteration-limits.md) ✅
+    -   Combined stopping criteria, diminishing returns after 3 iterations
+-   [6.2.4 Adaptive Reflection (Complexity Heuristic)](./6-planning/6.2.4-adaptive.md) ✅
+    -   Task complexity classification (simple/moderate/complex/critical)
+-   [6.2.5 Research Findings](./6-planning/6.2.5-research.md) ✅
+    -   Self-correction limits (Huang 2024), external feedback essential
 
-#### 6.3 Tree of Thoughts
+#### 6.3 Tree of Thoughts (5/5 - ✅ COMPLETE)
 
--   [6.3.1 Multi-Path Exploration](./kb/6-planning/6.3.1-multi-path.md) ⏳
--   [6.3.2 Branching Strategies](./kb/6-planning/6.3.2-branching.md) ⏳
--   [6.3.3 Pruning (Dead Ends)](./kb/6-planning/6.3.3-pruning.md) ⏳
--   [6.3.4 Best-First Search](./kb/6-planning/6.3.4-best-first.md) ⏳
--   [6.3.5 When to Use (Complex Problems)](./kb/6-planning/6.3.5-when-to-use.md) ⏳
+-   [6.3.1 Multi-Path Exploration](./6-planning/6.3.1-multi-path.md) ✅
+    -   **Research**: ToT (4%→74% Game of 24), LATS (92.7% HumanEval), Self-Consistency (+17.9%)
+-   [6.3.2 Branching Strategies](./6-planning/6.3.2-branching.md) ✅
+    -   Fixed K-way, adaptive, constrained branching (K=3-5 optimal)
+-   [6.3.3 Pruning (Dead Ends)](./6-planning/6.3.3-pruning.md) ✅
+    -   Score-based, depth-limited, beam pruning (60-80% reduction)
+-   [6.3.4 Best-First Search](./6-planning/6.3.4-best-first.md) ✅
+    -   Priority queue, A* variant, 50% fewer nodes explored
+-   [6.3.5 When to Use (Complex Problems)](./6-planning/6.3.5-when-to-use.md) ✅
+    -   Decision framework: 10-50× cost for 70% improvement
 
-#### 6.4 Preflight Validation
+#### 6.4 Preflight Validation (5/5 - ✅ COMPLETE)
 
--   [6.4.1 Check Before Execute](./kb/6-planning/6.4.1-check-before-execute.md) ⏳
--   [6.4.2 Resource Existence](./kb/6-planning/6.4.2-resource-existence.md) ⏳
--   [6.4.3 Constraint Satisfaction](./kb/6-planning/6.4.3-constraints.md) ⏳
--   [6.4.4 Schema Compatibility](./kb/6-planning/6.4.4-schema.md) ⏳
--   [6.4.5 Validation Issues → Suggestions](./kb/6-planning/6.4.5-suggestions.md) ⏳
+-   [6.4.1 Check Before Execute](./6-planning/6.4.1-check-before-execute.md) ✅
+    -   **Research**: 70-80% failure prevention, Design by Contract, SagaLLM (2024)
+-   [6.4.2 Resource Existence](./6-planning/6.4.2-resource-existence.md) ✅
+    -   Automatic reference extraction, fuzzy matching, cached checks
+-   [6.4.3 Constraint Satisfaction](./6-planning/6.4.3-constraints.md) ✅
+    -   Uniqueness, state transitions, relationships, business invariants
+-   [6.4.4 Schema Compatibility](./6-planning/6.4.4-schema.md) ✅
+    -   Zod validation, transformations, refinements, early return
+-   [6.4.5 Validation Issues → Suggestions](./6-planning/6.4.5-suggestions.md) ✅
+    -   Fuzzy matching, corrective actions, 60-70% auto-recovery
 
 ---
 

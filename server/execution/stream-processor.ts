@@ -92,7 +92,7 @@ export class StreamProcessor {
           toolCalls.push({
             toolName: chunk.toolName,
             toolCallId: chunk.toolCallId,
-            args: chunk.input,
+            input: chunk.input,
           });
 
           emitter.emitToolCall(chunk.toolName, chunk.toolCallId, chunk.input);
@@ -110,25 +110,46 @@ export class StreamProcessor {
             result: chunk.output,
           });
 
-          // Handle finalAnswer specially
+          // Handle finalAnswer specially - emit as text for chat UI
           if (chunk.toolName === 'finalAnswer' && chunk.output) {
             const finalAnswerResult = chunk.output as { content?: string; summary?: string };
             const answerContent = finalAnswerResult.content || finalAnswerResult.summary || '';
             if (answerContent) {
               displayTexts.push(answerContent);
+              // Emit as message for chat UI (tool-only responses don't generate text-delta events)
+              const messageId = randomUUID();
+              emitter.emitMessageStart(messageId);
+              emitter.emitTextDelta(messageId, answerContent);
+              emitter.emitMessageComplete(messageId, answerContent);
+              finalText = answerContent; // Set as final text
             }
           }
 
-          // Handle acknowledgeRequest for preflight text
+          // Handle acknowledgeRequest for preflight text - emit as text for chat UI
           if (chunk.toolName === 'acknowledgeRequest' && chunk.output) {
             const ackResult = chunk.output as { message?: string };
             if (ackResult.message) {
               displayTexts.push(ackResult.message);
+              // Emit as message for chat UI
+              const messageId = randomUUID();
+              emitter.emitMessageStart(messageId);
+              emitter.emitTextDelta(messageId, ackResult.message);
+              emitter.emitMessageComplete(messageId, ackResult.message);
+            }
+          }
+
+          // Persist discovered tools from searchTools to WorkingContext
+          if (chunk.toolName === 'searchTools' && chunk.output) {
+            const searchResult = chunk.output as { tools?: string[] };
+            if (searchResult.tools?.length) {
+              workingContext.addDiscoveredTools(searchResult.tools);
+              // Emit event for frontend observability
+              emitter.emitToolsDiscovered(searchResult.tools);
             }
           }
 
           // Extract entities for working memory
-          this.extractEntities(chunk.toolName, chunk.output, workingContext);
+          this.extractEntities(chunk.toolName, chunk.output, workingContext, logger, emitter);
 
           emitter.emitToolResult(chunk.toolCallId, chunk.toolName, chunk.output);
           break;
@@ -200,20 +221,36 @@ export class StreamProcessor {
 
   /**
    * Extract entities from tool results
+   * Now accepts logger and emitter for proper error visibility
    */
   private extractEntities(
     toolName: string,
     result: unknown,
-    workingContext: WorkingContext
+    workingContext: WorkingContext,
+    logger: AgentLogger,
+    emitter: SSEEventEmitter
   ): void {
     try {
       const entities = this.extractor.extract(toolName, result);
       if (entities.length > 0) {
         workingContext.addMany(entities);
+        logger.info('Extracted entities to working memory', {
+          toolName,
+          entityCount: entities.length,
+          entities: entities.map(e => ({ type: e.type, id: e.id, name: e.name })),
+        });
       }
     } catch (error) {
-      // Silently ignore extraction errors
-      console.warn('[StreamProcessor] Entity extraction failed:', error);
+      // Log error for debugging and emit to frontend for visibility
+      const errorMessage = (error as Error).message || String(error);
+      logger.warn('Entity extraction failed', {
+        toolName,
+        error: errorMessage,
+      });
+      emitter.emitLog('warn', `Entity extraction failed for ${toolName}: ${errorMessage}`, {
+        toolName,
+        error: errorMessage,
+      });
     }
   }
 }
