@@ -33,7 +33,7 @@ export const schema = z.object({
 	query: z
 		.string()
 		.describe(
-			"6-8 ACTION keywords covering all task needs (e.g. 'create post publish pexels search download')"
+			"8+ ACTION keywords covering task needs (e.g. 'create post publish image upload section hero update')"
 		),
 	limit: z.number().optional().default(8).describe("Max tools (default: 8)"),
 });
@@ -81,6 +81,6 @@ export async function execute(
 
 	return {
 		tools,
-		message: `Found ${tools.length} tools. STOP SEARCHING - call one of these tools now to complete the task.`,
+		message: `Found ${tools.length} tools: [${tools.join(", ")}]. Check if these match your task. If not, search again with different keywords.`,
 	};
 }

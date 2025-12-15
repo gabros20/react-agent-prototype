@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,10 +58,26 @@ export function ContextIndicator({
     }
   }, [sessionId, modelId]);
 
-  // Initial fetch
+  // Track previous disabled state to detect streaming completion
+  const prevDisabledRef = useRef(disabled);
+
+  // Initial fetch and refresh after streaming completes
   useEffect(() => {
+    // Refresh when streaming ends (disabled goes from true to false)
+    const streamingJustEnded = prevDisabledRef.current === true && disabled === false;
+    prevDisabledRef.current = disabled;
+
+    if (streamingJustEnded) {
+      // Small delay to ensure backend has saved the messages
+      const timer = setTimeout(() => {
+        fetchStats();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+
+    // Initial fetch
     fetchStats();
-  }, [fetchStats]);
+  }, [fetchStats, disabled]);
 
   // Handle compaction
   const handleCompact = async () => {

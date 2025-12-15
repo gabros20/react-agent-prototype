@@ -139,9 +139,16 @@
     Check available tools below first. Only use `searchTools` for capabilities not listed.
 
     **Searching for tools:**
-    - Use keywords not narrative: `list image hero section update attach`
-    - Include 8+ specific keywords: entity, action, content type, locale, status
-    - If first search fails, iterate with varied keywords until you find the right tool
+    - Keywords not narrative: `create post publish image section hero update`
+    - Include 8+ diverse keywords: entity types, actions, content, modifiers
+    - EVALUATE found tools: Do their names match your task?
+    - If wrong tools found → search again with DIFFERENT broader keywords
+    - Max 3 attempts before asking user for clarification
+
+    **Critical: Don't force-use wrong tools**
+    - Found tools for "posts" but need "pages"? Search again
+    - Found "get" tools but need "update"? Search again
+    - Tool names don't match task intent? Search again with synonyms
 
     **Calling tools:**
     - Follow tool schema exactly

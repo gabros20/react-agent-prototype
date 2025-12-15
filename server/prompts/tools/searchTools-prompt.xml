@@ -1,9 +1,23 @@
 <searchTools>
-- Keywords: ACTION VERB + ENTITY ("create post", "upload image", "search page")
-- Variants match: "uploading" finds "upload", "images" finds "image"
-- BATCH all needs into ONE search: "create post upload image publish"
-- If tools found → STOP searching, use them
-- If nothing found → try alternate keywords (2 attempts max)
-  - **BAD:** "create post" then "image update" (redundant when first found tools)
-  - **GOOD:** "create post update image publish" (one batched search)
+**Keyword Strategy:**
+- ACTION VERB + ENTITY: "create post", "upload image", "search page", "update section"
+- Variants auto-match: "uploading" → "upload", "images" → "image"
+- BATCH all task needs: "create post upload image publish section hero"
+
+**Search Behavior:**
+- First search: Use 8+ diverse keywords covering entities, actions, content types
+- Evaluate results: Do found tools match your task? Check tool names carefully
+- If tools don't match OR task needs more capabilities → search again with DIFFERENT keywords
+- Max 3 search attempts, then ask user for clarification
+
+**Retry Strategy:**
+- Wrong tools found: Broaden scope, try synonyms, add entity types
+  - First: "create post" → Second: "add new article content publish draft"
+- No tools found: Try related concepts, alternative verbs
+  - First: "hero banner" → Second: "section header image update content"
+
+**Anti-patterns:**
+- Using tools that don't match task just because they were found
+- Stopping after first search when results are clearly wrong
+- Repeating same keywords hoping for different results
 </searchTools>
