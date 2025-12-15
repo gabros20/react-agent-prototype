@@ -1,23 +1,16 @@
 <searchTools>
-**Keyword Strategy:**
-- ACTION VERB + ENTITY: "create post", "upload image", "search page", "update section"
-- Variants auto-match: "uploading" → "upload", "images" → "image"
-- BATCH all task needs: "create post upload image publish section hero"
+**MINIMUM 8 keywords required** (tool will reject fewer).
 
-**Search Behavior:**
-- First search: Use 8+ diverse keywords covering entities, actions, content types
-- Evaluate results: Do found tools match your task? Check tool names carefully
-- If tools don't match OR task needs more capabilities → search again with DIFFERENT keywords
-- Max 3 search attempts, then ask user for clarification
+**Build your query:**
+- Action verbs: get, fetch, create, add, new, update, modify, delete, browse, search, download, import
+- Entity types: page, section, post, image, navigation, entry
+- Example: "get page create add new section browse image download update"
 
-**Retry Strategy:**
-- Wrong tools found: Broaden scope, try synonyms, add entity types
-  - First: "create post" → Second: "add new article content publish draft"
-- No tools found: Try related concepts, alternative verbs
-  - First: "hero banner" → Second: "section header image update content"
+**After search, verify:**
+- Need to CREATE something? → Must have "create*" tool
+- Need to UPDATE something? → Must have "update*" tool
+- Need images? → Must have image-related tools
+- Missing any? Search again with different keywords.
 
-**Anti-patterns:**
-- Using tools that don't match task just because they were found
-- Stopping after first search when results are clearly wrong
-- Repeating same keywords hoping for different results
+**CRITICAL:** "add another" / "new" = CREATE tool, not UPDATE tool!
 </searchTools>

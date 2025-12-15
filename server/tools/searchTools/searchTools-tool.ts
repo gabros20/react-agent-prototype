@@ -53,6 +53,16 @@ export async function execute(
 
 	logger?.info(`[searchTools] Query: "${query}", limit: ${limit}`);
 
+	// Enforce minimum 8 keywords for comprehensive tool discovery
+	const keywords = query.trim().split(/\s+/).filter(k => k.length > 0);
+	if (keywords.length < 8) {
+		logger?.info(`[searchTools] Rejected: only ${keywords.length} keywords, need 8+`);
+		return {
+			tools: [],
+			message: `Query has only ${keywords.length} keywords. MINIMUM 8 REQUIRED. Add more action verbs (get, create, add, update, delete, browse, import, search) and entity types (page, section, image, post, entry). Example: "get page create add new section browse image download update"`,
+		};
+	}
+
 	// Run hybrid search with related tools expansion
 	const {
 		tools: searchResults,
@@ -81,6 +91,6 @@ export async function execute(
 
 	return {
 		tools,
-		message: `Found ${tools.length} tools: [${tools.join(", ")}]. Check if these match your task. If not, search again with different keywords.`,
+		message: `Found ${tools.length} tools: [${tools.join(", ")}]. Verify these cover ALL operations in your plan. Missing coverage? Search again with different keywords.`,
 	};
 }
