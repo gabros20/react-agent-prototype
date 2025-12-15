@@ -1,5 +1,21 @@
 <updateSection>
 - MERGES with existing - only send fields you want to change
-- imageField must match section schema (e.g., "backgroundImage", "image", "cover")
-- Call getSectionTemplate first to know field names
+- Use `content` object for text/layout changes, metadata fields (status/hidden/sortOrder) for visibility
+- Call getSectionTemplate first to know available field names
+
+<content_updates>
+  To update section content (text, layout, styling), pass a `content` object:
+  - Text: `content: { heading: "New Title" }`
+  - Layout: `content: { layout: "image-left" }` or `content: { layout: "image-right" }`
+  - Multiple: `content: { heading: "Title", layout: "image-left", backgroundColor: "gray" }`
+</content_updates>
+
+<layout_terminology>
+  "RTL" (right-to-left) = `layout: "image-left"` (image on left, text on right)
+  "LTR" (left-to-right) = `layout: "image-right"` (image on right, text on left)
+</layout_terminology>
+
+<image_attachment>
+  imageField must match section schema (e.g., "backgroundImage", "image", "cover")
+</image_attachment>
 </updateSection>

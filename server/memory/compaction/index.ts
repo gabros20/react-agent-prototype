@@ -3,9 +3,12 @@
  *
  * Context compaction system based on OpenCode's battle-tested approach.
  * Prevents AI drift during long conversations through:
- * 1. Token-based overflow detection
- * 2. Smart tool output pruning
+ * 1. Provider-token-based overflow detection (source of truth)
+ * 2. Smart tool output pruning (heuristic)
  * 3. Conversation summarization
+ *
+ * NOTE: Local token counting has been removed. Provider tokens are the
+ * ONLY source of truth for context window usage.
  */
 
 // Types
@@ -27,7 +30,6 @@ export type {
   AssistantMessage,
   ToolMessage,
   RichMessage,
-  OverflowCheckResult,
   PruneResult,
   CompactionResult,
   ContextPrepareResult,
@@ -47,18 +49,14 @@ export {
   isToolMessage,
 } from './types';
 
-// Token service
+// Token service (provider-only)
 export {
   getModelLimits,
-  countPartTokens,
-  countMessageTokens,
-  countTotalTokens,
-  estimateTokens,
-  countTokensWithModelAdjustment,
-  calculateAvailableTokens,
-  isApproachingOverflow,
-  calculateContextUsagePercent,
+  countPartTokens,  // ONLY for tool pruning heuristics
   isOverflowFromProviderTokens,
+  COMPACTION_THRESHOLD,
+  DEFAULT_CONTEXT_LIMIT,
+  DEFAULT_MAX_OUTPUT,
   type ProviderTokens,
 } from './token-service';
 
@@ -85,7 +83,6 @@ export {
 
 // Context preparation (main entry point)
 export {
-  checkOverflow,
   prepareContext,
   prepareContextForLLM,
   type ContextPrepareOptions,

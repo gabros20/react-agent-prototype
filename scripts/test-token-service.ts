@@ -2,27 +2,25 @@
  * Test Token Service
  *
  * Verifies:
- * - Token counting for text messages
- * - Token counting for tool call/result pairs
  * - Model limit retrieval
- * - Overflow detection
+ * - Provider token overflow detection
+ * - Part token counting (for pruning heuristics only)
+ *
+ * NOTE: Local token counting has been removed. Provider tokens are the
+ * ONLY source of truth for compaction decisions.
  */
 
 import {
   countPartTokens,
-  countMessageTokens,
-  countTotalTokens,
   getModelLimits,
-  isApproachingOverflow,
-  calculateAvailableTokens,
-  calculateContextUsagePercent,
-  type RichMessage,
+  isOverflowFromProviderTokens,
+  COMPACTION_THRESHOLD,
   type TextPart,
   type ToolCallPart,
   type ToolResultPart,
 } from '../server/memory/compaction';
 
-console.log('=== Token Service Tests ===\n');
+console.log('=== Token Service Tests (Provider-Only) ===\n');
 
 // Test 1: Model Limits
 console.log('1. Model Limits:');
@@ -38,8 +36,8 @@ for (const model of models) {
 }
 console.log();
 
-// Test 2: Part Token Counting
-console.log('2. Part Token Counting:');
+// Test 2: Part Token Counting (for pruning heuristics)
+console.log('2. Part Token Counting (pruning heuristics only):');
 
 const textPart: TextPart = {
   id: '1',
@@ -82,78 +80,45 @@ const compactedResultPart: ToolResultPart = {
 console.log(`  CompactedToolResultPart: ${countPartTokens(compactedResultPart)} tokens (was ${compactedResultPart.originalTokens})`);
 console.log();
 
-// Test 3: Message Token Counting
-console.log('3. Message Token Counting:');
-
-const userMessage: RichMessage = {
-  id: 'msg-1',
-  sessionId: 'session-123',
-  role: 'user',
-  parts: [textPart],
-  createdAt: Date.now(),
-  tokens: 0,
-};
-userMessage.tokens = countMessageTokens(userMessage);
-console.log(`  UserMessage: ${userMessage.tokens} tokens`);
-
-const assistantMessage: RichMessage = {
-  id: 'msg-2',
-  sessionId: 'session-123',
-  role: 'assistant',
-  parts: [
-    { id: 'p1', type: 'text', text: 'Let me get that page for you.' },
-    toolCallPart,
-  ],
-  createdAt: Date.now(),
-  tokens: 0,
-};
-assistantMessage.tokens = countMessageTokens(assistantMessage);
-console.log(`  AssistantMessage (text + tool call): ${assistantMessage.tokens} tokens`);
-
-const toolMessage: RichMessage = {
-  id: 'msg-3',
-  sessionId: 'session-123',
-  role: 'tool',
-  parts: [toolResultPart],
-  createdAt: Date.now(),
-  tokens: 0,
-};
-toolMessage.tokens = countMessageTokens(toolMessage);
-console.log(`  ToolMessage: ${toolMessage.tokens} tokens`);
-console.log();
-
-// Test 4: Total Token Counting
-console.log('4. Total Token Counting:');
-const messages: RichMessage[] = [userMessage, assistantMessage, toolMessage];
-const total = countTotalTokens(messages);
-console.log(`  Total for ${messages.length} messages: ${total} tokens`);
-console.log();
-
-// Test 5: Overflow Detection
-console.log('5. Overflow Detection:');
+// Test 3: Provider Token Overflow Detection (Source of Truth)
+console.log('3. Provider Token Overflow Detection:');
 const modelId = 'openai/gpt-4o';
 const limits = getModelLimits(modelId);
+const usableContext = limits.contextLimit - limits.maxOutput;
+const threshold = usableContext * COMPACTION_THRESHOLD;
 
-// Simulate different usage levels
-const usageLevels = [10_000, 50_000, 100_000, 110_000, 120_000];
-for (const usage of usageLevels) {
-  const available = calculateAvailableTokens(modelId, usage);
-  const percent = calculateContextUsagePercent(modelId, usage);
-  const isOverflow = isApproachingOverflow(modelId, usage, undefined, 0.9);
-  const status = isOverflow ? '⚠️ OVERFLOW' : '✅ OK';
-  console.log(`  ${usage.toLocaleString()} tokens: ${percent.toFixed(1)}% used, ${available.toLocaleString()} available ${status}`);
+console.log(`  Model: ${modelId}`);
+console.log(`  Context limit: ${limits.contextLimit.toLocaleString()}`);
+console.log(`  Max output: ${limits.maxOutput.toLocaleString()}`);
+console.log(`  Usable context: ${usableContext.toLocaleString()}`);
+console.log(`  Compaction threshold (${COMPACTION_THRESHOLD * 100}%): ${threshold.toLocaleString()}`);
+console.log();
+
+// Simulate provider token reports at different levels
+const providerTokenScenarios = [
+  { input: 10_000, output: 500 },
+  { input: 50_000, output: 2_000 },
+  { input: 55_000, output: 3_000 },   // Around 50% threshold
+  { input: 60_000, output: 5_000 },   // Over threshold
+  { input: 100_000, output: 10_000 }, // Way over
+];
+
+console.log('  Provider token scenarios:');
+for (const tokens of providerTokenScenarios) {
+  const total = tokens.input + tokens.output;
+  const percent = (total / usableContext) * 100;
+  const isOverflow = isOverflowFromProviderTokens(tokens, limits);
+  const status = isOverflow ? '⚠️ COMPACTION NEEDED' : '✅ OK';
+  console.log(`    ${tokens.input.toLocaleString()} in + ${tokens.output.toLocaleString()} out = ${total.toLocaleString()} (${percent.toFixed(1)}%) ${status}`);
 }
 console.log();
 
-// Test 6: Model-specific calculations
-console.log('6. Model-specific Context Limits:');
-const testModels = ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet', 'google/gemini-1.5-pro'];
-for (const model of testModels) {
-  const modelLimits = getModelLimits(model);
-  const usableContext = modelLimits.contextLimit - modelLimits.maxOutput;
-  console.log(`  ${model}:`);
-  console.log(`    Context: ${modelLimits.contextLimit.toLocaleString()}, Output: ${modelLimits.maxOutput.toLocaleString()}`);
-  console.log(`    Usable for input: ${usableContext.toLocaleString()}`);
-}
+// Test 4: Session Context Length Override
+console.log('4. Session Context Length Override:');
+const sessionContextLength = 200_000; // From OpenRouter API
+const limitsWithSession = getModelLimits('unknown/model', sessionContextLength);
+console.log(`  Unknown model with session context length ${sessionContextLength.toLocaleString()}:`);
+console.log(`    Context: ${limitsWithSession.contextLimit.toLocaleString()}, Output: ${limitsWithSession.maxOutput.toLocaleString()}`);
+console.log();
 
-console.log('\n=== All Tests Passed ===');
+console.log('=== All Tests Passed ===');

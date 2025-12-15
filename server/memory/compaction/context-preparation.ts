@@ -2,10 +2,13 @@
  * Context Preparation
  *
  * Orchestrates the full context preparation flow:
- * 1. Check if overflow is approaching
+ * 1. Check if overflow is approaching (using provider tokens)
  * 2. Prune tool outputs if needed (PRUNE_PROTECT pattern)
- * 3. Compact/summarize if still overflowing (LLM summarization)
+ * 3. Compact/summarize (LLM summarization)
  * 4. Return prepared messages ready for LLM
+ *
+ * NOTE: Provider tokens are the ONLY source of truth for overflow decisions.
+ * Local token counting has been removed.
  *
  * Enabled via ENABLE_COMPACTION=true environment variable.
  */
@@ -15,13 +18,10 @@ import type {
   RichMessage,
   CompactionConfig,
   ContextPrepareResult,
-  OverflowCheckResult,
 } from "./types";
 import { DEFAULT_COMPACTION_CONFIG } from "./types";
 import {
   getModelLimits,
-  countTotalTokens,
-  isApproachingOverflow,
   COMPACTION_THRESHOLD,
 } from "./token-service";
 import { pruneToolOutputs, needsPruning } from "./tool-pruner";
@@ -48,29 +48,8 @@ export interface ContextPrepareOptions {
   onProgress?: (status: string) => void;
   /** Force compaction even if not approaching overflow */
   force?: boolean;
-}
-
-/**
- * Check if context is approaching overflow
- */
-export function checkOverflow(
-  messages: RichMessage[],
-  modelId: string,
-  outputReserve?: number,
-  sessionContextLength?: number | null
-): OverflowCheckResult {
-  const limits = getModelLimits(modelId, sessionContextLength);
-  const reserve = outputReserve ?? limits.maxOutput;
-  const currentTokens = countTotalTokens(messages);
-  const usable = limits.contextLimit - reserve;
-
-  return {
-    isOverflow: currentTokens > usable * COMPACTION_THRESHOLD,
-    currentTokens,
-    availableTokens: usable - currentTokens,
-    modelLimit: limits.contextLimit,
-    outputReserve: reserve,
-  };
+  /** Provider-reported tokens (REQUIRED - source of truth for overflow decisions) */
+  providerTokens: { input: number; output: number };
 }
 
 /**
@@ -78,20 +57,22 @@ export function checkOverflow(
  *
  * Flow:
  * 1. Convert AI SDK messages to RichMessage format
- * 2. Check if approaching overflow
+ * 2. Check if approaching overflow using provider tokens
  * 3. If yes, try pruning tool outputs first
- * 4. If still overflowing, generate summary and compact
+ * 4. Always summarize if provider triggered compaction (pruning is best-effort)
  * 5. Convert back to AI SDK format
  *
+ * NOTE: Provider tokens are the ONLY source of truth. No fallback to local counting.
+ *
  * @param modelMessages - Current AI SDK message array
- * @param options - Preparation options
+ * @param options - Preparation options (providerTokens REQUIRED)
  * @returns ContextPrepareResult with prepared messages and stats
  */
 export async function prepareContext(
   modelMessages: ModelMessage[],
   options: ContextPrepareOptions
 ): Promise<ContextPrepareResult> {
-  const { sessionId, modelId, sessionContextLength, config = {}, onProgress, force = false } = options;
+  const { sessionId, modelId, sessionContextLength, config = {}, onProgress, force = false, providerTokens } = options;
   const cfg = { ...DEFAULT_COMPACTION_CONFIG, ...config };
 
   // Track debug info
@@ -105,22 +86,23 @@ export async function prepareContext(
   onProgress?.("Converting messages...");
   let messages = modelMessagesToRich(modelMessages, sessionId);
 
-  const tokensBefore = countTotalTokens(messages);
+  // Step 2: Check if we're approaching overflow using provider tokens (source of truth)
+  const limits = getModelLimits(modelId, sessionContextLength);
+  const usableContext = limits.contextLimit - limits.maxOutput;
+  const providerTotal = providerTokens.input + providerTokens.output;
+  const isOverflow = providerTotal > usableContext * COMPACTION_THRESHOLD;
 
-  // Step 2: Check if we're approaching overflow (or forced)
-  const overflowCheck = checkOverflow(messages, modelId, cfg.outputReserve, sessionContextLength);
-
-  if (!overflowCheck.isOverflow && !force) {
+  if (!isOverflow && !force) {
     // No action needed
     return {
       messages,
       wasPruned: false,
       wasCompacted: false,
       tokens: {
-        before: tokensBefore,
-        afterPrune: tokensBefore,
-        afterCompact: tokensBefore,
-        final: tokensBefore,
+        before: providerTotal,
+        afterPrune: providerTotal,
+        afterCompact: providerTotal,
+        final: providerTotal,
       },
       debug,
     };
@@ -138,28 +120,10 @@ export async function prepareContext(
     debug.removedTools = pruneResult.prunedTools;
   }
 
-  const tokensAfterPrune = countTotalTokens(messages);
-
-  // Step 4: Check if still overflowing after pruning
-  const postPruneCheck = checkOverflow(messages, modelId, cfg.outputReserve, sessionContextLength);
-
-  if (!postPruneCheck.isOverflow) {
-    // Pruning was enough
-    return {
-      messages,
-      wasPruned,
-      wasCompacted: false,
-      tokens: {
-        before: tokensBefore,
-        afterPrune: tokensAfterPrune,
-        afterCompact: tokensAfterPrune,
-        final: tokensAfterPrune,
-      },
-      debug,
-    };
-  }
-
-  // Step 5: Need compaction (expensive LLM call)
+  // Step 4: Always summarize when provider triggered compaction
+  // NOTE: We can't accurately estimate post-prune tokens without calling the provider.
+  // Since provider triggered compaction, we do full summarization.
+  // Pruning is just a "best effort" first pass to reduce context before summarization.
   onProgress?.("Generating summary...");
   const compactionService = getCompactionService();
   const compactResult = await compactionService.compact(messages, cfg);
@@ -167,17 +131,15 @@ export async function prepareContext(
   messages = compactResult.messages;
   debug.compactedMessages = compactResult.messagesCompacted;
 
-  const tokensAfterCompact = countTotalTokens(messages);
-
   return {
     messages,
     wasPruned,
     wasCompacted: true,
     tokens: {
-      before: tokensBefore,
-      afterPrune: tokensAfterPrune,
-      afterCompact: tokensAfterCompact,
-      final: tokensAfterCompact,
+      before: providerTotal,
+      afterPrune: providerTotal, // Can't measure without provider
+      afterCompact: providerTotal, // Next response will have accurate count
+      final: providerTotal,
     },
     debug,
   };

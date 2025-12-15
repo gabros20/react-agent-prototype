@@ -13,13 +13,13 @@ import {
   pruneToolOutputs,
   needsPruning,
   estimatePruneSavings,
-  countTotalTokens,
   type RichMessage,
   type TextPart,
   type ToolCallPart,
   type ToolResultPart,
   type CompactionConfig,
 } from '../server/memory/compaction';
+// NOTE: countTotalTokens removed - provider tokens are source of truth
 
 console.log('=== Tool Output Pruner Tests ===\n');
 
@@ -273,9 +273,8 @@ function createTestConversation(): RichMessage[] {
 // Test 1: Check if conversation needs pruning
 console.log('1. Needs Pruning Check:');
 const messages = createTestConversation();
-const totalTokensBefore = countTotalTokens(messages);
+// NOTE: Total token counting removed - provider tokens are source of truth
 console.log(`  Total messages: ${messages.length}`);
-console.log(`  Total tokens before: ${totalTokensBefore.toLocaleString()}`);
 
 // Use low thresholds for testing
 const testConfig: Partial<CompactionConfig> = {
@@ -299,13 +298,11 @@ console.log();
 // Test 3: Actually prune
 console.log('3. Pruning Results:');
 const pruneResult = pruneToolOutputs(messages, testConfig);
-const totalTokensAfter = countTotalTokens(pruneResult.messages);
+// NOTE: Total token counting removed - provider tokens are source of truth
 
 console.log(`  Outputs pruned: ${pruneResult.outputsPruned}`);
 console.log(`  Tokens saved: ${pruneResult.tokensSaved.toLocaleString()}`);
 console.log(`  Pruned tools: ${pruneResult.prunedTools.join(', ') || 'none'}`);
-console.log(`  Total tokens after: ${totalTokensAfter.toLocaleString()}`);
-console.log(`  Actual savings: ${(totalTokensBefore - totalTokensAfter).toLocaleString()}`);
 console.log();
 
 // Test 4: Verify recent outputs are preserved

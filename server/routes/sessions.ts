@@ -5,7 +5,6 @@ import { ApiResponse, ErrorCodes, HttpStatus } from "../types/api-response";
 import {
   prepareContextForLLM,
   getModelLimits,
-  countTotalTokens,
   modelMessagesToRich,
   richMessagesToModel,
 } from "../memory";
@@ -268,7 +267,15 @@ export function createSessionRoutes(services: Services) {
 
       // Count tool results that are already compacted (use compactedAt field directly)
       let compactedResults = 0;
+      // Count summary messages (from full context summarization)
+      let summaryCount = 0;
+
       for (const msg of richMessages) {
+        // Count summaries (full compaction with LLM summarization)
+        if (msg.role === "assistant" && "isSummary" in msg && msg.isSummary) {
+          summaryCount++;
+        }
+        // Count pruned tool results (lightweight output clearing)
         if (msg.role === "tool") {
           for (const part of msg.parts) {
             if (part.type === "tool-result" && part.compactedAt) {
@@ -286,7 +293,8 @@ export function createSessionRoutes(services: Services) {
         outputReserve: limits.maxOutput,
         usagePercent,
         messageCount: richMessages.length,
-        compactedResults,
+        compactedResults, // Tool outputs that were pruned (cleared)
+        summaryCount,     // Full context summarizations performed
         isApproachingLimit: usagePercent > 80,
         isOverLimit: usagePercent > 95,
         // Include provider token breakdown for debugging
@@ -318,7 +326,21 @@ export function createSessionRoutes(services: Services) {
       }
 
       const messageCountBefore = richMessages.length;
-      const tokensBefore = countTotalTokens(richMessages);
+
+      // Get last provider tokens for compaction decision (required)
+      const lastProviderTokens = await messageStore.getLastAssistantTokens(sessionId);
+      if (!lastProviderTokens && !input.force) {
+        res.json(ApiResponse.success({
+          compacted: false,
+          reason: "No provider tokens available - new session or no assistant messages yet",
+          tokensBefore: 0,
+          tokensAfter: 0,
+        }));
+        return;
+      }
+
+      // Use provider tokens or default to 0 for forced compaction
+      const providerTokens = lastProviderTokens || { input: 0, output: 0 };
 
       // Run compaction on rich messages
       const { messages: compactedRich, result } = await prepareContextForLLM(
@@ -327,6 +349,7 @@ export function createSessionRoutes(services: Services) {
           sessionId,
           modelId: input.modelId,
           force: input.force,
+          providerTokens,
         }
       );
 

@@ -17,7 +17,7 @@ import type {
   ToolResultPart,
   MessagePart,
 } from "./types";
-import { countMessageTokens } from "./token-service";
+// NOTE: Local token counting removed - provider tokens are source of truth
 
 // ============================================================================
 // AI SDK → RichMessage Conversion
@@ -112,9 +112,8 @@ function createUserMessage(
     ...base,
     role: "user",
     parts: textParts,
-    tokens: 0,
+    tokens: 0, // Provider tokens used instead
   };
-  message.tokens = countMessageTokens(message);
   return message;
 }
 
@@ -196,9 +195,8 @@ function createAssistantMessage(
     ...base,
     role: "assistant",
     parts,
-    tokens: 0,
+    tokens: 0, // Provider tokens used instead
   };
-  message.tokens = countMessageTokens(message);
   return message;
 }
 
@@ -234,9 +232,8 @@ function createToolMessage(
     ...base,
     role: "tool",
     parts,
-    tokens: 0,
+    tokens: 0, // Provider tokens used instead
   };
-  message.tokens = countMessageTokens(message);
   return message;
 }
 

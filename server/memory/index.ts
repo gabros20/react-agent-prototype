@@ -4,7 +4,10 @@
  * Contains:
  * - WorkingContext: Entity sliding window and tool tracking
  * - ToolSearchState: Immutable state for dynamic tool discovery
- * - Compaction: Token-based context compaction with summarization
+ * - Compaction: Provider-token-based context compaction with summarization
+ *
+ * NOTE: Local token counting has been removed. Provider tokens are the
+ * ONLY source of truth for context window usage.
  */
 
 // Working Context - Entity and tool tracking
@@ -27,7 +30,7 @@ export {
   type ActiveToolsResult,
 } from './tool-search';
 
-// Compaction - Token-based context compaction
+// Compaction - Provider-token-based context compaction
 export {
   // Types
   type CompactionConfig,
@@ -43,7 +46,6 @@ export {
   type UserMessage,
   type AssistantMessage,
   type ToolMessage,
-  type OverflowCheckResult,
   type PruneResult,
   type CompactionResult,
   type ContextPrepareResult,
@@ -57,17 +59,13 @@ export {
   isUserMessage,
   isAssistantMessage,
   isToolMessage,
-  // Token service
+  // Token service (provider-only)
   getModelLimits,
-  countPartTokens,
-  countMessageTokens,
-  countTotalTokens,
-  estimateTokens,
-  countTokensWithModelAdjustment,
-  calculateAvailableTokens,
-  isApproachingOverflow,
-  calculateContextUsagePercent,
+  countPartTokens,  // ONLY for tool pruning heuristics
   isOverflowFromProviderTokens,
+  COMPACTION_THRESHOLD,
+  DEFAULT_CONTEXT_LIMIT,
+  DEFAULT_MAX_OUTPUT,
   type ProviderTokens,
   // Tool pruner
   pruneToolOutputs,
@@ -82,7 +80,6 @@ export {
   richMessagesToModel,
   richMessageToModel,
   // Context preparation (main entry point)
-  checkOverflow,
   prepareContext,
   prepareContextForLLM,
   type ContextPrepareOptions,

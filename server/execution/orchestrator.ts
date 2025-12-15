@@ -58,6 +58,10 @@ export class AgentOrchestrator {
     });
     const logger = this.createSSELogger(resolved.traceId, emitter);
 
+    // Yield early to start the generator and allow client disconnect detection
+    // This ensures SSE events can flow during context preparation (compaction)
+    yield;
+
     try {
       // Prepare context (pass emitter for compaction events)
       const { context, workingContext } = await this.contextCoordinator.prepareContext(

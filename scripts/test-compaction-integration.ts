@@ -1,23 +1,27 @@
 /**
  * Compaction System Integration Test
  *
- * Tests the full flow:
+ * Tests the full flow with provider-only tokens:
  * 1. Create mock messages
- * 2. Run through prepareContextForLLM
- * 3. Verify pruning and compaction behavior
+ * 2. Simulate provider tokens (source of truth)
+ * 3. Run through prepareContextForLLM
+ * 4. Verify pruning and compaction behavior
+ *
+ * NOTE: Local token counting has been removed. Provider tokens are the
+ * ONLY source of truth for compaction decisions.
  */
 
 import {
   prepareContextForLLM,
-  checkOverflow,
   getModelLimits,
+  isOverflowFromProviderTokens,
+  COMPACTION_THRESHOLD,
   modelMessagesToRich,
-  countTotalTokens,
   type CompactionConfig,
 } from '../server/memory/compaction';
 import type { ModelMessage } from 'ai';
 
-console.log('=== Compaction System Integration Test ===\n');
+console.log('=== Compaction System Integration Test (Provider-Only) ===\n');
 
 // Helper to create mock messages
 function createMockConversation(turnCount: number, largeToolResults = false): ModelMessage[] {
@@ -86,83 +90,95 @@ function createMockConversation(turnCount: number, largeToolResults = false): Mo
 console.log('1. Model Limits Check:');
 const modelId = 'openai/gpt-4o';
 const limits = getModelLimits(modelId);
+const usableContext = limits.contextLimit - limits.maxOutput;
+const compactionThreshold = usableContext * COMPACTION_THRESHOLD;
+
 console.log(`  Model: ${modelId}`);
 console.log(`  Context limit: ${limits.contextLimit.toLocaleString()}`);
 console.log(`  Max output: ${limits.maxOutput.toLocaleString()}`);
-console.log(`  Usable input: ${(limits.contextLimit - limits.maxOutput).toLocaleString()}`);
+console.log(`  Usable input: ${usableContext.toLocaleString()}`);
+console.log(`  Compaction triggers at: ${compactionThreshold.toLocaleString()} (${COMPACTION_THRESHOLD * 100}%)`);
 console.log();
 
-// Test 2: Small conversation (no action needed)
-console.log('2. Small Conversation (No Compaction):');
+// Test 2: Provider token overflow detection
+console.log('2. Provider Token Overflow Detection:');
+const providerScenarios = [
+  { input: 10_000, output: 500, desc: 'Low usage' },
+  { input: 50_000, output: 5_000, desc: 'Near threshold' },
+  { input: 60_000, output: 5_000, desc: 'Over threshold' },
+  { input: 100_000, output: 10_000, desc: 'High usage' },
+];
+
+for (const scenario of providerScenarios) {
+  const isOverflow = isOverflowFromProviderTokens(scenario, limits);
+  const total = scenario.input + scenario.output;
+  const percent = (total / usableContext) * 100;
+  console.log(`  ${scenario.desc}: ${total.toLocaleString()} tokens (${percent.toFixed(1)}%) - ${isOverflow ? '⚠️ COMPACT' : '✅ OK'}`);
+}
+console.log();
+
+// Test 3: Prepare context with low provider tokens (no compaction)
+console.log('3. Low Provider Tokens (No Compaction):');
 const smallMessages = createMockConversation(3, false);
-const smallRich = modelMessagesToRich(smallMessages, 'test-session');
-const smallTokens = countTotalTokens(smallRich);
-const smallOverflow = checkOverflow(smallRich, modelId);
+const lowProviderTokens = { input: 10_000, output: 500 };
 
+console.log(`  Provider tokens: ${lowProviderTokens.input.toLocaleString()} in + ${lowProviderTokens.output.toLocaleString()} out`);
 console.log(`  Messages: ${smallMessages.length}`);
-console.log(`  Tokens: ${smallTokens.toLocaleString()}`);
-console.log(`  Overflow: ${smallOverflow.isOverflow ? '⚠️ YES' : '✅ NO'}`);
-console.log();
 
-// Test 3: Large conversation (should trigger pruning)
-console.log('3. Large Conversation with Big Tool Results:');
-const largeMessages = createMockConversation(10, true);
-const largeRich = modelMessagesToRich(largeMessages, 'test-session');
-const largeTokens = countTotalTokens(largeRich);
-const largeOverflow = checkOverflow(largeRich, modelId);
-
-console.log(`  Messages: ${largeMessages.length}`);
-console.log(`  Tokens: ${largeTokens.toLocaleString()}`);
-console.log(`  Overflow (90% threshold): ${largeOverflow.isOverflow ? '⚠️ YES' : '✅ NO'}`);
-console.log(`  Available: ${largeOverflow.availableTokens.toLocaleString()}`);
-console.log();
-
-// Test 4: Run prepareContextForLLM on small conversation
-console.log('4. Prepare Context (Small - No Action):');
-const smallResult = await prepareContextForLLM(smallMessages, {
+const lowResult = await prepareContextForLLM(smallMessages, {
   sessionId: 'test-session',
   modelId,
+  providerTokens: lowProviderTokens,
   onProgress: (status) => console.log(`    Progress: ${status}`),
 });
 
-console.log(`  Messages after: ${smallResult.messages.length}`);
-console.log(`  Was pruned: ${smallResult.result.wasPruned}`);
-console.log(`  Was compacted: ${smallResult.result.wasCompacted}`);
-console.log(`  Tokens: ${smallResult.result.tokens.before} → ${smallResult.result.tokens.final}`);
+console.log(`  Was pruned: ${lowResult.result.wasPruned}`);
+console.log(`  Was compacted: ${lowResult.result.wasCompacted}`);
+console.log(`  Messages after: ${lowResult.messages.length}`);
 console.log();
 
-// Test 5: Test with a small model to force overflow
-console.log('5. Prepare Context with Small Model (Forces Overflow):');
+// Test 4: Prepare context with high provider tokens (triggers compaction)
+console.log('4. High Provider Tokens (Triggers Compaction):');
+const largeMessages = createMockConversation(10, true);
+const highProviderTokens = { input: 80_000, output: 5_000 }; // Over 50% threshold
 
-// Use a model with smaller context to force overflow
-const smallModelId = 'openai/gpt-4'; // Only 8192 context limit
-const smallModelLimits = getModelLimits(smallModelId);
-console.log(`  Using model: ${smallModelId} (limit: ${smallModelLimits.contextLimit.toLocaleString()})`);
+console.log(`  Provider tokens: ${highProviderTokens.input.toLocaleString()} in + ${highProviderTokens.output.toLocaleString()} out`);
+console.log(`  Messages: ${largeMessages.length}`);
 
-// Use a very low threshold to force pruning
+// Use test config with low thresholds
 const testConfig: Partial<CompactionConfig> = {
   pruneMinimum: 100,
-  pruneProtect: 500, // Only protect last 500 tokens of tool outputs
+  pruneProtect: 500,
   minTurnsToKeep: 2,
-  outputReserve: smallModelLimits.maxOutput,
 };
 
-// Convert large messages with small model to force overflow
-const lowThresholdResult = await prepareContextForLLM(largeMessages, {
+const highResult = await prepareContextForLLM(largeMessages, {
   sessionId: 'test-session-2',
-  modelId: smallModelId,
+  modelId,
+  providerTokens: highProviderTokens,
   config: testConfig,
   onProgress: (status) => console.log(`    Progress: ${status}`),
 });
 
-console.log(`  Messages before: ${largeMessages.length}`);
-console.log(`  Messages after: ${lowThresholdResult.messages.length}`);
-console.log(`  Was pruned: ${lowThresholdResult.result.wasPruned}`);
-console.log(`  Was compacted: ${lowThresholdResult.result.wasCompacted}`);
-console.log(`  Tokens: ${lowThresholdResult.result.tokens.before.toLocaleString()} → ${lowThresholdResult.result.tokens.final.toLocaleString()}`);
-console.log(`  Tokens saved: ${(lowThresholdResult.result.tokens.before - lowThresholdResult.result.tokens.final).toLocaleString()}`);
-console.log(`  Pruned outputs: ${lowThresholdResult.result.debug.prunedOutputs}`);
-console.log(`  Compacted messages: ${lowThresholdResult.result.debug.compactedMessages}`);
-console.log(`  Removed tools: ${lowThresholdResult.result.debug.removedTools.join(', ') || 'none'}`);
+console.log(`  Was pruned: ${highResult.result.wasPruned}`);
+console.log(`  Was compacted: ${highResult.result.wasCompacted}`);
+console.log(`  Messages after: ${highResult.messages.length}`);
+console.log(`  Pruned outputs: ${highResult.result.debug.prunedOutputs}`);
+console.log(`  Compacted messages: ${highResult.result.debug.compactedMessages}`);
+console.log(`  Removed tools: ${highResult.result.debug.removedTools.join(', ') || 'none'}`);
+console.log();
+
+// Test 5: Force compaction even with low tokens
+console.log('5. Force Compaction:');
+const forceResult = await prepareContextForLLM(smallMessages, {
+  sessionId: 'test-session-3',
+  modelId,
+  providerTokens: lowProviderTokens,
+  force: true, // Force compaction even though under threshold
+  onProgress: (status) => console.log(`    Progress: ${status}`),
+});
+
+console.log(`  Was compacted (forced): ${forceResult.result.wasCompacted}`);
+console.log(`  Messages after: ${forceResult.messages.length}`);
 
 console.log('\n=== Integration Test Complete ===');

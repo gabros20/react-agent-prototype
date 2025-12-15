@@ -164,8 +164,21 @@ export function ContextIndicator({
                   {formatTokens(stats.currentTokens)} / {formatTokens(stats.availableTokens)} tokens
                 </div>
                 <div className="text-muted-foreground">
-                  {stats.messageCount} messages • {stats.compactedResults} pruned results
+                  {stats.messageCount} messages
                 </div>
+                {/* Show compaction metrics when any compaction has occurred */}
+                {(stats.compactedResults > 0 || stats.summaryCount > 0) && (
+                  <div className="text-muted-foreground border-t border-border pt-1 mt-1 space-y-0.5">
+                    {stats.compactedResults > 0 && (
+                      <div>{stats.compactedResults} tool outputs pruned</div>
+                    )}
+                    {stats.summaryCount > 0 && (
+                      <div className="text-emerald-500">
+                        {stats.summaryCount} {stats.summaryCount === 1 ? 'summary' : 'summaries'} generated
+                      </div>
+                    )}
+                  </div>
+                )}
                 {stats.isApproachingLimit && (
                   <div className="text-amber-500 flex items-center gap-1 mt-1">
                     <AlertTriangle className="h-3 w-3" />

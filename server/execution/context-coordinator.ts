@@ -245,6 +245,7 @@ export class ContextCoordinator {
           sessionId: options.sessionId,
           modelId: options.modelId,
           sessionContextLength: session.modelContextLength, // Use stored context length from OpenRouter
+          providerTokens: lastProviderTokens, // Pass provider tokens for accurate overflow decisions
           onProgress: (status) => {
             logger.info('Compaction progress', { status });
             // Emit progress events

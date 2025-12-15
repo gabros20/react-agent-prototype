@@ -6,7 +6,7 @@ import { defineToolMetadata } from "../_types/metadata";
 
 export default defineToolMetadata({
 	name: "updateSection",
-	description: "Update section content or attach image. Merges with existing.",
+	description: "Update section content, layout, or attach image. Merges with existing.",
 	phrases: [
 		"update section",
 		"edit section",
@@ -25,6 +25,14 @@ export default defineToolMetadata({
 		"replace section image",
 		"set hero image",
 		"set background image",
+		"set layout",
+		"change layout",
+		"set RTL",
+		"set LTR",
+		"right to left",
+		"left to right",
+		"image left",
+		"image right",
 	],
 	relatedTools: ["getSectionTemplate", "getSection", "getImage"],
 	riskLevel: "moderate",

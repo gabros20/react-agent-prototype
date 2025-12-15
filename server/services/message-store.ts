@@ -22,10 +22,9 @@ import {
   type ToolCallPart,
   type ToolResultPart,
   type CompactionMarkerPart,
-  countMessageTokens,
-  countPartTokens,
   isToolResultPart,
 } from "../memory/compaction";
+// NOTE: Local token counting removed - provider tokens are source of truth
 
 // ============================================================================
 // Types
@@ -73,8 +72,8 @@ export class MessageStore {
     message: RichMessage,
     providerTokens?: ProviderTokens
   ): Promise<SaveMessageResult> {
-    // Calculate total tokens for the message (local estimate)
-    const tokens = countMessageTokens(message);
+    // NOTE: Local token counting removed - provider tokens are source of truth
+    // The 'tokens' field is set to 0 (legacy field, kept for backward compat)
 
     // Determine display content for UI
     let displayContent: string | null = null;
@@ -95,7 +94,7 @@ export class MessageStore {
       role: message.role,
       content: JSON.stringify(content),
       displayContent,
-      tokens,
+      tokens: 0, // Legacy field - provider tokens are source of truth
       providerTokens: providerTokens || null, // Provider-reported tokens for compaction decisions
       isSummary: message.role === "assistant" && "isSummary" in message ? (message as AssistantMessage).isSummary : false,
       isCompactionTrigger: message.role === "user" && "isCompactionTrigger" in message ? (message as UserMessage).isCompactionTrigger : false,
@@ -105,7 +104,6 @@ export class MessageStore {
     // Insert message parts sequentially
     for (let i = 0; i < message.parts.length; i++) {
       const part = message.parts[i];
-      const partTokens = countPartTokens(part);
 
       await this.db.insert(schema.messageParts).values({
         id: part.id,
@@ -113,7 +111,7 @@ export class MessageStore {
         sessionId: message.sessionId,
         type: part.type as "text" | "tool-call" | "tool-result" | "compaction-marker" | "reasoning" | "step-start",
         content: JSON.stringify(this.partToStorageFormat(part)),
-        tokens: partTokens,
+        tokens: 0, // Legacy field - provider tokens are source of truth
         compactedAt: isToolResultPart(part) && part.compactedAt ? part.compactedAt : null,
         sortOrder: i,
         createdAt: new Date(message.createdAt),
@@ -123,7 +121,7 @@ export class MessageStore {
     return {
       messageId: message.id,
       partsCount: message.parts.length,
-      tokens,
+      tokens: 0, // Legacy field
     };
   }
 

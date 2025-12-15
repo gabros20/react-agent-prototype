@@ -28,7 +28,7 @@ import type {
   ToolResultPart,
 } from "./types";
 import { DEFAULT_COMPACTION_CONFIG } from "./types";
-import { countTotalTokens, countMessageTokens } from "./token-service";
+// NOTE: Local token counting removed - provider tokens are source of truth
 
 // ============================================================================
 // Configuration
@@ -94,7 +94,7 @@ export class CompactionService {
     config: Partial<CompactionConfig> = {}
   ): Promise<CompactionResult> {
     const cfg = { ...DEFAULT_COMPACTION_CONFIG, ...config };
-    const originalTokens = countTotalTokens(messages);
+    // NOTE: Token tracking removed - provider tokens are source of truth
 
     // Filter out pure error messages before summarization (OpenCode pattern)
     const filteredMessages = this.filterMessagesForCompaction(messages);
@@ -127,9 +127,8 @@ export class CompactionService {
       ],
       isCompactionTrigger: true,
       createdAt: Date.now(),
-      tokens: 0, // Will be calculated
+      tokens: 0, // Provider tokens used instead
     };
-    triggerMessage.tokens = countMessageTokens(triggerMessage);
 
     // Create the summary response (assistant message)
     const summaryMessage: AssistantMessage = {
@@ -145,23 +144,21 @@ export class CompactionService {
       ],
       isSummary: true,
       createdAt: Date.now(),
-      tokens: 0, // Will be calculated
+      tokens: 0, // Provider tokens used instead
     };
-    summaryMessage.tokens = countMessageTokens(summaryMessage);
 
     // Keep recent turns after the summary (minTurnsToKeep)
     const recentMessages = this.getRecentTurns(messages, cfg.minTurnsToKeep);
 
     // Final message array: [trigger, summary, ...recent]
     const finalMessages: RichMessage[] = [triggerMessage, summaryMessage, ...recentMessages];
-    const finalTokens = countTotalTokens(finalMessages);
 
     return {
       triggerMessage,
       summaryMessage,
       messages: finalMessages,
       messagesCompacted: messages.length - recentMessages.length,
-      tokensSaved: originalTokens - finalTokens,
+      tokensSaved: 0, // Can't measure without provider tokens - next response will show savings
     };
   }
 

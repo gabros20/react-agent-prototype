@@ -49,6 +49,8 @@ export function createAgentRoutes(services: Services) {
 			res.setHeader("Content-Type", "text/event-stream");
 			res.setHeader("Cache-Control", "no-cache");
 			res.setHeader("Connection", "keep-alive");
+			res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+			res.flushHeaders(); // Flush headers immediately to start SSE stream
 
 			// Guarded SSE write - checks if client still connected
 			const writeSSE = (event: string, data: unknown) => {

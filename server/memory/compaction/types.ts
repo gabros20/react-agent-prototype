@@ -165,13 +165,8 @@ export type RichMessage = UserMessage | AssistantMessage | ToolMessage;
 // Compaction Results
 // ============================================================================
 
-export interface OverflowCheckResult {
-  isOverflow: boolean;
-  currentTokens: number;
-  availableTokens: number;
-  modelLimit: number;
-  outputReserve: number;
-}
+// NOTE: OverflowCheckResult removed - provider tokens are source of truth
+// Use isOverflowFromProviderTokens() from token-service.ts instead
 
 export interface PruneResult {
   /** Messages after pruning */

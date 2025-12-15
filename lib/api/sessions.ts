@@ -280,7 +280,10 @@ export interface ContextStats {
   outputReserve: number;
   usagePercent: number;
   messageCount: number;
+  /** Tool outputs that were pruned (cleared to save space) */
   compactedResults: number;
+  /** Full context summarizations performed (LLM-generated summaries) */
+  summaryCount: number;
   isApproachingLimit: boolean;
   isOverLimit: boolean;
 }

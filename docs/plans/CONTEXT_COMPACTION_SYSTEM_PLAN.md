@@ -2,6 +2,13 @@
 
 ---
 
+> **⚠️ UPDATE (December 2024)**: This plan has been implemented with a key change:
+> **Provider tokens are now the ONLY source of truth for compaction decisions.**
+> Local token counting (gpt-tokenizer) has been removed from decision-making.
+> It's only kept for tool pruning heuristics. See `server/memory/compaction/token-service.ts`.
+
+---
+
 ## Executive Summary (Read This First When Resuming)
 
 ### What We're Building

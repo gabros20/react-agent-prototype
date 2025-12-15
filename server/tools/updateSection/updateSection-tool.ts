@@ -13,7 +13,7 @@ export const schema = z
 		content: z
 			.record(z.string(), z.any())
 			.optional()
-			.describe("Content to merge (only send fields to change)"),
+			.describe("Content fields to update. RTL/LTR layout: {layout:'image-left'} or {layout:'image-right'}"),
 		imageId: z.string().uuid().optional().describe("Image ID to attach"),
 		imageField: z
 			.string()
