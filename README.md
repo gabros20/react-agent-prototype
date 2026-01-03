@@ -1,6 +1,6 @@
 # ReAct AI Agent Prototype - CMS with AI
 
-AI-powered content management system with unified ReAct agent, 44 tools, semantic image search, stock photo integration (Pexels), web research (Exa AI), and automatic metadata generation using native AI SDK v6 patterns.
+AI-powered content management system with unified ReAct agent, 32 tools with dynamic injection, semantic image search, stock photo integration (Pexels), web research (Exa AI), and automatic metadata generation using native AI SDK v6 patterns.
 
 ## 🚀 New to the Project?
 
@@ -82,37 +82,52 @@ http://localhost:4000/pages/home?locale=en
 
 ```
 server/          # Backend Express API
-├── db/          # Database schema & client
+├── agents/      # AI agent module (AI SDK v6)
+│   ├── main-agent.ts    # ToolLoopAgent with dynamic tool injection
+│   └── system-prompt.ts # Static system prompt loader
+├── execution/   # Agent execution coordination
+│   ├── orchestrator.ts        # Stream execution controller
+│   ├── context-coordinator.ts # Context prep & compaction
+│   └── stream-processor.ts    # SSE event processing
+├── memory/      # Memory management
+│   ├── compaction/       # Provider-anchored context compaction
+│   ├── tool-search/      # Tool discovery state
+│   └── working-context/  # Entity tracking
+├── tools/       # Agent tools (32 tools) - per-tool folders
+│   ├── _registry/    # Unified tool registry
+│   ├── _types/       # AgentContext, metadata types
+│   ├── _loaders/     # Tool assembly
+│   └── {toolName}/   # Per-tool folders (createPage/, getPage/, etc.)
+│       ├── {name}-metadata.ts  # Search phrases, risk level
+│       ├── {name}-tool.ts      # Zod schema + execute
+│       └── index.ts            # Exports
 ├── services/    # Business logic layer
 │   ├── cms/     # CMS services (pages, sections, entries)
-│   ├── storage/ # Image processing & storage services
+│   ├── storage/ # Image processing & storage
 │   ├── ai/      # AI services (metadata, embeddings)
-│   ├── renderer.ts   # Nunjucks template rendering
-│   ├── vector-index.ts # LanceDB vector search
-│   ├── session-service.ts # Session management
-│   └── approval-queue.ts # HITL approval coordination
+│   ├── search/  # Tool search services
+│   │   ├── tool-search.service.ts  # Hybrid search facade
+│   │   ├── smart-search.ts         # BM25 + vector blending
+│   │   ├── bm25-search.ts          # Lexical search
+│   │   └── vector-search.ts        # Semantic search
+│   ├── renderer.ts         # Nunjucks template rendering
+│   ├── vector-index.ts     # LanceDB vector search
+│   └── session-service.ts  # Session management
 ├── routes/      # API routes
-│   ├── agent.ts # SSE streaming endpoints
+│   ├── agent.ts    # SSE streaming endpoints
 │   ├── sessions.ts # Session CRUD routes
-│   ├── upload.ts # Image upload endpoint
-│   └── images.ts # Image serving endpoints
+│   ├── upload.ts   # Image upload endpoint
+│   └── images.ts   # Image serving endpoints
 ├── middleware/  # Express middleware
 │   └── upload.ts # Multer file upload validation
 ├── queues/      # Job queues
 │   └── image-queue.ts # BullMQ image processing queue
 ├── workers/     # Background workers
 │   └── image-worker.ts # Image processing worker
-├── agent/       # AI agent orchestrator
-│   └── orchestrator.ts # Unified ReAct agent (native AI SDK v6)
-├── tools/       # Agent tools (44 tools)
-│   ├── all-tools.ts # Tool registry with experimental_context
-│   ├── image-tools.ts # 8 image management tools
-│   ├── post-tools.ts # 7 blog/post tools
-│   ├── site-settings-tools.ts # 5 navigation tools
-│   ├── web-research-tools.ts # 3 Exa AI web research tools
-│   └── pexels-tools.ts # 2 stock photo tools
-├── prompts/     # Single unified prompt
-│   └── react.xml # ReAct pattern prompt
+├── prompts/     # Prompt management
+│   ├── agent/    # Static system prompt
+│   ├── messages/ # Tool guidance message factories
+│   └── tools/    # Per-tool prompt files
 ├── templates/   # Nunjucks templates
 │   ├── layout/  # Page layout (HTML shell)
 │   ├── sections/ # Section templates (hero, feature, cta)
@@ -355,7 +370,7 @@ This project uses a **3-server architecture**:
 
 **Native AI SDK v6 pattern** - no custom abstractions:
 
--   **Single agent** with all 44 tools available always
+-   **Single agent** with dynamic tool injection (32 tools discovered on-demand)
 -   **Think → Act → Observe → Repeat** autonomous loop
 -   **Max 15 steps** per conversation turn
 -   **Auto-retry** with exponential backoff (3 attempts)
@@ -988,7 +1003,7 @@ Comprehensive 7-layer architecture documentation in `docs/architecture/`:
 | ----- | ----------------- | ---------------------------------------------- |
 | 1     | Server Core       | Express bootstrap, middleware, routes          |
 | 2     | Database          | Drizzle ORM, entity hierarchy, vector storage  |
-| 3     | Agent System      | ReAct loop, 44 tools, working memory, HITL     |
+| 3     | Agent System      | ReAct loop, 32 tools with dynamic injection, working memory, HITL |
 | 4     | Services          | CMS, sessions, image processing, renderer      |
 | 5     | Background        | Redis, BullMQ queues, worker lifecycle         |
 | 6     | Client            | Zustand stores, SSE streaming, chat components |
@@ -1020,7 +1035,7 @@ See [docs/PROGRESS.md](docs/PROGRESS.md) for complete sprint-by-sprint details.
 2. [Unified ReAct Agent](docs/UNIFIED_REACT_AGENT_REFACTOR.md) - Removed mode complexity
 3. [UI Overhaul](docs/UI_OVERHAUL_SUMMARY.md) - Modern design with blue bubbles
 
-**Current Status**: Production-ready prototype with 44 tools across 8 categories (CMS, images, posts, navigation, search, web research, stock photos, HTTP), unified agent, modern UI with real-time status indicator, AI-powered image management, and LangSmith-inspired trace observability.
+**Current Status**: Production-ready prototype with 32 tools (dynamic injection architecture) across 6 categories (CMS, images, posts, navigation, search, utility), unified agent, modern UI with real-time status indicator, AI-powered image management, and LangSmith-inspired trace observability.
 
 ## Debug Panel (Trace Observability)
 

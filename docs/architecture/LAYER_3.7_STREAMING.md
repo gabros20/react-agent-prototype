@@ -8,6 +8,8 @@ Streaming provides real-time feedback as the agent thinks and acts. Users see te
 
 **Key Files:**
 - `server/routes/agent.ts` - SSE endpoint
+- `server/execution/orchestrator.ts` - Stream coordination
+- `server/execution/stream-processor.ts` - Event processing
 - `app/api/agent/route.ts` - Next.js proxy
 - `app/assistant/_hooks/use-agent.ts` - Stream parser
 
@@ -135,6 +137,9 @@ data: {"name": "cms_createPage", "args": {...}}
 |-------|--------------|---------|
 | `system-prompt` | Before agent starts | `{ prompt, tokens, workingMemory, workingMemoryTokens }` |
 | `model-info` | Before agent starts | `{ modelId, pricing: { prompt, completion } }` |
+| `instructions-injected` | Tool guidance added | `{ tools[], instructions, stepNumber }` |
+| `compaction-triggered` | Context compaction | `{ reason, tokensBefore }` |
+| `compaction-complete` | Compaction done | `{ tokensAfter, summaryLength }` |
 | `user-prompt` | After loading session | `{ prompt, tokens, messageHistoryTokens, messageCount }` |
 | `step-start` | Agent step begins | `{ stepNumber }` |
 | `text-delta` | LLM generates text | `{ delta: string }` |

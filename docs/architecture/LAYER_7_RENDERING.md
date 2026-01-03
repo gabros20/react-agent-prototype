@@ -56,9 +56,10 @@ The rendering layer transforms CMS data into HTML pages using Nunjucks templates
 
 | File | Purpose |
 |------|---------|
-| `server/services/renderer-service.ts` | Rendering logic |
+| `server/services/renderer.ts` | Rendering logic |
 | `server/templates/layout/page.njk` | Base page layout |
 | `server/templates/sections/` | Section templates |
+| `server/templates/posts/` | Blog/post templates |
 | `server/templates/assets/` | Static assets |
 | `server/preview.ts` | Preview server |
 
@@ -69,25 +70,28 @@ The rendering layer transforms CMS data into HTML pages using Nunjucks templates
 ```
 server/templates/
 ├── layout/
-│   └── page.njk              # Base layout
+│   └── page.njk              # Base page layout
 ├── sections/
+│   ├── _default.njk          # Fallback template
+│   ├── header/
+│   │   └── default.njk       # Site header
+│   ├── footer/
+│   │   └── default.njk       # Site footer
 │   ├── hero/
 │   │   ├── default.njk       # Default variant
 │   │   └── centered.njk      # Centered variant
-│   ├── features/
-│   │   ├── default.njk
-│   │   └── grid.njk
+│   ├── feature/
+│   │   └── default.njk
 │   ├── image-text/
 │   │   └── default.njk
-│   ├── posts/
-│   │   └── default.njk
-│   ├── cta/
-│   │   └── default.njk
-│   └── testimonials/
+│   └── cta/
 │       └── default.njk
-├── partials/
-│   ├── header.njk
-│   └── footer.njk
+├── posts/
+│   ├── layout/
+│   │   └── post.njk          # Post page layout
+│   └── blog/
+│       ├── single.njk        # Single post template
+│       └── list.njk          # Post list template
 └── assets/
     ├── styles.css
     └── placeholders/
@@ -97,82 +101,131 @@ server/templates/
 
 ## RendererService
 
-Core rendering logic:
+Core rendering logic with template registry:
 
 ```typescript
-// server/services/renderer-service.ts
+// server/services/renderer.ts
 import nunjucks from 'nunjucks';
 import { marked } from 'marked';
 
-class RendererService {
-  private env: nunjucks.Environment;
+export interface TemplateRegistry {
+  [templateKey: string]: { variants: string[]; path: string };
+}
 
-  constructor() {
-    this.env = nunjucks.configure('server/templates', {
+export class RendererService {
+  private env: nunjucks.Environment;
+  private templateRegistry: TemplateRegistry = {};
+
+  constructor(
+    private templateDir: string,
+    private siteSettingsService: SiteSettingsService
+  ) {
+    this.env = nunjucks.configure(templateDir, {
       autoescape: true,
-      noCache: process.env.NODE_ENV === 'development'
+      watch: process.env.NODE_ENV === 'development',
+      noCache: process.env.NODE_ENV === 'development',
     });
 
-    this.registerFilters();
-  }
-
-  private registerFilters() {
-    // Markdown filter
+    // Register filters
     this.env.addFilter('markdown', (str: string) => {
       if (!str) return '';
       return marked.parse(str);
     });
 
-    // Truncate text
     this.env.addFilter('truncate', (str: string, length: number) => {
       if (!str || str.length <= length) return str;
-      return str.slice(0, length) + '...';
+      return `${str.slice(0, length)}...`;
     });
 
-    // Date formatting
-    this.env.addFilter('date', (date: Date | string, format: string) => {
-      return formatDate(new Date(date), format);
+    this.env.addFilter('asset', (assetPath: string) => `/assets/${assetPath}`);
+
+    this.env.addFilter('normalizeLink', (link: any) => {
+      if (!link) return null;
+      if (typeof link === 'object' && link.href) return link;
+      if (typeof link === 'string') return { href: link, type: 'url' };
+      return null;
     });
 
-    // Asset URL resolution
-    this.env.addFilter('asset', (path: string) => {
-      return `/assets/${path}`;
+    this.env.addFilter('date', (dateValue: any, format: string) => {
+      // Handle Date, string, or number inputs
+      // Support formats: "MMMM D, YYYY", "MMM D, YYYY", "YYYY-MM-DD"
     });
 
-    // Normalize navigation links
-    this.env.addFilter('normalizeLink', (url: string) => {
-      if (!url) return '#';
-      if (url.startsWith('http')) return url;
-      return url.startsWith('/') ? url : `/${url}`;
-    });
+    this.buildRegistry();
   }
 
-  async renderPage(page: Page, siteSettings: SiteSettings): Promise<string> {
-    const sections = await this.renderSections(page.sections);
+  private buildRegistry() {
+    // Scan sections/ directory and build templateKey → variants map
+    const templateKeys = fs.readdirSync(sectionsDir, { withFileTypes: true })
+      .filter(d => d.isDirectory()).map(d => d.name);
+
+    for (const templateKey of templateKeys) {
+      const variants = fs.readdirSync(path.join(sectionsDir, templateKey))
+        .filter(f => f.endsWith('.njk')).map(f => f.replace('.njk', ''));
+
+      this.templateRegistry[templateKey] = {
+        variants,
+        path: `sections/${templateKey}`,
+      };
+    }
+  }
+
+  async renderPage(pageSlug: string, locale: string, pageService: PageService): Promise<string> {
+    const page = await pageService.getPageBySlug(pageSlug, true, locale);
+    const globalNavItems = await this.siteSettingsService.getNavigationItems();
+
+    const sectionHtmlList: string[] = [];
+
+    for (const pageSection of page.pageSections) {
+      const sectionTemplate = pageSection.sectionTemplate;
+      const templatePath = this.resolveTemplate(
+        sectionTemplate.templateFile,  // Changed from templateKey
+        sectionTemplate.defaultVariant
+      );
+
+      const sectionHtml = this.env.render(templatePath, {
+        ...pageSection.content,  // Hybrid content already merged
+        sectionKey: sectionTemplate.key,
+        locale,
+        globalNavItems,
+      });
+      sectionHtmlList.push(sectionHtml);
+    }
 
     return this.env.render('layout/page.njk', {
-      site: siteSettings,
-      page: {
-        title: page.title,
-        slug: page.slug,
-        metadata: page.metadata
-      },
-      sections,
-      header: siteSettings.header,
-      footer: siteSettings.footer
+      page,
+      locale,
+      content: sectionHtmlList.join('\n'),
+      globalNavItems,
     });
   }
 
-  private async renderSections(sections: SectionEntry[]): Promise<string[]> {
-    return Promise.all(
-      sections.map(async (section) => {
-        const templatePath = `sections/${section.type}/${section.variant || 'default'}.njk`;
-        return this.env.render(templatePath, section.content);
-      })
-    );
+  async renderPost(entry: any, locale: string, collectionSlug: string): Promise<string> {
+    // Render header + footer + post content
+    const postHtml = this.env.render(`posts/${collectionSlug}/single.njk`, entry);
+    return this.env.render('posts/layout/post.njk', { content: postHtml, ... });
+  }
+
+  async renderPostList(entries: any[], collectionSlug: string, ...): Promise<string> {
+    // Render list view with header/footer
+    const listHtml = this.env.render(`posts/${collectionSlug}/list.njk`, { posts: entries });
+    return this.env.render('posts/layout/post.njk', { content: listHtml, ... });
+  }
+
+  private resolveTemplate(templateKey: string, variant: string): string {
+    const registry = this.templateRegistry[templateKey];
+    if (!registry) return 'sections/_default.njk';  // Fallback
+    if (!registry.variants.includes(variant)) variant = 'default';
+    return `${registry.path}/${variant}.njk`;
   }
 }
 ```
+
+**Key Changes:**
+- `sectionTemplate.templateFile` replaces `sectionTemplate.templateKey`
+- Template registry auto-discovers variants by scanning filesystem
+- Post rendering methods for blog/collection support
+- Header/footer rendered as section templates (not includes)
 
 ---
 
@@ -335,53 +388,65 @@ Base template with header, content, and footer:
 
 ---
 
-## Section Definitions
+## Section Templates
 
-Each section type has a schema in the database:
+Each section type is stored in the `sectionTemplates` table:
 
 ```typescript
-// Section definition structure
-interface SectionDefinition {
+// Section template structure (from database)
+interface SectionTemplate {
   id: string;
-  name: string;           // 'hero', 'features', etc.
-  displayName: string;    // 'Hero Section'
-  schema: ZodSchema;      // Content validation
-  defaultContent: object; // Initial values
-  variants: string[];     // ['default', 'centered', 'minimal']
+  key: string;            // 'hero', 'feature', etc.
+  name: string;           // 'Hero Section'
+  description?: string;
+  fields: object;         // JSON field definitions
+  templateFile: string;   // 'hero' (maps to sections/hero/)
+  defaultVariant: string; // 'default'
+  cssBundle?: string;     // Optional CSS path
 }
 
-// Example: Hero section definition
-const heroDefinition = {
-  name: 'hero',
-  displayName: 'Hero Section',
-  schema: z.object({
-    heading: z.string(),
-    subheading: z.string().optional(),
-    eyebrow: z.string().optional(),
-    image: z.string().optional(),
-    imageAlt: z.string().optional(),
-    cta: z.object({
-      text: z.string(),
-      url: z.string()
-    }).optional(),
-    backgroundColor: z.string().optional()
-  }),
-  defaultContent: {
-    heading: 'Welcome to our site',
-    subheading: 'We help you achieve your goals'
-  },
-  variants: ['default', 'centered', 'minimal', 'video']
+// Example: Hero section in database
+const heroTemplate = {
+  key: 'hero',
+  name: 'Hero Section',
+  templateFile: 'hero',
+  defaultVariant: 'default',
+  fields: {
+    heading: { type: 'text', required: true },
+    subheading: { type: 'text' },
+    eyebrow: { type: 'text' },
+    image: { type: 'image' },
+    cta: {
+      type: 'object',
+      fields: { text: { type: 'text' }, url: { type: 'url' } }
+    },
+    backgroundColor: { type: 'color' }
+  }
 };
+```
+
+**Template Registry Discovery:**
+The renderer auto-discovers available variants by scanning the filesystem:
+
+```typescript
+// After buildRegistry(), templateRegistry contains:
+{
+  hero: { variants: ['default', 'centered'], path: 'sections/hero' },
+  feature: { variants: ['default'], path: 'sections/feature' },
+  // ... other templates
+}
 ```
 
 ---
 
 ## Header & Footer
 
+Header and footer are now rendered as section templates, not partials:
+
 ### Header Template
 
 ```html
-<!-- server/templates/partials/header.njk -->
+<!-- server/templates/sections/header/default.njk -->
 <header class="site-header">
   <div class="header-container">
     <a href="/" class="logo">
@@ -417,7 +482,7 @@ const heroDefinition = {
 ### Footer Template
 
 ```html
-<!-- server/templates/partials/footer.njk -->
+<!-- server/templates/sections/footer/default.njk -->
 <footer class="site-footer">
   <div class="footer-container">
     <div class="footer-info">
@@ -556,19 +621,34 @@ app.listen(4000, () => {
 ## Rendering Flow
 
 ```
-Page Request
+Page Request (/home?locale=en)
      ↓
-RendererService.renderPage(page, settings)
+RendererService.renderPage(pageSlug, locale, pageService)
      ↓
-Load section entries for page
+Fetch page with sections (includes sectionTemplate and content)
      ↓
-For each section:
-  - Get template: sections/{type}/{variant}.njk
-  - Render with content data
+Fetch global navigation from SiteSettingsService
+     ↓
+For each pageSection:
+  - Get templateFile from sectionTemplate
+  - Resolve: sections/{templateFile}/{variant}.njk
+  - Render with pageSection.content + globals
      ↓
 Combine in layout/page.njk
-  - Inject header, sections, footer
-  - Apply filters (markdown, dates, etc.)
+  - content = joined section HTML
+  - globalNavItems, locale, currentYear
+     ↓
+Return HTML string
+
+Post Request (/blog/my-post?locale=en)
+     ↓
+RendererService.renderPost(entry, locale, 'blog')
+     ↓
+Render header (sections/header/default.njk)
+Render footer (sections/footer/default.njk)
+Render post (posts/blog/single.njk)
+     ↓
+Combine in posts/layout/post.njk
      ↓
 Return HTML string
 ```

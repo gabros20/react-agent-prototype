@@ -115,8 +115,8 @@ const sqlite = new Database(dbPath);
 // Enable WAL mode for better concurrency
 sqlite.pragma("journal_mode = WAL");
 
-// Set busy timeout to handle write contention
-sqlite.pragma("busy_timeout = 5000");
+// Enable foreign key enforcement (required for ON DELETE CASCADE to work)
+sqlite.pragma("foreign_keys = ON");
 
 // Create Drizzle instance with full schema
 export const db = drizzle(sqlite, { schema });
@@ -496,12 +496,13 @@ sqlite.pragma("wal_autocheckpoint = 10000"); // Every 10000 pages
 ### Production Recommendations
 
 ```typescript
-// Balanced settings
+// Balanced settings (our default configuration)
 sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");     // Required for cascades
+// Optional performance tuning:
 sqlite.pragma("synchronous = NORMAL");  // vs FULL
-sqlite.pragma("busy_timeout = 5000");
+sqlite.pragma("busy_timeout = 5000");   // Not currently set
 sqlite.pragma("cache_size = -64000");   // 64MB
-sqlite.pragma("foreign_keys = ON");
 ```
 
 ---

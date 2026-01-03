@@ -12,7 +12,7 @@ The content model separates **structure** (what sections exist on a page) from *
 - Order-preserving section arrangements
 
 **Key Tables:**
-- `sectionDefinitions` - Template blueprints (hero, feature, cta)
+- `sectionTemplates` - Template blueprints (hero, feature, cta)
 - `pages` - Page metadata and slug
 - `pageSections` - Junction: which sections on which page, in what order
 - `pageSectionContents` - Localized content for each section instance
@@ -51,10 +51,10 @@ const pages = { content: JSON.stringify({ anything: goes }) }
 │                    DEFINITION LAYER (Global)                     │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐    │
-│  │                  sectionDefinitions                      │    │
+│  │                  sectionTemplates                        │    │
 │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐      │    │
 │  │  │  hero   │  │ feature │  │   cta   │  │ gallery │      │    │
-│  │  │ schema  │  │ schema  │  │ schema  │  │ schema  │      │    │
+│  │  │  fields │  │  fields │  │  fields │  │  fields │      │    │
 │  │  └─────────┘  └─────────┘  └─────────┘  └─────────┘      │    │
 │  └──────────────────────────────────────────────────────────┘    │
 ├──────────────────────────────────────────────────────────────────┤
@@ -65,9 +65,9 @@ const pages = { content: JSON.stringify({ anything: goes }) }
 │  │                                                            │  │
 │  │  pageSections (ordered):                                   │  │
 │  │  ┌───────────────────────────────────────────────────────┐ │  │
-│  │  │ order=0 │ sectionDefId → hero    │ status=published   │ │  │
-│  │  │ order=1 │ sectionDefId → feature │ status=published   │ │  │
-│  │  │ order=2 │ sectionDefId → cta     │ status=unpublished │ │  │
+│  │  │ order=0 │ templateId → hero    │ status=published     │ │  │
+│  │  │ order=1 │ templateId → feature │ status=published     │ │  │
+│  │  │ order=2 │ templateId → cta     │ status=draft         │ │  │
 │  │  └───────────────────────────────────────────────────────┘ │  │
 │  └────────────────────────────────────────────────────────────┘  │
 ├──────────────────────────────────────────────────────────────────┤
@@ -102,11 +102,11 @@ const pages = { content: JSON.stringify({ anything: goes }) }
 
 ## Core Implementation
 
-### Section Definitions (Templates)
+### Section Templates
 
 ```typescript
 // server/db/schema.ts
-export const sectionDefinitions = sqliteTable("section_definitions", {
+export const sectionTemplates = sqliteTable("section_templates", {
   id: text("id").primaryKey(),
   key: text("key").notNull().unique(),        // "hero", "feature", "cta"
   name: text("name").notNull(),               // "Hero Section"
@@ -116,9 +116,9 @@ export const sectionDefinitions = sqliteTable("section_definitions", {
     .default("published"),
 
   // JSON schema defining allowed fields
-  elementsStructure: text("elements_structure", { mode: "json" }).notNull(),
+  fields: text("fields", { mode: "json" }).notNull(),
 
-  templateKey: text("template_key").notNull(), // Nunjucks template name
+  templateFile: text("template_file").notNull(), // Nunjucks template name
   defaultVariant: text("default_variant").notNull().default("default"),
   cssBundle: text("css_bundle"),               // Optional CSS path
 
@@ -127,7 +127,7 @@ export const sectionDefinitions = sqliteTable("section_definitions", {
 });
 ```
 
-**Elements Structure Example:**
+**Fields Structure Example:**
 
 ```json
 {
@@ -197,13 +197,14 @@ export const pageSections = sqliteTable("page_sections", {
   pageId: text("page_id")
     .notNull()
     .references(() => pages.id, { onDelete: "cascade" }),
-  sectionDefId: text("section_def_id")
+  sectionTemplateId: text("section_template_id")
     .notNull()
-    .references(() => sectionDefinitions.id, { onDelete: "restrict" }),
+    .references(() => sectionTemplates.id, { onDelete: "restrict" }),
   sortOrder: integer("sort_order").notNull(), // 0, 1, 2, ...
-  status: text("status", { enum: ["published", "unpublished"] })
+  status: text("status", { enum: ["published", "unpublished", "draft"] })
     .notNull()
     .default("published"),
+  hidden: integer("hidden", { mode: "boolean" }).default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -249,9 +250,9 @@ export const pageSectionsRelations = relations(pageSections, ({ one, many }) => 
     fields: [pageSections.pageId],
     references: [pages.id]
   }),
-  sectionDefinition: one(sectionDefinitions, {
-    fields: [pageSections.sectionDefId],
-    references: [sectionDefinitions.id],
+  sectionTemplate: one(sectionTemplates, {
+    fields: [pageSections.sectionTemplateId],
+    references: [sectionTemplates.id],
   }),
   contents: many(pageSectionContents),
 }));
@@ -282,7 +283,7 @@ async getPageWithSections(pageId: string, locale: string = "en") {
     with: {
       pageSections: {
         with: {
-          sectionDefinition: true,
+          sectionTemplate: true,
           contents: {
             where: eq(pageSectionContents.localeCode, locale),
           },
@@ -307,7 +308,7 @@ async getPageWithSections(pageId: string, locale: string = "en") {
     {
       id: "section-uuid-1",
       sortOrder: 0,
-      sectionDefinition: { key: "hero", name: "Hero Section", ... },
+      sectionTemplate: { key: "hero", name: "Hero Section", ... },
       contents: [
         { localeCode: "en", content: { title: "Welcome", ... } }
       ]
@@ -315,7 +316,7 @@ async getPageWithSections(pageId: string, locale: string = "en") {
     {
       id: "section-uuid-2",
       sortOrder: 1,
-      sectionDefinition: { key: "feature", ... },
+      sectionTemplate: { key: "feature", ... },
       contents: [...]
     }
   ]
@@ -351,7 +352,7 @@ async createPage(
         const [pageSection] = await tx.insert(pageSections).values({
           id: randomUUID(),
           pageId: page.id,
-          sectionDefId: section.definitionId,
+          sectionTemplateId: section.templateId,
           sortOrder: i,
           status: "published",
           createdAt: new Date(),
@@ -396,12 +397,16 @@ async reorderSections(pageId: string, sectionIds: string[]) {
 The same pattern applies to collections (blog posts, products, etc.):
 
 ```typescript
-// Definition
-export const collectionDefinitions = sqliteTable("collection_definitions", {
+// Template
+export const collectionTemplates = sqliteTable("collection_templates", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),      // "blog", "products"
   name: text("name").notNull(),
-  elementsStructure: text("elements_structure", { mode: "json" }).notNull(),
+  description: text("description"),
+  status: text("status", { enum: ["published", "unpublished"] }).notNull().default("published"),
+  fields: text("fields", { mode: "json" }).notNull(),
+  hasSlug: integer("has_slug", { mode: "boolean" }).default(true),
+  orderDirection: text("order_direction", { enum: ["asc", "desc"] }).default("desc"),
   // ...
 });
 
@@ -409,7 +414,7 @@ export const collectionDefinitions = sqliteTable("collection_definitions", {
 export const collectionEntries = sqliteTable("collection_entries", {
   id: text("id").primaryKey(),
   collectionId: text("collection_id")
-    .references(() => collectionDefinitions.id, { onDelete: "cascade" }),
+    .references(() => collectionTemplates.id, { onDelete: "cascade" }),
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   status: text("status", { enum: ["draft", "published", "archived"] }),
@@ -471,15 +476,15 @@ Having `pageSections` separate from `pageSectionContents`:
 2. **Status** - Hide/show section without touching content
 3. **Ordering** - Change order without duplicating content
 
-### Why RESTRICT on Section Definitions?
+### Why RESTRICT on Section Templates?
 
 ```typescript
-.references(() => sectionDefinitions.id, { onDelete: "restrict" })
+.references(() => sectionTemplates.id, { onDelete: "restrict" })
 ```
 
-If a section definition (hero template) is in use, you can't delete it:
+If a section template (hero) is in use, you can't delete it:
 - Prevents orphaned sections with no template
-- Forces explicit migration: remove sections first, then definition
+- Forces explicit migration: remove sections first, then template
 
 ### Why sortOrder Integer vs. Linked List?
 
@@ -507,7 +512,7 @@ sortOrder: integer("sort_order") // 0, 1, 2, 3, ...
 | Layer 2.2 (Hierarchy) | Pages scoped to site/environment |
 | Layer 2.4 (Images) | Content JSON references image URLs |
 | Layer 4 (Services) | PageService, SectionService wrap queries |
-| Layer 7 (Rendering) | Templates use sectionDefinition.templateKey |
+| Layer 7 (Rendering) | Templates use sectionTemplate.templateFile |
 
 ### Rendering Flow
 
@@ -520,7 +525,7 @@ PageService.getPageWithSections("home", "en")
     ▼
 For each pageSection:
     │
-    ├─ Get sectionDefinition.templateKey → "hero"
+    ├─ Get sectionTemplate.templateFile → "hero"
     ├─ Get content[locale=en] → { title: "Welcome", ... }
     │
     ▼
@@ -571,24 +576,24 @@ pageSections: {
 }
 ```
 
-### Can't Delete Section Definition
+### Can't Delete Section Template
 
 ```
 Error: FOREIGN KEY constraint failed (RESTRICT)
 ```
 
-**Cause:** Sections still reference this definition.
+**Cause:** Sections still reference this template.
 
 **Fix:** Delete referencing sections first:
 
 ```typescript
 // Find and delete dependent sections
 await db.delete(pageSections)
-  .where(eq(pageSections.sectionDefId, definitionId));
+  .where(eq(pageSections.sectionTemplateId, templateId));
 
-// Now safe to delete definition
-await db.delete(sectionDefinitions)
-  .where(eq(sectionDefinitions.id, definitionId));
+// Now safe to delete template
+await db.delete(sectionTemplates)
+  .where(eq(sectionTemplates.id, templateId));
 ```
 
 ### JSON Content Type Errors

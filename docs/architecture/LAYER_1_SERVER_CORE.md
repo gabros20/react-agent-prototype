@@ -19,15 +19,15 @@ The server core provides the HTTP foundation for the entire system. It bootstrap
 ├──────────────────────────────────────────────────────────┤
 │  Middleware Stack                                        │
 │  ┌─────────┬─────────┬─────────┬─────────┬─────────────┐ │
-│  │  CORS   │ Logger  │BodyParse│ RateLim │ ErrorHandle │ │
+│  │  CORS   │ Logger  │BodyParse│ Static  │ ErrorHandle │ │
 │  └─────────┴─────────┴─────────┴─────────┴─────────────┘ │
 ├──────────────────────────────────────────────────────────┤
 │  Route Handlers                                          │
 │  ┌─────────────┬────────────┬───────────┬─────────────┐  │
-│  │ /v1/agent   │ /v1/session│ /v1/teams │ /api/images │  │
+│  │ /v1/agent   │ /v1/session│ /v1/cms   │ /api/images │  │
 │  └─────────────┴────────────┴───────────┴─────────────┘  │
 ├──────────────────────────────────────────────────────────┤
-│  Service Container (Singleton DI)                        │
+│  Services (Factory Initialized)                          │
 │  ┌─────────┬─────────┬─────────┬─────────┬────────────┐  │
 │  │   DB    │ Vector  │  Page   │ Section │  Session   │  │
 │  └─────────┴─────────┴─────────┴─────────┴────────────┘  │
@@ -38,46 +38,55 @@ The server core provides the HTTP foundation for the entire system. It bootstrap
 
 ## Key Files
 
-| File                                   | Purpose                         |
-| -------------------------------------- | ------------------------------- |
-| `server/index.ts`                      | App bootstrap, middleware setup |
-| `server/services/service-container.ts` | Singleton DI container          |
-| `server/middleware/`                   | CORS, logging, errors, uploads  |
-| `server/routes/`                       | API route definitions           |
+| File                                   | Purpose                              |
+| -------------------------------------- | ------------------------------------ |
+| `server/index.ts`                      | App bootstrap, middleware setup      |
+| `server/services/create-services.ts`   | Service factory (async initialization) |
+| `server/middleware/`                   | CORS, logging, errors, uploads       |
+| `server/routes/`                       | API route definitions                |
+| `server/execution/orchestrator.ts`     | Agent execution coordination         |
+| `server/agents/main-agent.ts`          | ToolLoopAgent singleton              |
+| `server/tools/_registry/`              | Tool registry system                 |
 
 ---
 
-## Service Container
+## Service Factory
 
-The `ServiceContainer` implements a simple singleton pattern for dependency injection. All services are initialized once and shared across the application.
+Services are initialized via an async factory function at startup. This replaces the older singleton pattern with explicit dependency injection.
 
 ```typescript
-// server/services/service-container.ts
-class ServiceContainer {
-	private static instance: ServiceContainer;
+// server/services/create-services.ts
+export async function createServices({ db }: { db: DrizzleDB }): Promise<Services> {
+	const vectorIndex = new VectorIndexService();
+	await vectorIndex.initialize();
 
-	readonly db: DrizzleDatabase;
-	readonly vectorIndex: VectorIndexService;
-	readonly pageService: PageService;
-	readonly sectionService: SectionService;
-	readonly entryService: EntryService;
-	readonly sessionService: SessionService;
+	const pageService = new PageService(db, vectorIndex);
+	const sectionService = new SectionService(db);
+	const entryService = new EntryService(db);
+	const sessionService = new SessionService(db);
+	// ... other services
 
-	static getInstance(): ServiceContainer {
-		if (!this.instance) {
-			this.instance = new ServiceContainer();
-		}
-		return this.instance;
-	}
+	return {
+		db,
+		vectorIndex,
+		pageService,
+		sectionService,
+		entryService,
+		sessionService,
+		// ...
+	};
 }
 ```
 
-**Access Pattern:**
+**Initialization:**
 
 ```typescript
-import { ServiceContainer } from "./services/service-container";
-const container = ServiceContainer.getInstance();
-const pages = await container.pageService.getPages(siteId, envId);
+// server/index.ts
+const services = await createServices({ db });
+
+// Routes receive services as parameter
+app.use("/v1/agent", createAgentRoutes(services));
+app.use("/v1/sessions", createSessionRoutes(services));
 ```
 
 ---
@@ -91,10 +100,9 @@ Middleware executes in order for every request:
 | 1     | CORS           | Cross-origin configuration |
 | 2     | Request Logger | Log method, path, duration |
 | 3     | Body Parser    | JSON + URL-encoded bodies  |
-| 4     | Rate Limiter   | Request throttling         |
-| 5     | Static Files   | Serve `/uploads/*`         |
-| 6     | Routes         | Handle API endpoints       |
-| 7     | Error Handler  | Catch + format errors      |
+| 4     | Static Files   | Serve `/uploads/*`         |
+| 5     | Routes         | Handle API endpoints       |
+| 6     | Error Handler  | Catch + format errors      |
 
 ### Error Handler
 
@@ -120,16 +128,17 @@ Routes are modular and mounted by resource type:
 ```
 /v1
 ├── /agent
-│   └── /stream          POST - SSE agent execution
+│   └── /stream          POST - SSE agent execution (via orchestrator)
 ├── /sessions
 │   ├── /                GET/POST - List/create sessions
 │   ├── /:id             GET/DELETE - Session details
-│   ├── /:id/messages    GET/POST - Message history
-│   └── /:id/checkpoint  POST - Save checkpoint
-└── /teams/:team/sites/:site/environments/:env
-    ├── /pages           GET/POST/PUT/DELETE
-    ├── /sections        GET/POST/PUT/DELETE
-    └── /entries         GET/POST/PUT/DELETE
+│   ├── /:id/messages    GET - Message history
+│   └── /:id/logs        GET - Conversation logs
+├── /cms
+│   ├── /pages           GET/POST/PUT/DELETE
+│   ├── /sections        GET/POST/PUT/DELETE
+│   ├── /entries         GET/POST/PUT/DELETE
+│   └── /images          GET/POST/PUT/DELETE
 
 /api
 ├── /upload              POST - File upload (multer)
@@ -210,44 +219,51 @@ Key environment variables:
 
 ## Startup Sequence
 
-1. Initialize ServiceContainer (DB, services)
-2. Apply middleware stack
-3. Mount route handlers
-4. Start HTTP server
-5. Log startup confirmation
+1. Initialize services via async factory
+2. Initialize worker events subscriber for SSE
+3. Apply middleware stack
+4. Mount route handlers with services
+5. Start HTTP server
+6. Log startup confirmation
 
 ```typescript
 // server/index.ts
-const app = express();
-const container = ServiceContainer.getInstance();
+async function startServer() {
+	// Initialize services via factory
+	const services = await createServices({ db });
 
-// Middleware
-app.use(cors(corsOptions));
-app.use(requestLogger);
-app.use(express.json());
+	// Initialize worker events subscriber for SSE
+	const workerEventSubscriber = getSubscriber();
+	await workerEventSubscriber.subscribe();
 
-// Routes
-app.use("/v1/agent", agentRoutes);
-app.use("/v1/sessions", sessionRoutes);
-app.use("/v1/teams", teamsRoutes);
+	// Routes (receive services as parameter)
+	app.use("/api", createUploadRoutes(services));
+	app.use("/api", createImageRoutes(services));
+	app.use("/v1/agent", createAgentRoutes(services));
+	app.use("/v1/sessions", createSessionRoutes(services));
+	app.use("/v1/models", createModelsRoutes());
+	app.use("/v1/tools", createToolRoutes(services));
 
-// Error handling (must be last)
-app.use(errorHandler);
+	// Error handling (must be last)
+	app.use(errorHandler);
 
-app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+	app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+}
+
+startServer();
 ```
 
 ---
 
 ## Integration Points
 
-| Connects To          | How                      |
-| -------------------- | ------------------------ |
-| Layer 2 (Database)   | ServiceContainer.db      |
-| Layer 3 (Agent)      | `/v1/agent/stream` route |
-| Layer 4 (Services)   | ServiceContainer.\*      |
-| Layer 5 (Background) | Job dispatch from routes |
-| Layer 6 (Client)     | HTTP/SSE responses       |
+| Connects To          | How                          |
+| -------------------- | ---------------------------- |
+| Layer 2 (Database)   | `services.db`                |
+| Layer 3 (Agent)      | `/v1/agent/stream` route     |
+| Layer 4 (Services)   | `services.*` passed to routes|
+| Layer 5 (Background) | Job dispatch from routes     |
+| Layer 6 (Client)     | HTTP/SSE responses           |
 
 ---
 

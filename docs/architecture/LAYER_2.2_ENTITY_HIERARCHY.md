@@ -38,12 +38,12 @@ const pages = await db.select().from(pages)
 ┌────────────────────────────────────────────────────────────────┐
 │                    GLOBAL (Shared Across All)                  │
 │           ┌──────────────────┐  ┌──────────────────┐           │
-│           │ SectionDefs      │  │ CollectionDefs   │           │
-│           │ (templates)      │  │ (blog, products) │           │
+│           │ SectionTemplates │  │CollectionTemplates│          │
+│           │ (hero, feature)  │  │ (blog, products) │           │
 │           └──────────────────┘  └──────────────────┘           │
 │           ┌──────────────────┐  ┌──────────────────┐           │
 │           │ Locales          │  │ SiteSettings     │           │
-│           │ (en, de, fr)     │  │ (navigation)     │           │
+│           │ (en, de, fr)     │  │ (key-value)      │           │
 │           └──────────────────┘  └──────────────────┘           │
 ├────────────────────────────────────────────────────────────────┤
 │                         TENANT LAYER                           │
@@ -202,14 +202,14 @@ DELETE team
 
 ### Protected References (RESTRICT)
 
-Section definitions can't be deleted if pages use them:
+Section templates can't be deleted if pages use them:
 
 ```typescript
 export const pageSections = sqliteTable("page_sections", {
-  sectionDefId: text("section_def_id")
+  sectionTemplateId: text("section_template_id")
     .notNull()
-    .references(() => sectionDefinitions.id, { onDelete: "restrict" }),
-    // ← RESTRICT: Can't delete definition if sections exist
+    .references(() => sectionTemplates.id, { onDelete: "restrict" }),
+    // ← RESTRICT: Can't delete template if sections exist
 });
 ```
 
@@ -232,20 +232,23 @@ environmentId: text("environment_id").references(() => environments.id),
 
 **Alternative considered:** Only environmentId with join to get siteId. Rejected because most queries need site context immediately.
 
-### Why Global Section Definitions?
+### Why Global Section Templates?
 
 ```typescript
-// SectionDefinitions have NO siteId or environmentId
-export const sectionDefinitions = sqliteTable("section_definitions", {
+// SectionTemplates have NO siteId or environmentId
+export const sectionTemplates = sqliteTable("section_templates", {
   id: text("id").primaryKey(),
   key: text("key").notNull().unique(), // "hero", "feature", "cta"
+  name: text("name").notNull(),
+  fields: text("fields", { mode: "json" }).notNull(), // Field definitions
+  templateFile: text("template_file").notNull(),
   // No ownership columns!
 });
 ```
 
 **Reasons:**
 1. **Reusability** - Same hero template across all sites/environments
-2. **Consistency** - One "hero" definition, not duplicated per tenant
+2. **Consistency** - One "hero" template, not duplicated per tenant
 3. **Simpler migrations** - Update template once, affects all
 
 **Trade-off:** Can't have site-specific section types (acceptable for our use case).

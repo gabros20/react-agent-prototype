@@ -1,16 +1,19 @@
 # Layer 3.3: Working Memory
 
-> Entity tracking and reference resolution within conversations
+> Entity tracking, discovered tools persistence, and reference resolution
 
 ## Overview
 
-Working Memory enables the agent to remember entities mentioned during a conversation. When a user says "delete that page" or "add an image to it," the system resolves these references to actual entity IDs without requiring the user to repeat details.
+Working Memory enables the agent to remember entities and discovered tools across conversation turns. It now has two key responsibilities:
+
+1. **Entity Tracking** - When a user says "delete that page," resolve to actual entity IDs
+2. **Discovered Tools Persistence** - Remember tools found via `searchTools` across turns
 
 **Key Files:**
 
--   `server/services/working-memory/working-context.ts` - Main implementation
--   `server/services/working-memory/entity-extractor.ts` - Extraction logic
--   `server/services/working-memory/types.ts` - Type definitions
+-   `server/memory/working-context/working-context.ts` - Main implementation
+-   `server/memory/working-context/entity-extractor.ts` - Entity extraction from tool results
+-   `server/memory/working-context/types.ts` - Type definitions
 
 ---
 
@@ -26,16 +29,26 @@ User: "Now add a hero section to it"
 Agent: Add to which page? I don't know what "it" refers to.
 ```
 
+Additionally, without tool persistence:
+
+```
+User: "Create the page"
+Agent: [Discovers createPage tool, creates page]
+
+User: "Now update the title"
+Agent: [Must search for tools again - inefficient]
+```
+
 With working memory:
 
 ```
 User: "Create a page called About Us"
 Agent: Created page with ID page-123
-[Working Memory: page-123 = "About Us"]
+[Working Memory: page-123 = "About Us", discoveredTools = ["createPage"]]
 
-User: "Now add a hero section to it"
-Agent: [Resolves "it" → page-123]
-       Adding hero section to page-123...
+User: "Now update the title"
+Agent: [Already has updatePage tool, resolves "it" → page-123]
+       Updating page-123...
 ```
 
 ---
@@ -50,123 +63,324 @@ Agent: [Resolves "it" → page-123]
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │                     WorkingContext                          │  │
 │  │                                                             │  │
-│  │   entities: Entity[]     ← Max 10, MRU ordered              │  │
+│  │   entities: Map<id, Entity>  ← O(1) lookup, max 10         │  │
+│  │   entitiesOrder: string[]    ← Recency tracking            │  │
+│  │   discoveredTools: string[]  ← Max 20, persisted           │  │
 │  │                                                             │  │
-│  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │  │
-│  │   │  page   │ │ section │ │  image  │ │  post   │           │  │
-│  │   │About Us │ │  Hero   │ │mountain │ │ Blog #1 │           │  │
-│  │   │page-123 │ │ sec-456 │ │ img-789 │ │post-012 │           │  │
-│  │   └─────────┘ └─────────┘ └─────────┘ └─────────┘           │  │
+│  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐          │  │
+│  │   │  page   │ │ section │ │  image  │ │  post   │          │  │
+│  │   │About Us │ │  Hero   │ │mountain │ │ Blog #1 │          │  │
+│  │   │page-123 │ │ sec-456 │ │ img-789 │ │post-012 │          │  │
+│  │   └─────────┘ └─────────┘ └─────────┘ └─────────┘          │  │
 │  │                                                             │  │
+│  │   discoveredTools: [createPage, updatePage, createSection] │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
 │                              ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │                    Entity Extractor                         │  │
 │  │                                                             │  │
-│  │   Tool Result → Infer Type → Extract Entities               │  │
-│  │                                                             │  │
-│  │   cms_createPage → 'page' → { id, name, type }              │  │
-│  │   cms_searchImages → 'image' → [{ id, name, type }, ...]    │  │
+│  │   Uses Tool Metadata extraction schemas:                    │  │
+│  │   - idPath: "page.id" or "pages[].id"                      │  │
+│  │   - namePath: "page.title" or "pages[].title"              │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
 │                              ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                    Prompt Injection                         │  │
+│  │               Context Message Generation                    │  │
 │  │                                                             │  │
-│  │   [WORKING MEMORY]                                          │  │
-│  │   pages:                                                    │  │
-│  │     - "About Us" (page-123)                                 │  │
-│  │   sections:                                                 │  │
-│  │     - "Hero" (sec-456)                                      │  │
-│  │   images:                                                   │  │
-│  │     - "mountain.jpg" (img-789)                              │  │
+│  │   toContextString() for injection as conversation message   │  │
+│  │   Memoized via version tracking                            │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Core Concepts
+## Core Implementation
 
-### Entity
+### WorkingContext Class
 
-An entity represents something the agent has encountered:
+```typescript
+// server/memory/working-context/working-context.ts
+export class WorkingContext {
+  private entities: Map<string, Entity> = new Map();
+  private entitiesOrder: string[] = [];           // Recency order
+  private discoveredTools: string[] = [];
+  private _version = 0;
+  private _cachedContextString: string | null = null;
+  private _cachedContextVersion = -1;
+
+  readonly MAX_ENTITIES = 10;
+  readonly MAX_DISCOVERED_TOOLS = 20;
+
+  // Add single entity
+  addEntity(entity: Entity): void {
+    // Remove from current position if exists
+    const existing = this.entitiesOrder.indexOf(entity.id);
+    if (existing !== -1) {
+      this.entitiesOrder.splice(existing, 1);
+    }
+
+    // Add to front (most recent)
+    this.entitiesOrder.unshift(entity.id);
+    this.entities.set(entity.id, { ...entity, timestamp: new Date() });
+
+    // Trim to max
+    while (this.entitiesOrder.length > this.MAX_ENTITIES) {
+      const removed = this.entitiesOrder.pop()!;
+      this.entities.delete(removed);
+    }
+
+    this._version++;
+  }
+
+  // Add discovered tools
+  addDiscoveredTools(tools: string[]): void {
+    for (const tool of tools) {
+      if (!this.discoveredTools.includes(tool)) {
+        this.discoveredTools.push(tool);
+      }
+    }
+
+    // Trim to max (keep oldest - first discovered)
+    if (this.discoveredTools.length > this.MAX_DISCOVERED_TOOLS) {
+      this.discoveredTools = this.discoveredTools.slice(0, this.MAX_DISCOVERED_TOOLS);
+    }
+
+    this._version++;
+  }
+
+  // Memoized context string
+  toContextString(): string {
+    if (this._cachedContextVersion === this._version && this._cachedContextString) {
+      return this._cachedContextString;
+    }
+
+    this._cachedContextString = this.buildContextString();
+    this._cachedContextVersion = this._version;
+    return this._cachedContextString;
+  }
+
+  // Get discovered tools for agent options
+  getDiscoveredTools(): string[] {
+    return [...this.discoveredTools];
+  }
+}
+```
+
+### Entity Interface
 
 ```typescript
 interface Entity {
-	id: string; // Unique identifier (e.g., "page-123")
-	name: string; // Human-readable name (e.g., "About Us")
-	type: EntityType; // Category: 'page' | 'section' | 'image' | 'post' | ...
+  id: string;
+  name: string;
+  type: 'page' | 'section' | 'image' | 'post' | 'entry';
+  timestamp: Date;
 }
-
-type EntityType =
-	| "page"
-	| "section"
-	| "collection"
-	| "entry"
-	| "media" // Images, files
-	| "image" // Alias for media
-	| "post"
-	| "task";
 ```
 
-### WorkingContext
+---
 
-The main class managing entities:
+## Entity Extraction
+
+### Metadata-Driven Extraction
+
+Entity extraction now uses the per-tool metadata's `extraction` schema:
 
 ```typescript
-class WorkingContext {
-	private entities: Entity[] = [];
-	private readonly MAX_ENTITIES = 10;
+// server/memory/working-context/entity-extractor.ts
+import { ToolRegistry } from '../../tools/_registry/tool-registry';
 
-	// Add entities (maintains MRU order, deduplicates)
-	addEntities(newEntities: Entity[]): void;
+export function extractEntities(
+  toolName: string,
+  result: unknown
+): Entity[] {
+  const metadata = ToolRegistry.getInstance().get(toolName);
+  if (!metadata?.extraction) return [];
 
-	// Get all entities
-	getEntities(): Entity[];
+  const { type, idPath, namePath } = metadata.extraction;
 
-	// Get entities by type
-	getEntitiesByType(type: EntityType): Entity[];
+  // Handle array paths like "pages[].id"
+  if (idPath.includes('[]')) {
+    return extractFromArray(result, type, idPath, namePath);
+  }
 
-	// Format for prompt injection
-	toContextString(): string;
+  // Handle single entity paths like "page.id"
+  const id = getPath(result, idPath);
+  const name = getPath(result, namePath);
 
-	// Serialize for checkpointing
-	serialize(): SerializedContext;
+  if (!id || !name) return [];
 
-	// Restore from checkpoint
-	static restore(data: SerializedContext): WorkingContext;
+  return [{
+    type,
+    id: String(id),
+    name: String(name),
+    timestamp: new Date(),
+  }];
+}
+
+function extractFromArray(
+  result: unknown,
+  type: EntityType,
+  idPath: string,
+  namePath: string
+): Entity[] {
+  const basePath = idPath.split('[]')[0].replace(/\.$/, '');
+  const idField = idPath.split('[].')[1];
+  const nameField = namePath.split('[].')[1];
+
+  const items = getPath(result, basePath) as unknown[];
+  if (!Array.isArray(items)) return [];
+
+  return items.slice(0, 3).map(item => ({
+    type,
+    id: String(getPath(item, idField)),
+    name: String(getPath(item, nameField)),
+    timestamp: new Date(),
+  })).filter(e => e.id && e.name);
+}
+```
+
+### Extraction Schema Examples
+
+From tool metadata:
+
+```typescript
+// Single entity
+extraction: {
+  type: 'page',
+  idPath: 'page.id',
+  namePath: 'page.title',
+}
+
+// Array of entities
+extraction: {
+  type: 'page',
+  idPath: 'pages[].id',
+  namePath: 'pages[].title',
+}
+
+// Nested path
+extraction: {
+  type: 'section',
+  idPath: 'result.section.id',
+  namePath: 'result.section.heading',
+}
+```
+
+---
+
+## Discovered Tools Persistence
+
+### Flow Across Turns
+
+```
+Turn 1: User asks to create a page
+├── Step 1: searchTools("create page")
+│   └── Discovers: [createPage, updatePage, getPage]
+├── Step 2: createPage(...)
+└── Save WorkingContext with discoveredTools
+
+Turn 2: User asks to update the title
+├── Load WorkingContext (has discoveredTools)
+├── prepareCall receives: options.discoveredTools = [createPage, updatePage, getPage]
+├── prepareStep: Tools already available (no search needed)
+└── Step 1: updatePage(...) - can execute immediately
+```
+
+### Integration with Agent
+
+```typescript
+// server/execution/context-coordinator.ts
+async prepareContext(options: ResolvedOptions, logger, emitter?) {
+  // Load session
+  const session = await this.deps.sessionService.load(options.sessionId);
+
+  // Parse working context from session
+  const workingContext = WorkingContext.fromJSON(session.workingContext || {});
+
+  // Return context including discovered tools
+  return {
+    context: {
+      messages: session.messages,
+      workingMemoryString: workingContext.toContextString(),
+      discoveredTools: workingContext.getDiscoveredTools(), // For prepareCall
+      // ...
+    },
+    workingContext,
+  };
+}
+```
+
+---
+
+## Context String Generation
+
+### Output Format
+
+```typescript
+toContextString(): string {
+  const parts: string[] = [];
+
+  // Group entities by type
+  const grouped = this.groupByType();
+
+  for (const [type, entities] of grouped) {
+    parts.push(`${type}s:`);
+    for (const entity of entities) {
+      parts.push(`  - "${entity.name}" (${entity.id})`);
+    }
+  }
+
+  if (parts.length === 0) {
+    return 'No entities tracked yet.';
+  }
+
+  return parts.join('\n');
+}
+```
+
+### Example Output
+
+```
+pages:
+  - "About Us" (page-123)
+  - "Home" (page-456)
+sections:
+  - "Hero" (sec-789)
+images:
+  - "hero-bg.jpg" (img-345)
+```
+
+### Injection as Conversation Message
+
+Working memory is now injected as a conversation message, not in the system prompt:
+
+```typescript
+// server/execution/context-coordinator.ts
+function buildContextMessages(workingContext: WorkingContext): ModelMessage[] {
+  const contextString = workingContext.toContextString();
+  if (!contextString || contextString === 'No entities tracked yet.') {
+    return [];
+  }
+
+  return [
+    {
+      role: 'user',
+      content: `[WORKING MEMORY]\n${contextString}\n\nUse these entities when I refer to "this page", "that image", etc.`,
+    },
+    {
+      role: 'assistant',
+      content: 'I understand. I\'ll use these entities when you refer to them.',
+    },
+  ];
 }
 ```
 
 ---
 
 ## Sliding Window (Max 10 Entities)
-
-Working memory uses a fixed-size window to prevent unbounded growth:
-
-```typescript
-addEntities(newEntities: Entity[]): void {
-  for (const entity of newEntities) {
-    // Check for existing entity with same ID
-    const existingIndex = this.entities.findIndex(e => e.id === entity.id);
-
-    if (existingIndex !== -1) {
-      // Remove from current position (will re-add at front)
-      this.entities.splice(existingIndex, 1);
-    }
-
-    // Add to front (most recent)
-    this.entities.unshift(entity);
-
-    // Trim to max size
-    if (this.entities.length > this.MAX_ENTITIES) {
-      this.entities.pop();  // Remove oldest
-    }
-  }
-}
-```
 
 ### Why 10?
 
@@ -182,300 +396,56 @@ Newest entities at front, oldest at back:
 
 ```
 Initial: []
-After cms_createPage("Home"):    [Home]
-After cms_createPage("About"):   [About, Home]
-After cms_getPage("Home"):       [Home, About]  ← Home moves to front
-After 9 more entities:           [E10, E9, ... Home, About]
-After 1 more entity:             [E11, E10, ... Home]  ← About dropped
+After createPage("Home"):     [Home]
+After createPage("About"):    [About, Home]
+After getPage("Home"):        [Home, About]  ← Home moves to front
+After 9 more entities:        [E10, E9, ... Home, About]
+After 1 more entity:          [E11, E10, ... Home]  ← About dropped
 ```
 
 ---
 
-## Entity Extraction
+## Serialization
 
-### Automatic Type Inference
-
-The extractor infers entity type from tool name:
+### Save with Session
 
 ```typescript
-// server/services/working-memory/entity-extractor.ts
-function inferTypeFromToolName(toolName: string): EntityType | null {
-	if (toolName.includes("Page")) return "page";
-	if (toolName.includes("Section")) return "section";
-	if (toolName.includes("Image")) return "image";
-	if (toolName.includes("Post")) return "post";
-	if (toolName.includes("Entry")) return "entry";
-	if (toolName.includes("Collection")) return "collection";
-	return null;
+// In context-coordinator.ts saveSessionData
+await this.deps.sessionService.save(sessionId, {
+  messages: responseMessages,
+  workingContext: workingContext.toJSON(),
+});
+
+// WorkingContext.toJSON()
+toJSON(): SerializedWorkingContext {
+  return {
+    entities: Array.from(this.entities.values()),
+    entitiesOrder: this.entitiesOrder,
+    discoveredTools: this.discoveredTools,
+    version: 1,
+  };
 }
 ```
 
-### Extraction Patterns
-
-Different result structures are handled:
+### Load from Session
 
 ```typescript
-function extract(toolName: string, result: unknown): Entity[] {
-	const type = inferTypeFromToolName(toolName);
-	if (!type) return [];
+// WorkingContext.fromJSON()
+static fromJSON(data: SerializedWorkingContext): WorkingContext {
+  const ctx = new WorkingContext();
 
-	const entities: Entity[] = [];
-
-	// Pattern 1: Single resource (e.g., { page: { id, title } })
-	if (result[type]) {
-		const resource = result[type];
-		if (resource.id) {
-			entities.push({
-				id: resource.id,
-				name: resource.title || resource.name || resource.slug || resource.filename,
-				type,
-			});
-		}
-	}
-
-	// Pattern 2: Plural array (e.g., { pages: [...] })
-	const pluralKey = type + "s";
-	if (Array.isArray(result[pluralKey])) {
-		const items = result[pluralKey].slice(0, 3); // Max 3 from lists
-		for (const item of items) {
-			if (item.id) {
-				entities.push({
-					id: item.id,
-					name: item.title || item.name || item.slug || item.filename,
-					type,
-				});
-			}
-		}
-	}
-
-	// Pattern 3: Matches array (e.g., { matches: [...] })
-	if (Array.isArray(result.matches)) {
-		const items = result.matches.slice(0, 3);
-		for (const item of items) {
-			if (item.id) {
-				entities.push({
-					id: item.id,
-					name: item.title || item.name || item.slug,
-					type,
-				});
-			}
-		}
-	}
-
-	return entities;
-}
-```
-
-### Extraction Examples
-
-**Single Page Created:**
-
-```typescript
-// Tool: cms_createPage
-// Result: { success: true, page: { id: "page-123", title: "About Us", slug: "about" } }
-// Extracted: [{ id: "page-123", name: "About Us", type: "page" }]
-```
-
-**Multiple Images Found:**
-
-```typescript
-// Tool: cms_searchImages
-// Result: { matches: [{ id: "img-1", filename: "hero.jpg" }, { id: "img-2", filename: "bg.jpg" }, ...] }
-// Extracted: [{ id: "img-1", name: "hero.jpg", type: "image" }, { id: "img-2", name: "bg.jpg", type: "image" }, { id: "img-3", ... }]
-// Note: Only first 3 extracted to avoid flooding memory
-```
-
-**Section Content Retrieved:**
-
-```typescript
-// Tool: cms_getSectionContent
-// Result: { section: { id: "sec-456", heading: "Welcome" } }
-// Extracted: [{ id: "sec-456", name: "Welcome", type: "section" }]
-```
-
----
-
-## Prompt Injection
-
-Working memory is injected into the system prompt:
-
-### toContextString() Output
-
-```typescript
-toContextString(): string {
-  if (this.entities.length === 0) {
-    return '[WORKING MEMORY]\nNo entities tracked yet.';
-  }
-
-  // Group by type
-  const grouped = new Map<EntityType, Entity[]>();
-  for (const entity of this.entities) {
-    const list = grouped.get(entity.type) || [];
-    list.push(entity);
-    grouped.set(entity.type, list);
-  }
-
-  // Format output
-  let output = '[WORKING MEMORY]\n';
-  for (const [type, entities] of grouped) {
-    output += `${type}s:\n`;
-    for (const entity of entities) {
-      output += `  - "${entity.name}" (${entity.id})\n`;
+  if (data.entities) {
+    for (const entity of data.entities) {
+      ctx.entities.set(entity.id, entity);
     }
+    ctx.entitiesOrder = data.entitiesOrder || [];
   }
 
-  return output;
-}
-```
+  if (data.discoveredTools) {
+    ctx.discoveredTools = data.discoveredTools;
+  }
 
-### Example Output
-
-```
-[WORKING MEMORY]
-pages:
-  - "About Us" (page-123)
-  - "Home" (page-456)
-sections:
-  - "Hero" (sec-789)
-  - "Features" (sec-012)
-images:
-  - "hero-bg.jpg" (img-345)
-posts:
-  - "Welcome Post" (post-678)
-```
-
-### Injection Point
-
-In the system prompt template:
-
-```xml
-<!-- server/prompts/react.xml -->
-<agent>
-  <!-- ... other sections ... -->
-
-  {{{workingMemory}}}
-
-  <instructions>
-    When the user refers to "this page", "that image", "it", etc.,
-    check WORKING MEMORY for the most recent entity of the appropriate type.
-  </instructions>
-</agent>
-```
-
----
-
-## Reference Resolution
-
-### How the Agent Uses Working Memory
-
-The prompt instructs the agent to resolve references:
-
-```xml
-<reference_resolution>
-  When the user says:
-  - "this page" / "that page" / "the page" → Use most recent page from WORKING MEMORY
-  - "this section" / "it" (after section operation) → Use most recent section
-  - "the image" / "that image" → Use most recent image
-
-  Example:
-  User: "Add a hero section to it"
-  Working Memory shows: pages: - "About Us" (page-123)
-  Agent: I'll add a hero section to page-123 (About Us)
-</reference_resolution>
-```
-
-### Resolution Flow
-
-```
-User: "Add an image to it"
-                │
-                ▼
-┌─────────────────────────────────────────┐
-│ Agent checks WORKING MEMORY:            │
-│   pages:                                │
-│     - "About Us" (page-123)             │
-│   sections:                             │
-│     - "Hero" (sec-456)                  │
-│   images:                               │
-│     - "mountain.jpg" (img-789)          │
-└─────────────────────────────────────────┘
-                │
-                ▼
-┌─────────────────────────────────────────┐
-│ Context: Last operation was on section  │
-│ "it" likely refers to sec-456           │
-└─────────────────────────────────────────┘
-                │
-                ▼
-┌─────────────────────────────────────────┐
-│ Agent calls:                            │
-│ cms_updateSectionImage({                │
-│   pageSectionId: "sec-456",             │
-│   imageId: "img-789"                    │
-│ })                                      │
-└─────────────────────────────────────────┘
-```
-
----
-
-## Lifecycle Integration
-
-### When Entities Are Added
-
-Entities are extracted after each tool result in `onStepFinish`:
-
-```typescript
-// In orchestrator.ts
-onStepFinish: async ({ step }) => {
-	if (step.toolResults) {
-		for (const result of step.toolResults) {
-			const entities = entityExtractor.extract(result.toolName, result.result);
-			workingContext.addEntities(entities);
-		}
-	}
-};
-```
-
-### When Working Memory Is Injected
-
-Before each LLM call, the system prompt is compiled with current memory:
-
-```typescript
-// In orchestrator.ts
-const compiledPrompt = compilePrompt({
-	// ... other context
-	workingMemory: workingContext.toContextString(),
-});
-```
-
-### Checkpointing
-
-Working memory is saved with session checkpoints:
-
-```typescript
-// Saving
-await sessionService.saveCheckpoint(sessionId, {
-	messages: currentMessages,
-	workingMemory: workingContext.serialize(),
-});
-
-// Restoring
-const checkpoint = await sessionService.loadCheckpoint(sessionId);
-if (checkpoint?.workingMemory) {
-	workingContext = WorkingContext.restore(checkpoint.workingMemory);
-}
-```
-
-### Serialization Format
-
-```typescript
-interface SerializedContext {
-	entities: Array<{
-		id: string;
-		name: string;
-		type: EntityType;
-	}>;
-	version: number; // For future migrations
+  return ctx;
 }
 ```
 
@@ -483,113 +453,49 @@ interface SerializedContext {
 
 ## Design Decisions
 
-### Why In-Memory Only?
-
-Working memory is session-scoped and ephemeral:
-
-| Storage   | Tradeoff                      |
-| --------- | ----------------------------- |
-| In-memory | Fast, simple, lost on restart |
-| Redis     | Persistent, adds complexity   |
-| Database  | Persistent, slower, overkill  |
-
-**Our choice:** In-memory with checkpoint serialization. Speed matters for every LLM call, and checkpoints handle persistence.
-
-### Why No Explicit Reference Map?
-
-Some systems maintain:
+### Why O(1) Map + Order Array?
 
 ```typescript
-references: Map<string, string>; // "the page" → "page-123"
+// Map for O(1) lookups by ID
+private entities: Map<string, Entity> = new Map();
+
+// Array for O(n) recency operations (n ≤ 10, so fine)
+private entitiesOrder: string[] = [];
 ```
 
-**We don't because:**
+Enables:
+- Fast entity lookup by ID
+- Efficient recency tracking
+- Simple serialization
 
-1. LLM handles natural language resolution well
-2. Avoids maintaining fragile mappings
-3. Works across languages without translation
-4. MRU ordering provides implicit "most recent" resolution
+### Why Discovered Tools in Working Context?
 
-### Why Extract Only 3 from Lists?
+Previously considered:
+- Separate `DiscoveredToolsStore` - More complexity
+- Session messages parsing - Fragile, expensive
+- Module-level state - Not serializable
 
-When `cms_searchImages` returns 10 matches, we only extract 3:
+Current approach:
+- Single source of truth
+- Persists with session
+- Available on next turn via `options.discoveredTools`
 
-```typescript
-const items = result.matches.slice(0, 3);
-```
+### Why Max 20 Discovered Tools?
 
-**Reasons:**
-
-1. Prevents flooding memory with one operation
-2. Top results are usually most relevant
-3. User can search again if needed
-4. Preserves memory for diverse entity types
-
----
-
-## Edge Cases
-
-### Duplicate Entities
-
-Same entity from different operations:
-
-```typescript
-// Operation 1: Get page
-cms_getPage({ slug: "about" });
-// Memory: [{ id: "page-123", name: "About Us", type: "page" }]
-
-// Operation 2: Update same page
-cms_updatePage({ pageId: "page-123", title: "About Our Team" });
-// Memory: [{ id: "page-123", name: "About Our Team", type: "page" }]
-// Entity moved to front, name updated
-```
-
-### Ambiguous References
-
-When multiple entities of same type exist:
-
-```
-Memory:
-  pages:
-    - "About Us" (page-123)      ← Most recent
-    - "Contact" (page-456)
-    - "Home" (page-789)
-
-User: "Delete that page"
-```
-
-**Resolution:** Most recent (About Us) unless user specifies otherwise.
-
-**Prompt guidance:**
-
-```xml
-<ambiguity>
-If multiple entities of the same type exist and the reference is ambiguous:
-1. Default to the most recent (first in list)
-2. If uncertain, ask the user: "Which page - About Us or Contact?"
-</ambiguity>
-```
-
-### No Matching Entity
-
-```
-Memory: (empty or no pages)
-
-User: "Update that page"
-```
-
-**Agent behavior:** Ask for clarification or search for pages.
+- Typical CMS workflow uses 5-10 tools
+- 20 covers complex multi-domain tasks
+- Beyond 20, likely searching inefficiently
 
 ---
 
 ## Integration Points
 
-| Connects To                                 | How                                |
-| ------------------------------------------- | ---------------------------------- |
-| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | onStepFinish extracts entities     |
-| [3.2 Tools](./LAYER_3.2_TOOLS.md)           | Tool results → entity extraction   |
-| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)       | Memory injected into system prompt |
-| Session Service                             | Serialized in checkpoints          |
+| Connects To                                 | How                                    |
+| ------------------------------------------- | -------------------------------------- |
+| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) | Discovered tools passed to prepareCall |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md)           | Metadata drives entity extraction      |
+| Session Service                             | Serialized with session                |
+| Context Coordinator                         | Loaded/saved per request               |
 
 ---
 
@@ -598,23 +504,24 @@ User: "Update that page"
 ### View Current Memory
 
 ```typescript
-// In tool or orchestrator
-console.log("Working Memory:", workingContext.toContextString());
+console.log('Entities:', workingContext.getEntities());
+console.log('Discovered Tools:', workingContext.getDiscoveredTools());
+console.log('Context String:', workingContext.toContextString());
 ```
 
 ### Common Issues
 
-| Issue                    | Cause                       | Solution                         |
-| ------------------------ | --------------------------- | -------------------------------- |
-| Entity not found         | Extraction failed           | Check tool result structure      |
-| Wrong entity resolved    | MRU ordering                | Have user be more specific       |
-| Memory empty             | No extractions succeeded    | Verify entity extractor patterns |
-| Memory full of same type | Many operations on one type | Expected behavior, uses MRU      |
+| Issue                    | Cause                        | Solution                        |
+| ------------------------ | ---------------------------- | ------------------------------- |
+| Entity not extracted     | Missing extraction in metadata| Add extraction schema           |
+| Wrong entity resolved    | MRU ordering                 | User should be more specific    |
+| Tools not persisted      | Not calling addDiscoveredTools| Check stream processor          |
+| Memory reset unexpectedly| New session created          | Check session ID consistency    |
 
 ---
 
 ## Further Reading
 
--   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - When extraction happens
--   [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool result structures
--   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - How memory is injected
+-   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Tool discovery flow
+-   [3.2 Tools](./LAYER_3.2_TOOLS.md) - Extraction schemas in metadata
+-   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - Context injection

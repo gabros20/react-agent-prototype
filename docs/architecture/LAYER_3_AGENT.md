@@ -1,309 +1,579 @@
 # Layer 3: Agent System
 
-> Native AI SDK 6 ToolLoopAgent, tool registry, working memory, and human-in-the-loop approval
+> Dynamic tool injection with cache-safe architecture, AI SDK 6 ToolLoopAgent, hybrid tool search, and provider-anchored compaction
 
 ## Overview
 
-The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v6 `ToolLoopAgent` class**. Since the migration to AI SDK 6 (commit `1e1963e`), the agent uses a centralized module-level singleton with:
+The agent layer implements a ReAct (Reasoning + Acting) pattern using **AI SDK v6 `ToolLoopAgent` class** with a **cache-safe dynamic tool injection** architecture. The key innovation is maintaining a **static system prompt** while injecting dynamic content (working memory, tool guidance) as **conversation messages**.
 
--   **`ToolLoopAgent`** class with `.stream()` and `.generate()` methods
--   **`callOptionsSchema`** for type-safe runtime options via Zod
--   **`prepareCall`** hook for dynamic system prompt injection
--   **`stopWhen`** conditions (step count + FINAL_ANSWER detection)
--   **`prepareStep`** for context window management
+**Architecture Highlights:**
+
+-   **Static System Prompt**: Never changes during execution (preserves LLM cache)
+-   **Dynamic Tool Injection**: Tools discovered on-demand via `searchTools`
+-   **Hybrid Search**: BM25 (lexical) + vector (semantic) for tool discovery
+-   **Provider-Anchored Compaction**: Uses provider tokens as source of truth
+-   **Cache Benefits**: 50-90% cost reduction via LLM prefix caching
 
 **Key Files:**
 
--   `server/agent/cms-agent.ts` - ToolLoopAgent singleton definition
--   `server/agent/system-prompt.ts` - Prompt compilation with Handlebars
--   `server/routes/agent.ts` - Streaming route handler
--   `server/prompts/core/agent.xml` - Core agent prompt (~1400 tokens)
--   `server/tools/instructions/index.ts` - Per-tool instructions
--   `server/tools/` - Tool definitions
+-   `server/agents/main-agent.ts` - ToolLoopAgent singleton definition
+-   `server/agents/system-prompt.ts` - Static prompt loader
+-   `server/execution/orchestrator.ts` - Thin coordination layer
+-   `server/memory/` - Tool search, working context, compaction
+-   `server/tools/_registry/` - Unified tool registry
+-   `server/services/search/` - Hybrid tool search services
+-   `server/prompts/messages/` - Tool guidance message factories
 
 ---
 
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                          Agent System                             │
-│                       (AI SDK v6 Native)                          │
-├───────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                    CMS Agent (Module)                       │  │
-│  │                                                             │  │
-│  │    model: openrouter/gpt-4o-mini                            │  │
-│  │    maxSteps: 15                                             │  │
-│  │    maxRetries: 2 (native)                                   │  │
-│  │                                                             │  │
-│  │    ┌─────────┐    ┌─────────┐    ┌─────────┐                │  │
-│  │    │  THINK  │ →  │   ACT   │ →  │ OBSERVE │ → (repeat)     │  │
-│  │    │         │    │         │    │         │                │  │
-│  │    │ Reason  │    │ Execute │    │ Process │                │  │
-│  │    │ about   │    │ tool    │    │ tool    │                │  │
-│  │    │ task    │    │ call    │    │ result  │                │  │
-│  │    └─────────┘    └─────────┘    └─────────┘                │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-│                              │                                    │
-│                              ▼                                    │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                     Tool Registry                           │  │
-│  │  ┌────────┬────────┬────────┬────────┬────────┬──────────┐  │  │
-│  │  │  Page  │Section │ Entry  │ Image  │  Post  │Navigation│  │  │
-│  │  │  Tools │ Tools  │ Tools  │ Tools  │ Tools  │  Tools   │  │  │
-│  │  └────────┴────────┴────────┴────────┴────────┴──────────┘  │  │
-│  │                    45 Total Tools                           │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-│                              │                                    │
-│         ┌────────────────────┼────────────────────┐               │
-│         ▼                    ▼                    ▼               │
-│  ┌─────────────┐     ┌─────────────┐      ┌─────────────┐         │
-│  │   Working   │     │    HITL     │      │  Tokenizer  │         │
-│  │   Memory    │     │ Conversational │   │  & Pricing  │         │
-│  │             │     │             │      │             │         │
-│  │ Entity track│     │ confirmed   │      │ Token count │         │
-│  │ Reference   │     │ flag pattern│      │ Cost calc   │         │
-│  │ resolution  │     │             │      │             │         │
-│  └─────────────┘     └─────────────┘      └─────────────┘         │
-└───────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           Agent System                                     │
+│                    (Cache-Safe Dynamic Tool Injection)                     │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │                    CMS Agent (ToolLoopAgent)                        │  │
+│  │                                                                     │  │
+│  │    STATIC System Prompt (never changes - cache preserved)          │  │
+│  │    Dynamic Tool Activation (via prepareStep)                       │  │
+│  │                                                                     │  │
+│  │    ┌──────────┐    ┌──────────┐    ┌──────────┐                    │  │
+│  │    │  STEP 0  │ →  │  STEP 1  │ →  │ STEP 2+  │                    │  │
+│  │    │          │    │          │    │          │                    │  │
+│  │    │ Ack      │    │ Search   │    │ Execute  │                    │  │
+│  │    │ Request  │    │ Tools    │    │ Discovered│                   │  │
+│  │    │          │    │          │    │ Tools    │                    │  │
+│  │    └──────────┘    └──────────┘    └──────────┘                    │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                              │                                            │
+│                              ▼                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │                     Tool Search System                              │  │
+│  │                                                                     │  │
+│  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐             │  │
+│  │  │ BM25 Search │    │   Vector    │    │   Smart     │             │  │
+│  │  │  (Lexical)  │ +  │   Search    │ →  │   Blend     │             │  │
+│  │  │             │    │ (Semantic)  │    │             │             │  │
+│  │  └─────────────┘    └─────────────┘    └─────────────┘             │  │
+│  │                                               │                     │  │
+│  │                                               ▼                     │  │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │  │
+│  │  │                   Tool Registry (32 Tools)                  │   │  │
+│  │  │  ┌────────┬────────┬────────┬────────┬────────┬──────────┐  │   │  │
+│  │  │  │  Page  │Section │ Entry  │ Image  │  Post  │Navigation│  │   │  │
+│  │  │  │  Tools │ Tools  │ Tools  │ Tools  │ Tools  │  Tools   │  │   │  │
+│  │  │  └────────┴────────┴────────┴────────┴────────┴──────────┘  │   │  │
+│  │  └─────────────────────────────────────────────────────────────┘   │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                              │                                            │
+│         ┌────────────────────┼────────────────────┐                       │
+│         ▼                    ▼                    ▼                       │
+│  ┌─────────────┐     ┌─────────────┐      ┌─────────────┐                 │
+│  │   Working   │     │   Memory    │      │ Compaction  │                 │
+│  │   Context   │     │  Management │      │   Service   │                 │
+│  │             │     │             │      │             │                 │
+│  │ Entity track│     │ Tool search │      │ Provider-   │                 │
+│  │ Discovered  │     │ state mgmt  │      │ anchored    │                 │
+│  │ tools       │     │             │      │             │                 │
+│  └─────────────┘     └─────────────┘      └─────────────┘                 │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Key Files
 
-| File                                    | Purpose                          |
-| --------------------------------------- | -------------------------------- |
-| `server/agent/cms-agent.ts`             | ToolLoopAgent singleton          |
-| `server/agent/system-prompt.ts`         | Modular prompt compilation       |
-| `server/routes/agent.ts`                | Stream/generate route handlers   |
-| `server/tools/all-tools.ts`             | Tool registry                    |
-| `server/tools/*.ts`                     | Individual tool definitions      |
-| `server/prompts/core/agent.xml`         | Core agent prompt (~1400 tokens) |
-| `server/tools/instructions/index.ts`    | Per-tool instructions            |
-| `server/services/working-memory/`       | Entity extraction                |
-| `lib/tokenizer.ts`                      | Token counting (tiktoken)        |
-| `server/services/openrouter-pricing.ts` | Cost calculation                 |
+| File                                             | Purpose                                   |
+| ------------------------------------------------ | ----------------------------------------- |
+| `server/agents/main-agent.ts`                    | ToolLoopAgent singleton with dynamic tools|
+| `server/agents/system-prompt.ts`                 | Static system prompt loader               |
+| `server/execution/orchestrator.ts`               | Thin coordination layer (~150 lines)      |
+| `server/execution/context-coordinator.ts`        | Context preparation & compaction          |
+| `server/execution/stream-processor.ts`           | Stream handling & entity extraction       |
+| `server/memory/tool-search/tool-search-manager.ts`| Tool discovery lifecycle                 |
+| `server/memory/tool-search/tool-search-state.ts` | Immutable tool search state              |
+| `server/memory/working-context/working-context.ts`| Entity tracking & discovered tools       |
+| `server/memory/compaction/compaction-service.ts` | LLM-based conversation summarization     |
+| `server/memory/compaction/tool-pruner.ts`        | Tool output pruning                      |
+| `server/memory/compaction/token-service.ts`      | Provider token management                |
+| `server/tools/_registry/tool-registry.ts`        | Unified tool metadata registry           |
+| `server/services/search/tool-search.service.ts`  | Hybrid search facade                     |
+| `server/services/search/smart-search.ts`         | BM25 + vector blending                   |
+| `server/prompts/messages/tool-guidance-messages.ts`| Tool guidance as conversation messages |
+
+---
+
+## Three-Phase Tool Lifecycle
+
+The agent uses a **discovery-based tool lifecycle** where tools are found on-demand:
+
+### Phase 1: Acknowledgment (Step 0)
+
+```typescript
+// Force acknowledgeRequest tool
+if (stepNumber === 0) {
+  return {
+    activeTools: [...CORE_TOOLS],
+    toolChoice: { type: "tool", toolName: "acknowledgeRequest" },
+  };
+}
+```
+
+Agent acknowledges the user's request before taking action.
+
+### Phase 2: Discovery (Step 1)
+
+```typescript
+// Agent can use searchTools to find capabilities
+if (stepNumber === 1 && discoveredTools.length === 0) {
+  return {
+    activeTools: [...CORE_TOOLS], // searchTools, finalAnswer, acknowledgeRequest
+    toolChoice: "auto",
+  };
+}
+```
+
+Agent uses `searchTools` to discover relevant capabilities.
+
+### Phase 3: Execution (Step 2+)
+
+```typescript
+// All discovered tools available
+const activeTools = [...new Set([...CORE_TOOLS, ...discoveredTools])];
+return { activeTools, toolChoice: "auto" };
+```
+
+Agent executes with discovered tools.
+
+---
+
+## Core Tools (Always Available)
+
+| Tool               | Purpose                              |
+| ------------------ | ------------------------------------ |
+| `searchTools`      | Discover tools via hybrid search     |
+| `finalAnswer`      | Complete response to user            |
+| `acknowledgeRequest`| Conversational preflight (step 0)   |
+
+---
+
+## Dynamic Tool Injection
+
+### The Problem
+
+Traditional approach: Inject tool prompts into system prompt
+```xml
+<tool-usage-instructions>{{{activeProtocols}}}</tool-usage-instructions>
+```
+
+**Issue**: System prompt changes every step → **LLM cache invalidated** → **High costs**
+
+### The Solution: Message-Based Injection
+
+Tool guidance injected as **conversation messages** (user-assistant pairs):
+
+```typescript
+// server/prompts/messages/tool-guidance-messages.ts
+export function createToolGuidanceMessages(
+  newTools: string[],
+  existingTools: string[]
+): ModelMessage[] {
+  return [
+    {
+      role: "user",
+      content: `[TOOL GUIDANCE] New tools now available: ${newTools.join(", ")}
+
+Here are the usage guidelines:
+${toolGuidance}`,
+    },
+    {
+      role: "assistant",
+      content: `I understand. I now have access to: ${newTools.join(", ")}.`,
+    },
+  ];
+}
+```
+
+**Benefits**:
+-   System prompt stays **STATIC** → LLM prefix caching preserved
+-   OpenAI: 50% discount on cached prefix
+-   Anthropic: 90% discount on cached prefix
+-   Dynamic content appears naturally in conversation
 
 ---
 
 ## CMS Agent Module
 
-The centralized agent module uses `ToolLoopAgent` - a module-level singleton:
+The agent uses a module-level singleton with AI SDK 6's ToolLoopAgent:
 
 ```typescript
-// server/agent/cms-agent.ts
-import { ToolLoopAgent, stepCountIs } from "ai";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { z } from "zod";
-import { ALL_TOOLS } from "../tools/all-tools";
-import { getSystemPrompt } from "./system-prompt";
-import type { AgentContext } from "../tools/types";
-
-const openrouter = createOpenRouter({
-	apiKey: process.env.OPENROUTER_API_KEY,
-});
+// server/agents/main-agent.ts
+import { ToolLoopAgent, stepCountIs, hasToolCall } from "ai";
 
 export const AGENT_CONFIG = {
-	maxSteps: 15,
-	modelId: "openai/gpt-4o-mini",
-	maxOutputTokens: 4096,
+  maxSteps: 15,
+  modelId: "openai/gpt-4o-mini",
+  maxOutputTokens: 4096,
 } as const;
 
-// Type-safe call options via Zod schema
-export const AgentCallOptionsSchema = z.object({
-	sessionId: z.string(),
-	traceId: z.string(),
-	workingMemory: z.string().optional(),
-	cmsTarget: z.object({
-		siteId: z.string(),
-		environmentId: z.string(),
-	}),
-	// Runtime-injected services
-	db: z.custom<any>(),
-	services: z.custom<any>(),
-	sessionService: z.custom<any>(),
-	vectorIndex: z.custom<any>(),
-	logger: z.custom<any>(),
-	stream: z.custom<any>().optional(),
-});
+const CORE_TOOLS = ['searchTools', 'finalAnswer', 'acknowledgeRequest'];
 
-export type AgentCallOptions = z.infer<typeof AgentCallOptionsSchema>;
-
-// Custom stop condition: FINAL_ANSWER detection
-const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
-	const lastStep = steps[steps.length - 1];
-	return lastStep?.text?.includes("FINAL_ANSWER:") || false;
-};
-
-// Module-level singleton agent
 export const cmsAgent = new ToolLoopAgent({
-	model: openrouter.languageModel(AGENT_CONFIG.modelId),
+  model: openrouter.languageModel(AGENT_CONFIG.modelId),
 
-	// Placeholder - replaced dynamically in prepareCall
-	instructions: "CMS Agent - Instructions will be dynamically generated",
+  // STATIC instructions - never changes (preserves LLM cache)
+  instructions: getStaticSystemPrompt(),
 
-	tools: ALL_TOOLS,
-	callOptionsSchema: AgentCallOptionsSchema,
+  tools: ALL_TOOLS,
+  callOptionsSchema: AgentCallOptionsSchema,
 
-	// Dynamic instruction injection + context setup
-	prepareCall: ({ options, ...settings }) => {
-		const dynamicInstructions = getSystemPrompt({
-			currentDate: new Date().toISOString().split("T")[0],
-			workingMemory: options.workingMemory || "",
-		});
+  // Per-request initialization
+  prepareCall: ({ options, ...settings }) => {
+    // Store discovered tools from previous turns
+    persistedDiscoveredTools = options.discoveredTools || [];
 
-		return {
-			...settings,
-			instructions: dynamicInstructions,
-			maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
-			experimental_context: {
-				db: options.db,
-				services: options.services,
-				sessionService: options.sessionService,
-				vectorIndex: options.vectorIndex,
-				logger: options.logger,
-				stream: options.stream,
-				traceId: options.traceId,
-				sessionId: options.sessionId,
-				cmsTarget: options.cmsTarget,
-			} as AgentContext,
-		};
-	},
+    // Reset guidance tracking
+    toolsWithGuidanceInjected = new Set([...CORE_TOOLS, ...persistedDiscoveredTools]);
 
-	// Stop conditions (OR logic)
-	stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
+    return {
+      ...settings,
+      instructions: getStaticSystemPrompt(), // Static - no dynamic content
+      activeTools: [...CORE_TOOLS],
+      experimental_context: { /* services */ } as AgentContext,
+    };
+  },
 
-	// Context window management
-	prepareStep: async ({ messages }: { messages: any[] }) => {
-		if (messages.length > 20) {
-			return {
-				messages: [
-					messages[0], // Keep system prompt
-					...messages.slice(-10), // Keep last 10
-				],
-			};
-		}
-		return {};
-	},
+  // Native stop conditions (OR logic)
+  stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasToolCall("finalAnswer")],
+
+  // Dynamic tool availability
+  prepareStep: async ({ stepNumber, steps, messages }) => {
+    // Extract tools from searchTools results
+    const fromCurrentSteps = toolSearchManager.extractFromSteps(steps);
+    const discoveredTools = [...new Set([...persistedDiscoveredTools, ...fromCurrentSteps])];
+
+    // Find NEW tools (not seen before)
+    const newlyDiscovered = fromCurrentSteps.filter(
+      tool => !toolsWithGuidanceInjected.has(tool)
+    );
+
+    // Inject guidance as MESSAGES (not instructions)
+    let updatedMessages = [...messages];
+    if (newlyDiscovered.length > 0) {
+      const guidanceMessages = createToolGuidanceMessages(newlyDiscovered, [...]);
+      updatedMessages = [...updatedMessages, ...guidanceMessages];
+    }
+
+    // Phase-based tool availability
+    if (stepNumber === 0) {
+      return { activeTools: CORE_TOOLS, toolChoice: { type: "tool", toolName: "acknowledgeRequest" } };
+    }
+    if (stepNumber === 1 && discoveredTools.length === 0) {
+      return { activeTools: CORE_TOOLS };
+    }
+    return { activeTools: [...CORE_TOOLS, ...discoveredTools], messages: updatedMessages };
+  },
 });
 ```
 
-### Usage in Routes
+### Module-Level State (AI SDK Limitation)
 
 ```typescript
-// Streaming
-const streamResult = await cmsAgent.stream({
-	messages,
-	options: agentOptions, // Type-checked via callOptionsSchema
-});
-
-// Non-streaming
-const result = await cmsAgent.generate({
-	messages,
-	options: agentOptions,
-});
+// WARNING: Not thread-safe (AI SDK limitation)
+let persistedDiscoveredTools: string[] = [];
+let toolsWithGuidanceInjected: Set<string> = new Set();
 ```
 
-### Key Changes from Migration
-
-| Before (Custom Orchestrator) | After (ToolLoopAgent)                 |
-| ---------------------------- | ------------------------------------- |
-| `generateText` function      | `ToolLoopAgent` class                 |
-| Custom while loop + retry    | SDK handles internally                |
-| Custom step tracking         | `stopWhen` conditions                 |
-| Checkpoint every 3 steps     | Messages saved at end only            |
-| `ApprovalQueue` service      | Conversational confirmed flag pattern |
-| Untyped options              | `callOptionsSchema` with Zod          |
-| Static system prompt         | `prepareCall` dynamic injection       |
-| Routes 600+ lines            | Routes ~100 lines (thin controllers)  |
-| Business logic in routes     | AgentOrchestrator service             |
+**Why module-level?** `prepareStep` doesn't receive `experimental_context`, forcing module-level storage. Each request overwrites via `prepareCall`.
 
 ---
 
-## Event Types
+## Tool Search System
 
-| Event                       | Description                 |
-| --------------------------- | --------------------------- |
-| `text-delta`                | Streaming text chunks       |
-| `tool-call`                 | Tool invocation started     |
-| `tool-result`               | Tool execution completed    |
-| `tool-call-streaming-start` | Tool call begins (AI SDK 6) |
-| `step-start`                | Step boundary               |
-| `step-finish`               | Step completed with usage   |
-| `finish`                    | Agent completed             |
-| `error`                     | Execution failed            |
+### Hybrid Search Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Smart Search Flow                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   Query: "create a new page"                                    │
+│              │                                                  │
+│              ▼                                                  │
+│   ┌─────────────────────┐    ┌─────────────────────┐           │
+│   │    BM25 Search      │    │   Vector Search     │           │
+│   │    (Fast, Exact)    │    │   (Semantic)        │           │
+│   │                     │    │                     │           │
+│   │  Score: 0.85        │    │  Score: 0.72        │           │
+│   │  "createPage"       │    │  "createPage"       │           │
+│   │  "updatePage"       │    │  "createPost"       │           │
+│   └─────────────────────┘    └─────────────────────┘           │
+│              │                         │                        │
+│              └────────────┬────────────┘                        │
+│                           ▼                                     │
+│              ┌─────────────────────┐                           │
+│              │   Confidence Check   │                           │
+│              │                      │                           │
+│              │  BM25 > 0.7? Use BM25│                           │
+│              │  BM25 < 0.3? Use Vec │                           │
+│              │  Else: Blend both    │                           │
+│              └─────────────────────┘                           │
+│                           │                                     │
+│                           ▼                                     │
+│              ┌─────────────────────┐                           │
+│              │  Related Tools      │                           │
+│              │  Expansion          │                           │
+│              │  (max 3, discounted)│                           │
+│              └─────────────────────┘                           │
+│                           │                                     │
+│                           ▼                                     │
+│              Result: [createPage, updatePage, getPage]          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Search Service
+
+```typescript
+// server/services/search/tool-search.service.ts
+class ToolSearchService {
+  async search(query: string, limit: number = 8): Promise<SmartSearchResult>;
+  getTool(name: string): ToolMetadata;
+  listTools(): ToolMetadata[];
+}
+```
+
+### Smart Blending Strategy
+
+```typescript
+// server/services/search/smart-search.ts
+function smartBlend(bm25: SearchResult[], vector: SearchResult[]): SearchResult[] {
+  // High BM25 confidence (>0.7) → Use BM25 only
+  // Low BM25 confidence (<0.3) → Fall back to vector
+  // Medium confidence → Reciprocal rank fusion
+}
+```
 
 ---
 
 ## Tool Registry
 
-All 45 tools are defined with Zod schemas. Destructive operations use the `confirmed` flag pattern:
+### Per-Tool Folder Structure
+
+Each tool is self-contained:
+
+```
+server/tools/{toolName}/
+├── {toolName}-metadata.ts    # Search phrases, risk level, extraction
+├── {toolName}-tool.ts        # Zod schema + execute function
+└── index.ts                  # Exports + AI SDK tool assembly
+```
+
+### Metadata Schema
 
 ```typescript
-// server/tools/all-tools.ts
-export const ALL_TOOLS = {
-	// Page tools (read)
-	cms_getPage: tool({
-		description: "Get a page by slug or ID",
-		inputSchema: z.object({
-			slug: z.string().optional(),
-			id: z.string().optional(),
-			includeContent: z.boolean().optional().default(false),
-		}),
-		execute: async (input, { experimental_context }) => {
-			const ctx = experimental_context as AgentContext;
-			const page = await ctx.services.pageService.getPageBySlug(input.slug!);
-			return { page };
-		},
-	}),
+// server/tools/_types/metadata.ts
+interface ToolMetadata {
+  name: string;
+  description: string;
+  phrases: string[];              // BM25 search phrases
+  relatedTools: string[];         // Auto-expansion
+  riskLevel: "safe" | "moderate" | "destructive";
+  requiresConfirmation: boolean;
+  extraction: ExtractionSchema | null;  // Entity extraction
+}
+```
 
-	// Page tools (destructive) - uses confirmed flag pattern
-	cms_deletePage: tool({
-		description: "Delete a page permanently. Requires confirmed: true.",
-		inputSchema: z.object({
-			slug: z.string().optional(),
-			id: z.string().optional(),
-			confirmed: z.boolean().optional().describe("Must be true to delete"),
-		}),
-		execute: async (input, { experimental_context }) => {
-			const ctx = experimental_context as AgentContext;
+### Example Tool Metadata
 
-			// First call: return confirmation request
-			if (!input.confirmed) {
-				return {
-					requiresConfirmation: true,
-					message: `Are you sure you want to delete this page?`,
-				};
-			}
-
-			// Second call with confirmed: true
-			await ctx.services.pageService.deletePage(input.id!);
-			return { success: true };
-		},
-	}),
-
-	// ... 43 more tools
+```typescript
+// server/tools/createPage/createPage-metadata.ts
+export default {
+  name: "createPage",
+  description: "Create a new page in the CMS",
+  phrases: ["create page", "new page", "add page", "make page"],
+  relatedTools: ["getPage", "updatePage", "createSection"],
+  riskLevel: "moderate",
+  requiresConfirmation: false,
+  extraction: {
+    type: "page",
+    idPath: "page.id",
+    namePath: "page.title",
+  },
 };
 ```
 
-### Tool Categories
+### Registry Initialization
 
-| Category     | Count | Tools                                                                                                                                                     | Purpose            |
-| ------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Page         | 6     | getPage, createPage, createPageWithContent, updatePage, deletePage, listPages                                                                             | Page CRUD          |
-| Section      | 8     | listSectionTemplates, getSectionFields, addSectionToPage, updateSectionContent, deletePageSection, deletePageSections, getPageSections, getSectionContent | Section management |
-| Entry        | 2     | getCollectionEntries, getEntryContent                                                                                                                     | Collection entries |
-| Search       | 2     | searchVector, findResource                                                                                                                                | Semantic search    |
-| Image        | 7     | findImage, searchImages, listAllImages, addImageToSection, updateSectionImage, replaceImage, deleteImage                                                  | Media management   |
-| Navigation   | 5     | getNavigation, addNavigationItem, updateNavigationItem, removeNavigationItem, toggleNavigationItem                                                        | Menu structure     |
-| Post         | 7     | createPost, updatePost, publishPost, archivePost, deletePost, listPosts, getPost                                                                          | Blog content       |
-| HTTP         | 2     | httpGet, httpPost                                                                                                                                         | External APIs      |
-| Planning     | 1     | planAnalyzeTask                                                                                                                                           | Task analysis      |
-| Web Research | 3     | webQuickSearch, webDeepResearch, webFetchContent                                                                                                          | Exa AI research    |
-| Stock Photos | 2     | pexelsSearchPhotos, pexelsDownloadPhoto                                                                                                                   | Pexels integration |
+```typescript
+// At startup (once)
+await ToolRegistry.getInstance().initialize();
+
+// Anywhere after (O(1) sync)
+const tool = ToolRegistry.getInstance().get('createPage');
+const corpus = ToolRegistry.getInstance().getSearchCorpus();
+```
+
+---
+
+## Working Memory
+
+### Entity Tracking
+
+```typescript
+// server/memory/working-context/working-context.ts
+class WorkingContext {
+  private entities: Map<string, Entity>;      // O(1) lookup
+  private entitiesOrder: string[];            // Recency order
+  private discoveredTools: string[];          // Persisted across turns
+
+  readonly MAX_ENTITIES = 10;
+  readonly MAX_DISCOVERED_TOOLS = 20;
+
+  addEntity(entity: Entity): void;
+  getEntity(id: string): Entity | undefined;
+  toContextString(): string;                  // Memoized serialization
+}
+
+interface Entity {
+  type: "page" | "section" | "image" | "post";
+  id: string;
+  name: string;
+  timestamp: Date;
+}
+```
+
+### Entity Extraction
+
+```typescript
+// server/memory/working-context/entity-extractor.ts
+function extractEntities(toolName: string, result: unknown): Entity[] {
+  const metadata = ToolRegistry.getInstance().get(toolName);
+  if (!metadata?.extraction) return [];
+
+  // Use metadata's extraction schema
+  // Supports nested paths, arrays, custom ID fields
+}
+```
+
+---
+
+## Compaction System
+
+### Provider-Anchored Token Management
+
+```typescript
+// server/memory/compaction/token-service.ts
+interface ProviderTokens {
+  input: number;   // From OpenRouter API
+  output: number;  // From OpenRouter API
+}
+
+function isOverflowFromProviderTokens(
+  tokens: ProviderTokens,
+  limits: ModelLimits,
+  threshold = 0.5
+): boolean {
+  const used = tokens.input + tokens.output;
+  const usable = limits.contextLimit - limits.maxOutput;
+  return used > usable * threshold;
+}
+```
+
+### Two-Stage Compaction
+
+**Stage 1: Tool Output Pruning**
+
+```typescript
+// server/memory/compaction/tool-pruner.ts
+// Prunes old tool outputs while preserving tool call information
+// - Protects recent 40K tokens of tool outputs
+// - Minimum 20K tokens to trigger pruning
+// - Marks pruned outputs with `compactedAt` timestamp
+```
+
+**Stage 2: Conversation Summary**
+
+```typescript
+// server/memory/compaction/compaction-service.ts
+// If overflow persists after pruning:
+// - Uses fast model (gpt-4o-mini) to generate summary
+// - Creates user-assistant compaction pair:
+//   User: "What have we accomplished so far?"
+//   Assistant: [LLM-generated summary]
+// - Keeps recent N turns (default: 2)
+```
+
+### Compaction Configuration
+
+```typescript
+const DEFAULT_COMPACTION_CONFIG = {
+  pruneMinimum: 20_000,     // Min tokens to save for pruning
+  pruneProtect: 40_000,     // Protect recent outputs
+  outputReserve: 4_096,     // Reserve for model output
+  minTurnsToKeep: 2,        // Always keep 2 recent turns
+};
+```
+
+---
+
+## Execution Flow
+
+### Orchestrator Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AgentOrchestrator                        │
+│                    (Thin Coordinator)                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────┐    ┌─────────────────────┐        │
+│  │  ContextCoordinator │    │   StreamProcessor   │        │
+│  │                     │    │                     │        │
+│  │  - Session loading  │    │  - Stream handling  │        │
+│  │  - Context prep     │    │  - Entity extract   │        │
+│  │  - Compaction       │    │  - Event emission   │        │
+│  │  - Message convert  │    │                     │        │
+│  └─────────────────────┘    └─────────────────────┘        │
+│                                                             │
+│  ┌─────────────────────────────────────────────────┐       │
+│  │                 SSEEventEmitter                  │       │
+│  │           (Typed event emission to client)       │       │
+│  └─────────────────────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Stream Execution Flow
+
+```typescript
+// server/execution/orchestrator.ts
+async *executeStream(options, writeSSE) {
+  // 1. Resolve options (session, model, etc.)
+  const resolved = await contextCoordinator.resolveOptions(options);
+
+  // 2. Prepare context (load history, check compaction)
+  const { context, workingContext } = await contextCoordinator.prepareContext(resolved);
+
+  // 3. Emit context events (system prompt, model info, etc.)
+  await this.emitContextEvents(resolved, context, emitter);
+
+  // 4. Build agent options with discovered tools
+  const agentOptions = this.buildAgentOptions(resolved, context, logger, emitter);
+
+  // 5. Execute agent
+  const streamResult = await cmsAgent.stream({ messages: context.messages, options: agentOptions });
+
+  // 6. Process stream (entity extraction, event emission)
+  const result = await streamProcessor.processStream(streamResult, workingContext, emitter);
+
+  // 7. Save session data
+  await contextCoordinator.saveSessionData(...);
+
+  emitter.emitDone();
+}
+```
 
 ---
 
@@ -312,279 +582,122 @@ export const ALL_TOOLS = {
 Tools receive context via `experimental_context`:
 
 ```typescript
+// server/tools/_types/agent-context.ts
 interface AgentContext {
-	// Database
-	db: DrizzleDB;
+  // Database
+  db: DrizzleDB;
 
-	// Services
-	services: {
-		pageService: PageService;
-		sectionService: SectionService;
-		entryService: EntryService;
-		imageService: ImageService;
-		postService: PostService;
-		navigationService: NavigationService;
-		siteSettingsService: SiteSettingsService;
-	};
+  // Services
+  services: Services;
 
-	// Session & Vector
-	sessionService: SessionService;
-	vectorIndex: VectorIndexService;
+  // Vector search
+  vectorIndex: VectorIndexService;
 
-	// Logging
-	logger: {
-		info: (msg: string, meta?: object) => void;
-		warn: (msg: string, meta?: object) => void;
-		error: (msg: string, meta?: object) => void;
-	};
+  // Logging
+  logger: AgentLogger;
 
-	// Identity
-	traceId: string;
-	sessionId: string;
+  // Optional stream writer
+  stream?: StreamWriter;
 
-	// Multi-tenant targeting
-	cmsTarget: {
-		siteId: string;
-		environmentId: string;
-	};
+  // Identity
+  traceId: string;
+  sessionId: string;
+
+  // Multi-tenant targeting
+  cmsTarget: {
+    siteId: string;
+    environmentId: string;
+  };
 }
 ```
 
 ---
 
-## Working Memory
+## Tool Categories
 
-Tracks entities mentioned across conversation turns:
-
-```typescript
-// server/services/working-memory/index.ts
-interface WorkingMemoryState {
-	entities: Map<string, Entity>;
-	references: Map<string, string>; // "the page" → pageId
-}
-
-interface Entity {
-	type: "page" | "section" | "image" | "post";
-	id: string;
-	name: string;
-	lastMentioned: number; // step number
-}
-```
-
-**Entity Extraction:**
-After each tool result, entities are extracted and stored:
-
-```typescript
-// After createPage returns { page: { id: 'abc', title: 'Home' } }
-workingContext.add({
-	type: "page",
-	id: "abc",
-	name: "Home",
-});
-```
-
-**Reference Resolution:**
-When user says "delete that page", the system resolves "that page" → page ID.
+| Category     | Count | Tools                                                          | Purpose            |
+| ------------ | ----- | -------------------------------------------------------------- | ------------------ |
+| Page         | 4     | getPage, createPage, updatePage, deletePage                    | Page CRUD          |
+| Section      | 5     | getSection, createSection, updateSection, deleteSection, getSectionTemplate | Section management |
+| Entry        | 4     | getEntry, createEntry, updateEntry, deleteEntry                | Collection entries |
+| Image        | 6     | getImage, createImage, updateImage, deleteImage, importImage, browseImages | Media management   |
+| Post         | 4     | getPost, createPost, updatePost, deletePost                    | Blog content       |
+| Navigation   | 4     | getNavItem, createNavItem, updateNavItem, deleteNavItem        | Menu structure     |
+| Search       | 2     | searchTools, searchWeb                                         | Discovery & web    |
+| Utility      | 3     | finalAnswer, acknowledgeRequest, fetchContent                  | Meta tools         |
 
 ---
 
 ## Human-in-the-Loop (HITL)
 
-**Conversational Confirmed Flag Pattern**: Destructive tools require explicit confirmation via the `confirmed` parameter:
+**Conversational Confirmed Flag Pattern**: Destructive tools require explicit confirmation:
 
 ```typescript
-// server/tools/all-tools.ts
+// Example tool with confirmation
 cms_deletePage: tool({
   description: 'Delete a page permanently. Requires confirmed: true.',
   inputSchema: z.object({
-    slug: z.string().optional(),
-    id: z.string().optional(),
-    confirmed: z.boolean().optional().describe('Must be true to delete'),
+    id: z.string(),
+    confirmed: z.boolean().optional(),
   }),
   execute: async (input, { experimental_context }) => {
-    const ctx = experimental_context as AgentContext;
-
-    // First call without confirmed: return confirmation request
     if (!input.confirmed) {
       return {
         requiresConfirmation: true,
-        message: `Are you sure you want to delete page "${page.name}"?`,
-        page: { id: page.id, slug: page.slug, name: page.name },
+        message: `Delete page "${page.name}"?`,
       };
     }
-
-    // Second call with confirmed: true - execute deletion
-    await ctx.services.pageService.deletePage(input.id!);
-    return { success: true, message: 'Page deleted successfully.' };
+    await ctx.services.page.delete(input.id);
+    return { success: true };
   },
 }),
 ```
 
-**Confirmation Flow:**
-
-1. User requests deletion (e.g., "delete the about page")
-2. Tool called without `confirmed` flag
-3. Tool returns `{ requiresConfirmation: true, message: "..." }`
-4. Agent presents confirmation message to user in chat
-5. User confirms ("yes") or cancels ("no")
-6. If confirmed, tool called again with `confirmed: true`
-
-**No Modal/Endpoint Needed**: The confirmation happens conversationally in the chat, not via a separate approval endpoint. See [3.5 HITL](./LAYER_3.5_HITL.md) for full details.
+**Flow**:
+1. User requests deletion
+2. Tool called without `confirmed`
+3. Returns `{ requiresConfirmation: true, message: "..." }`
+4. Agent asks user for confirmation in chat
+5. User confirms → tool called with `confirmed: true`
 
 ---
 
-## System Prompt
+## Event Types
 
-The prompt is compiled from a single core XML file using Handlebars, with per-tool instructions injected dynamically:
-
-```typescript
-// server/agent/system-prompt.ts
-import Handlebars from "handlebars";
-import fs from "node:fs";
-import path from "node:path";
-
-export interface SystemPromptContext {
-	currentDate: string;
-	workingMemory?: string;
-	activeProtocols?: string;
-}
-
-let compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
-
-function loadAgentPrompt(): string {
-	const agentPath = path.join(__dirname, "../prompts/core/agent.xml");
-	return fs.readFileSync(agentPath, "utf-8");
-}
-
-export function getSystemPrompt(context: SystemPromptContext): string {
-	if (!compiledTemplate) {
-		const template = loadAgentPrompt();
-		compiledTemplate = Handlebars.compile(template);
-	}
-
-	return compiledTemplate({
-		...context,
-		workingMemory: context.workingMemory || "",
-		activeProtocols: context.activeProtocols || "",
-	});
-}
-```
-
-### Prompt Structure
-
-```
-server/prompts/
-└── core/
-    └── agent.xml            # Core prompt (~1400 tokens)
-
-server/tools/
-└── instructions/
-    └── index.ts             # Per-tool instructions (40+ tools)
-```
-
-### Dynamic Injection Points
-
-```xml
-<!-- agent.xml -->
-<working-memory>{{{workingMemory}}}</working-memory>
-<tool-usage-instructions>{{{activeProtocols}}}</tool-usage-instructions>
-```
-
-Per-tool instructions are injected into `activeProtocols` via `prepareStep` after `tool_search` discovers tools.
-
----
-
-## Token & Cost Tracking
-
-New in AI SDK 6 migration - token counting and cost calculation:
-
-```typescript
-// lib/tokenizer.ts
-import { encodingForModel } from "js-tiktoken";
-
-export function countTokens(text: string, model = "gpt-4o-mini"): number {
-	const encoding = encodingForModel(model as any);
-	return encoding.encode(text).length;
-}
-
-// server/services/openrouter-pricing.ts
-export function calculateCost(inputTokens: number, outputTokens: number, model: string): number {
-	const pricing = MODEL_PRICING[model] || MODEL_PRICING["default"];
-	return (inputTokens * pricing.input) / 1_000_000 + (outputTokens * pricing.output) / 1_000_000;
-}
-```
-
-**Usage in Route:**
-
-```typescript
-// After generateText completes
-const { usage } = result;
-const cost = calculateCost(usage.promptTokens, usage.completionTokens, model);
-
-// Emit to frontend
-writeSSE("usage", {
-	promptTokens: usage.promptTokens,
-	completionTokens: usage.completionTokens,
-	totalTokens: usage.totalTokens,
-	estimatedCost: cost,
-});
-```
-
----
-
-## Native Retry Logic
-
-AI SDK 6 handles retries natively:
-
-```typescript
-const result = await generateText({
-	// ...
-	maxRetries: 2, // Default: 2, handles 429/5xx automatically
-});
-```
-
-**Retry Behavior:**
-
--   Rate limits (429) → automatic exponential backoff
--   Server errors (5xx) → retry with backoff
--   Client errors (4xx except 429) → no retry, surface immediately
-
----
-
-## Message Persistence
-
-Messages saved at end of agent execution (no mid-step checkpointing):
-
-```typescript
-// server/routes/agent.ts
-const result = await runAgent(messages, options);
-
-// Save after completion
-await sessionService.saveMessages(sessionId, [...previousMessages, { role: "user", content: prompt }, ...result.responseMessages]);
-```
-
-**Note**: Checkpoint system removed in AI SDK 6 migration (was dead code).
+| Event                       | Description                          |
+| --------------------------- | ------------------------------------ |
+| `text-delta`                | Streaming text chunks                |
+| `tool-call`                 | Tool invocation started              |
+| `tool-result`               | Tool execution completed             |
+| `step-start`                | Step boundary                        |
+| `step-finish`               | Step completed with usage            |
+| `instructions-injected`     | Tool guidance injected (new)         |
+| `compaction-triggered`      | Compaction started (new)             |
+| `compaction-complete`       | Compaction finished (new)            |
+| `finish`                    | Agent completed                      |
+| `error`                     | Execution failed                     |
 
 ---
 
 ## Integration Points
 
-| Connects To        | How                       |
-| ------------------ | ------------------------- |
-| Layer 1 (Server)   | `/api/agent` route        |
-| Layer 2 (Database) | Via services in context   |
-| Layer 4 (Services) | Tools call services       |
-| Layer 6 (Client)   | AI SDK UI stream protocol |
+| Connects To         | How                                |
+| ------------------- | ---------------------------------- |
+| Layer 1 (Server)    | `/api/agent/stream` route          |
+| Layer 2 (Database)  | Via services in AgentContext       |
+| Layer 4 (Services)  | Tools call services, search        |
+| Layer 5 (Background)| Image processing via queues        |
+| Layer 6 (Client)    | SSE stream events                  |
 
 ---
 
 ## Deep Dive Topics
 
--   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Loop implementation details
--   [3.2 Tools](./LAYER_3.2_TOOLS.md) - Tool anatomy and patterns
--   [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Entity tracking
--   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - Prompt structure
--   [3.5 HITL](./LAYER_3.5_HITL.md) - Approval flow
--   [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Retry and degradation
--   [3.7 Streaming](./LAYER_3.7_STREAMING.md) - SSE events
--   [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) - How tools get services
+-   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Three-phase tool lifecycle
+-   [3.2 Tools](./LAYER_3.2_TOOLS.md) - Per-tool folder structure
+-   [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Entity & tool tracking
+-   [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - Static system prompt architecture
+-   [3.5 HITL](./LAYER_3.5_HITL.md) - Confirmed flag pattern
+-   [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) - Retry and repair
+-   [3.7 Streaming](./LAYER_3.7_STREAMING.md) - SSE event types
+-   [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) - AgentContext pattern

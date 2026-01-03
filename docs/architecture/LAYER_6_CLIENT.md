@@ -59,13 +59,15 @@ The client layer is a Next.js 16 application with React 19. It provides the chat
 
 ## Key Files
 
-| File                                | Purpose             |
-| ----------------------------------- | ------------------- |
-| `app/assistant/page.tsx`            | Main chat interface |
-| `app/assistant/_components/`        | UI components       |
-| `app/assistant/_hooks/use-agent.ts` | SSE stream handling |
-| `app/assistant/_stores/`            | Zustand state       |
-| `app/api/agent/route.ts`            | Proxy to Express    |
+| File                                | Purpose                |
+| ----------------------------------- | ---------------------- |
+| `app/assistant/page.tsx`            | Main chat interface    |
+| `app/assistant/_components/`        | UI components          |
+| `app/assistant/_hooks/use-agent.ts` | SSE stream handling    |
+| `app/assistant/_hooks/sse-handlers.ts` | Event processing helpers |
+| `app/assistant/_stores/`            | Zustand state          |
+| `lib/api/`                          | API client layer       |
+| `lib/debug-logger/`                 | Debug logging abstraction |
 
 ---
 
@@ -73,95 +75,104 @@ The client layer is a Next.js 16 application with React 19. It provides the chat
 
 ### ChatStore
 
-Manages conversation state:
+Manages conversation state with separate streaming message handling:
 
 ```typescript
 // app/assistant/_stores/chat-store.ts
-interface ChatState {
-	sessionId: string | null;
-	messages: Message[];
-	isStreaming: boolean;
-	traceId: string | null;
-
-	// Actions
-	setSessionId: (id: string) => void;
-	addMessage: (message: Message) => void;
-	updateLastMessage: (content: string) => void;
-	setStreaming: (streaming: boolean) => void;
-	clearMessages: () => void;
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt: Date;
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
-	sessionId: null,
-	messages: [],
-	isStreaming: false,
-	traceId: null,
+export interface StreamingMessage {
+  id: string;
+  content: string;
+}
 
-	setSessionId: (id) => set({ sessionId: id }),
+export interface AgentStatus {
+  state: 'thinking' | 'tool-call';
+  toolName?: string;
+}
 
-	addMessage: (message) =>
-		set((state) => ({
-			messages: [...state.messages, message],
-		})),
+interface ChatState {
+  sessionId: string | null;
+  messages: ChatMessage[];
+  streamingMessage: StreamingMessage | null; // Currently streaming message
+  currentTraceId: string | null;
+  isStreaming: boolean;
+  agentStatus: AgentStatus | null;
 
-	updateLastMessage: (content) =>
-		set((state) => {
-			const messages = [...state.messages];
-			const last = messages[messages.length - 1];
-			if (last?.role === "assistant") {
-				last.content += content;
-			}
-			return { messages };
-		}),
+  // Session management
+  setSessionId: (sessionId: string | null) => void;
 
-	setStreaming: (streaming) => set({ isStreaming: streaming }),
+  // Message management
+  setMessages: (messages: ChatMessage[]) => void;
+  addMessage: (message: ChatMessage) => void;
 
-	clearMessages: () => set({ messages: [] }),
+  // Streaming message management (separated from persisted messages)
+  startStreamingMessage: (id: string) => void;
+  appendToStreamingMessage: (delta: string) => void;
+  finalizeStreamingMessage: () => void;
+  clearStreamingMessage: () => void;
+
+  // Status management
+  setCurrentTraceId: (traceId: string | null) => void;
+  setIsStreaming: (isStreaming: boolean) => void;
+  setAgentStatus: (status: AgentStatus | null) => void;
+
+  reset: () => void;
+}
+
+// No localStorage persistence - DB is single source of truth
+export const useChatStore = create<ChatState>()((set, get) => ({
+  // ... implementation
 }));
 ```
+
+**Key Pattern:** Streaming messages are kept separate from persisted messages. Text deltas append to `streamingMessage`, then finalization moves it to `messages` array.
 
 ### SessionStore
 
-Manages session list:
+Manages session list using the API client layer:
 
 ```typescript
 // app/assistant/_stores/session-store.ts
-interface SessionState {
-	sessions: Session[];
-	activeSessionId: string | null;
+import { sessionsApi } from '@/lib/api';
 
-	loadSessions: () => Promise<void>;
-	createSession: () => Promise<Session>;
-	switchSession: (id: string) => void;
-	deleteSession: (id: string) => Promise<void>;
+interface SessionState {
+  sessions: Session[];
+  isLoading: boolean;
+
+  // Actions (all use lib/api layer)
+  loadSessions: () => Promise<void>;
+  createSession: (title?: string) => Promise<Session>;
+  selectSession: (id: string) => void;
+  deleteSession: (id: string) => Promise<void>;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
-	sessions: [],
-	activeSessionId: null,
+  sessions: [],
+  isLoading: false,
 
-	loadSessions: async () => {
-		const res = await fetch("/api/sessions");
-		const sessions = await res.json();
-		set({ sessions });
-	},
+  loadSessions: async () => {
+    set({ isLoading: true });
+    const sessions = await sessionsApi.list();
+    set({ sessions, isLoading: false });
+  },
 
-	createSession: async () => {
-		const res = await fetch("/api/sessions", { method: "POST" });
-		const session = await res.json();
-		set((state) => ({
-			sessions: [session, ...state.sessions],
-			activeSessionId: session.id,
-		}));
-		return session;
-	},
+  createSession: async (title) => {
+    const session = await sessionsApi.create(title);
+    set(state => ({ sessions: [session, ...state.sessions] }));
+    return session;
+  },
 
-	switchSession: (id) => {
-		set({ activeSessionId: id });
-		useChatStore.getState().setSessionId(id);
-	},
+  // ... other actions using sessionsApi
 }));
 ```
+
+**Key Pattern:** All API calls go through `lib/api/sessions.ts` - no inline `fetch()` in stores.
 
 ### TraceStore
 
@@ -211,97 +222,85 @@ debugLogger.info("Event occurred", { data });
 
 ### useAgent
 
-Core hook for agent communication:
+Core hook for agent communication with modular SSE handlers:
 
 ```typescript
 // app/assistant/_hooks/use-agent.ts
+import { agentApi } from '@/lib/api';
+import { handleSSEEvent } from './sse-handlers';
+
 export function useAgent() {
-	const { sessionId, addMessage, updateLastMessage, setStreaming } = useChatStore();
-	const { addEntry, completeEntry } = useTraceStore();
+  const { sessionId, startStreamingMessage, appendToStreamingMessage,
+          finalizeStreamingMessage, setIsStreaming, setAgentStatus } = useChatStore();
+  const { addEntry, completeEntry, setMetrics } = useTraceStore();
 
-	const sendMessage = async (content: string) => {
-		// Add user message
-		addMessage({ role: "user", content });
-		addMessage({ role: "assistant", content: "" });
-		setStreaming(true);
+  const sendMessage = async (userMessage: string, options?: AgentOptions) => {
+    // Add user message
+    useChatStore.getState().addMessage({
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: userMessage,
+      createdAt: new Date(),
+    });
 
-		try {
-			const response = await fetch("/api/agent", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ sessionId, message: content }),
-			});
+    setIsStreaming(true);
+    startStreamingMessage(crypto.randomUUID());
 
-			const reader = response.body?.getReader();
-			const decoder = new TextDecoder();
+    try {
+      // Use API client layer (handles SSE parsing internally)
+      const stream = await agentApi.stream({
+        sessionId,
+        prompt: userMessage,
+        modelId: options?.modelId,
+      });
 
-			while (true) {
-				const { done, value } = await reader!.read();
-				if (done) break;
+      // Process SSE events
+      for await (const event of stream) {
+        handleSSEEvent(event, {
+          onTextDelta: (text) => appendToStreamingMessage(text),
+          onToolCall: (toolName, args, callId) => {
+            setAgentStatus({ state: 'tool-call', toolName });
+            addEntry({ type: 'tool-call', toolName, toolCallId: callId, input: args });
+          },
+          onToolResult: (callId, result) => {
+            completeEntry(callId, result);
+          },
+          onFinish: (metrics) => {
+            finalizeStreamingMessage();
+            setMetrics(metrics);
+          },
+        });
+      }
+    } finally {
+      setIsStreaming(false);
+      setAgentStatus(null);
+    }
+  };
 
-				const chunk = decoder.decode(value);
-				const lines = chunk.split("\n");
+  return { sendMessage };
+}
+```
 
-				for (const line of lines) {
-					if (!line.startsWith("data: ")) continue;
-					const data = JSON.parse(line.slice(6));
+**SSE Handlers Pattern:** Event processing is extracted to `sse-handlers.ts` for cleaner separation and testability.
 
-					handleEvent(data);
-				}
-			}
-		} finally {
-			setStreaming(false);
-		}
-	};
-
-	const handleEvent = (event: AgentEvent) => {
-		switch (event.type) {
-			case "text-delta":
-				updateLastMessage(event.text);
-				break;
-
-			case "tool-call":
-				addEntry({
-					type: "tool-call",
-					level: "info",
-					toolName: event.toolName,
-					toolCallId: event.toolCallId,
-					summary: `Calling ${event.toolName}...`,
-					input: event.args,
-				});
-				break;
-
-			case "tool-result":
-				// Check for confirmation required
-				if (event.result?.requiresConfirmation) {
-					addEntry({
-						type: "confirmation-required",
-						level: "warn",
-						toolName: event.toolName,
-						summary: `${event.toolName}: Confirmation required`,
-						output: event.result,
-					});
-				} else {
-					completeEntry(event.toolCallId, event.result);
-				}
-				break;
-
-			case "log":
-				addEntry({
-					type: "system-log",
-					level: event.level || "info",
-					summary: event.message,
-					input: event.data,
-				});
-				break;
-
-			case "finish":
-				// Streaming complete
-				break;
-		}
-	};
-
-	return { sendMessage };
+```typescript
+// app/assistant/_hooks/sse-handlers.ts
+export function handleSSEEvent(event: AgentEvent, handlers: SSEHandlers) {
+  switch (event.type) {
+    case 'text-delta':
+      handlers.onTextDelta(event.text);
+      break;
+    case 'tool-call':
+      handlers.onToolCall(event.toolName, event.args, event.toolCallId);
+      break;
+    case 'tool-result':
+      handlers.onToolResult(event.toolCallId, event.result);
+      break;
+    case 'finish':
+      handlers.onFinish(event.metrics);
+      break;
+    // ... other events
+  }
 }
 ```
 
@@ -422,31 +421,70 @@ export function SessionSidebar() {
 
 ---
 
-## API Routes
+## API Client Layer
 
-Next.js routes proxy to Express:
+All API calls go through the `lib/api/` layer - no inline `fetch()` in stores/hooks:
 
 ```typescript
-// app/api/agent/route.ts
-export async function POST(request: Request) {
-	const body = await request.json();
+// lib/api/index.ts
+export { sessionsApi } from './sessions';
+export { agentApi } from './agent';
 
-	const response = await fetch("http://localhost:8787/v1/agent/stream", {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(body),
-	});
+// lib/api/sessions.ts
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787';
 
-	// Forward SSE stream
-	return new Response(response.body, {
-		headers: {
-			"Content-Type": "text/event-stream",
-			"Cache-Control": "no-cache",
-			Connection: "keep-alive",
-		},
-	});
-}
+export const sessionsApi = {
+  list: async () => {
+    const res = await fetch(`${BASE_URL}/v1/sessions`);
+    return res.json();
+  },
+
+  create: async (title?: string) => {
+    const res = await fetch(`${BASE_URL}/v1/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    return res.json();
+  },
+
+  getMessages: async (sessionId: string) => {
+    const res = await fetch(`${BASE_URL}/v1/sessions/${sessionId}/messages`);
+    return res.json();
+  },
+
+  delete: async (sessionId: string) => {
+    await fetch(`${BASE_URL}/v1/sessions/${sessionId}`, { method: 'DELETE' });
+  },
+};
+
+// lib/api/agent.ts
+export const agentApi = {
+  stream: async function* (options: AgentOptions) {
+    const response = await fetch(`${BASE_URL}/v1/agent/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader!.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        yield JSON.parse(line.slice(6));
+      }
+    }
+  },
+};
 ```
+
+**Key Pattern:** Generator function for SSE streaming allows `for await...of` consumption.
 
 ---
 

@@ -1,19 +1,22 @@
-# Layer 3.1: ReAct Loop (AI SDK 6 ToolLoopAgent)
+# Layer 3.1: ReAct Loop (Three-Phase Tool Lifecycle)
 
-> The core execution loop using AI SDK 6 `ToolLoopAgent` class with native stop conditions
+> Dynamic tool discovery with cache-safe architecture using AI SDK 6 ToolLoopAgent
 
 ## Overview
 
-The ReAct (Reasoning + Acting) pattern enables the LLM to break complex tasks into steps, execute tools, observe results, and iterate until complete. The agent uses `ToolLoopAgent` - a module-level singleton with:
-- **`callOptionsSchema`** for type-safe runtime options
-- **`prepareCall`** for dynamic instruction injection
-- **`stopWhen`** conditions (step count + FINAL_ANSWER detection)
-- **`prepareStep`** for context window management
+The ReAct (Reasoning + Acting) pattern enables the LLM to break complex tasks into steps, execute tools, observe results, and iterate until complete. The agent uses `ToolLoopAgent` - a module-level singleton with a **three-phase tool lifecycle**:
+
+1. **Acknowledgment Phase** (Step 0) - Conversational preflight
+2. **Discovery Phase** (Step 1) - Tool search via hybrid BM25+vector
+3. **Execution Phase** (Step 2+) - Work with discovered tools
+
+**Key Innovation**: Static system prompt + dynamic tool injection via messages = LLM cache preserved (50-90% cost savings).
 
 **Key Files:**
-- `server/agent/cms-agent.ts` - ToolLoopAgent singleton
-- `server/agent/system-prompt.ts` - Modular prompt compilation
-- `server/routes/agent.ts` - Route handler with stream/generate
+- `server/agents/main-agent.ts` - ToolLoopAgent with three-phase lifecycle
+- `server/agents/system-prompt.ts` - Static prompt loader
+- `server/execution/orchestrator.ts` - Thin coordination layer
+- `server/memory/tool-search/tool-search-manager.ts` - Tool discovery extraction
 
 ---
 
@@ -21,29 +24,23 @@ The ReAct (Reasoning + Acting) pattern enables the LLM to break complex tasks in
 
 LLMs cannot execute multi-step tasks in a single call. When asked to "create a page, add an image, and update navigation," a raw LLM can only produce text - it cannot actually perform these actions or verify they succeeded.
 
-**Without ReAct:**
+**Additional Challenge**: With 36+ tools, loading all tools at once wastes context and tokens. The agent needs to discover relevant tools on-demand.
 
-```
-User: "Create an About page with a hero image"
-LLM: "I would create a page called About..." (just text, no action)
-```
-
-**With ReAct:**
+**With Three-Phase ReAct:**
 
 ```
 User: "Create an About page with a hero image"
 Agent:
-  1. THINK: I need to create a page first
-  2. ACT: cms_createPage({title: "About"})
-  3. OBSERVE: Page created with id "page-123"
-  4. THINK: Now I need to find a suitable image
-  5. ACT: cms_searchImages({query: "hero background"})
-  6. OBSERVE: Found 3 images, best match is "img-456"
-  7. THINK: Now attach the image to the hero section
-  8. ACT: cms_updateSectionImage({imageId: "img-456", ...})
-  9. OBSERVE: Image attached successfully
-  10. THINK: Task complete, inform user
-  → FINAL_ANSWER: Created About page with hero image
+  Step 0: ACKNOWLEDGE → "I'll create an About page with a hero image for you"
+  Step 1: SEARCH → searchTools("create page add image")
+          → Discovers: createPage, createSection, importImage
+  Step 2: ACT → createPage({title: "About"})
+  Step 3: OBSERVE → Page created with id "page-123"
+  Step 4: ACT → searchTools("find hero image")
+          → Discovers: browseImages, getImage
+  Step 5: ACT → browseImages({query: "hero background"})
+  ...
+  Step N: COMPLETE → finalAnswer("Created About page with hero image")
 ```
 
 ---
@@ -51,549 +48,485 @@ Agent:
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   ToolLoopAgent (Module Singleton)              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   ┌──────────────────────────────────────────────────────────┐  │
-│   │                 cmsAgent.stream() / .generate()          │  │
-│   │                                                          │  │
-│   │    model: openrouter/gpt-4o-mini                         │  │
-│   │    maxOutputTokens: 4096                                 │  │
-│   │    callOptionsSchema: Zod schema for type-safe options   │  │
-│   └──────────────────────────────────────────────────────────┘  │
-│                              │                                  │
-│                              ▼                                  │
-│   ┌──────────────────────────────────────────────────────────┐  │
-│   │                     prepareCall()                        │  │
-│   │                                                          │  │
-│   │    • Dynamic system prompt via getSystemPrompt()         │  │
-│   │    • Working memory injection                            │  │
-│   │    • experimental_context setup for tools                │  │
-│   └──────────────────────────────────────────────────────────┘  │
-│                              │                                  │
-│                              ▼                                  │
-│   ┌──────────────────────────────────────────────────────────┐  │
-│   │                    EXECUTION LOOP                        │  │
-│   │                                                          │  │
-│   │    ┌─────────┐    ┌─────────┐    ┌─────────┐             │  │
-│   │    │  THINK  │───▶│   ACT   │───▶│ OBSERVE │──┐          │  │
-│   │    │         │    │         │    │         │  │          │  │
-│   │    │ Reason  │    │ Call    │    │ Process │  │          │  │
-│   │    │ about   │    │ tool    │    │ result  │  │          │  │
-│   │    │ next    │    │         │    │         │  │          │  │
-│   │    └─────────┘    └─────────┘    └─────────┘  │          │  │
-│   │         ▲                                     │          │  │
-│   │         └─────────────────────────────────────┘          │  │
-│   │                                                          │  │
-│   │    stopWhen Conditions (OR logic):                       │  │
-│   │    • stepCountIs(15) - max steps reached                 │  │
-│   │    • hasFinalAnswer() - FINAL_ANSWER: detected           │  │
-│   └──────────────────────────────────────────────────────────┘  │
-│                              │                                  │
-│         ┌────────────────────┼────────────────────┐             │
-│         ▼                    ▼                    ▼             │
-│   ┌─────────────┐     ┌────────────┐        ┌───────────┐       │
-│   │ prepareStep │     │ Streaming  │        │  Token    │       │
-│   │             │     │  Events    │        │  Tracking │       │
-│   │ Message     │     │            │        │           │       │
-│   │ trimming    │     │ fullStream │        │ usage     │       │
-│   │ (>20 msgs)  │     │ chunks     │        │           │       │
-│   └─────────────┘     └────────────┘        └───────────┘       │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                   ToolLoopAgent (Cache-Safe Architecture)               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │                 STATIC System Prompt                             │  │
+│   │                                                                  │  │
+│   │    Never changes during execution → LLM cache preserved          │  │
+│   │    OpenAI: 50% discount | Anthropic: 90% discount                │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+│                              │                                          │
+│                              ▼                                          │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │              THREE-PHASE TOOL LIFECYCLE                          │  │
+│   │                                                                  │  │
+│   │   ┌────────────┐    ┌────────────┐    ┌────────────┐             │  │
+│   │   │  STEP 0    │    │  STEP 1    │    │  STEP 2+   │             │  │
+│   │   │            │    │            │    │            │             │  │
+│   │   │ Acknowledge│ →  │  Discover  │ →  │  Execute   │             │  │
+│   │   │ Request    │    │  Tools     │    │  Actions   │             │  │
+│   │   │            │    │            │    │            │             │  │
+│   │   │ FORCED:    │    │ AVAILABLE: │    │ AVAILABLE: │             │  │
+│   │   │ acknowledge│    │ searchTools│    │ Core +     │             │  │
+│   │   │ Request    │    │ finalAnswer│    │ Discovered │             │  │
+│   │   │            │    │ acknowledge│    │            │             │  │
+│   │   └────────────┘    └────────────┘    └────────────┘             │  │
+│   │                                                                  │  │
+│   │   Tool Guidance: Injected as MESSAGES (not system prompt)        │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+│                              │                                          │
+│                              ▼                                          │
+│   ┌──────────────────────────────────────────────────────────────────┐  │
+│   │                     STOP CONDITIONS                              │  │
+│   │                                                                  │  │
+│   │    stopWhen: [                                                   │  │
+│   │      stepCountIs(15),           // Max steps                     │  │
+│   │      hasToolCall("finalAnswer") // Explicit completion           │  │
+│   │    ]                                                             │  │
+│   └──────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Core Implementation
 
-### CMS Agent Module (ToolLoopAgent Singleton)
+### Three-Phase prepareStep Logic
 
 ```typescript
-// server/agent/cms-agent.ts
-import { ToolLoopAgent, stepCountIs } from "ai";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { z } from "zod";
-import { ALL_TOOLS } from "../tools/all-tools";
-import { getSystemPrompt } from "./system-prompt";
-import type { AgentContext } from "../tools/types";
+// server/agents/main-agent.ts
+prepareStep: async ({ stepNumber, steps, messages }) => {
+  type ToolName = keyof typeof ALL_TOOLS;
 
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
+  // Extract tools from searchTools results in current steps
+  const fromCurrentSteps = toolSearchManager.extractFromSteps(steps);
 
-export const AGENT_CONFIG = {
-  maxSteps: 15,
-  modelId: "openai/gpt-4o-mini",
-  maxOutputTokens: 4096,
-} as const;
+  // Combine: persisted (previous turns) + current step discoveries
+  const discoveredTools = [...new Set([
+    ...persistedDiscoveredTools,
+    ...fromCurrentSteps
+  ])] as ToolName[];
 
-// Type-safe call options via Zod schema
-export const AgentCallOptionsSchema = z.object({
-  sessionId: z.string(),
-  traceId: z.string(),
-  workingMemory: z.string().optional(),
-  cmsTarget: z.object({
-    siteId: z.string(),
-    environmentId: z.string(),
-  }),
-  db: z.custom<any>(),
-  services: z.custom<any>(),
-  sessionService: z.custom<any>(),
-  vectorIndex: z.custom<any>(),
-  logger: z.custom<any>(),
-  stream: z.custom<any>().optional(),
-});
+  // Find NEW tools (not seen before in this turn)
+  const newlyDiscovered = fromCurrentSteps.filter(
+    tool => !toolsWithGuidanceInjected.has(tool)
+  );
 
-// Custom stop condition
-const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
-  const lastStep = steps[steps.length - 1];
-  return lastStep?.text?.includes("FINAL_ANSWER:") || false;
-};
+  // Inject tool guidance as MESSAGES (preserves cache)
+  let updatedMessages = [...messages];
+  if (newlyDiscovered.length > 0 && stepNumber > 0) {
+    const guidanceMessages = createToolGuidanceMessages(
+      newlyDiscovered,
+      [...toolsWithGuidanceInjected]
+    );
+    updatedMessages = [...updatedMessages, ...guidanceMessages];
 
-// Module-level singleton
-export const cmsAgent = new ToolLoopAgent({
-  model: openrouter.languageModel(AGENT_CONFIG.modelId),
-  instructions: "CMS Agent", // Replaced in prepareCall
-  tools: ALL_TOOLS,
-  callOptionsSchema: AgentCallOptionsSchema,
+    // Mark tools as having guidance
+    newlyDiscovered.forEach(tool => toolsWithGuidanceInjected.add(tool));
+  }
 
-  prepareCall: ({ options, ...settings }) => {
-    const dynamicInstructions = getSystemPrompt({
-      currentDate: new Date().toISOString().split("T")[0],
-      workingMemory: options.workingMemory || "",
-    });
-
+  // PHASE 1: Acknowledgment (Step 0)
+  // Force acknowledgeRequest for conversational preflight
+  if (stepNumber === 0) {
     return {
-      ...settings,
-      instructions: dynamicInstructions,
-      maxOutputTokens: AGENT_CONFIG.maxOutputTokens,
-      experimental_context: {
-        db: options.db,
-        services: options.services,
-        sessionService: options.sessionService,
-        vectorIndex: options.vectorIndex,
-        logger: options.logger,
-        stream: options.stream,
-        traceId: options.traceId,
-        sessionId: options.sessionId,
-        cmsTarget: options.cmsTarget,
-      } as AgentContext,
+      activeTools: [...CORE_TOOLS] as ToolName[],
+      toolChoice: { type: "tool", toolName: "acknowledgeRequest" },
+      messages: updatedMessages,
     };
-  },
+  }
 
-  stopWhen: [stepCountIs(AGENT_CONFIG.maxSteps), hasFinalAnswer],
+  // PHASE 2: Discovery (Step 1, no tools yet)
+  // Agent uses searchTools to find capabilities
+  if (stepNumber === 1 && discoveredTools.length === 0) {
+    return {
+      activeTools: [...CORE_TOOLS] as ToolName[],
+      toolChoice: "auto",
+      messages: updatedMessages,
+    };
+  }
 
-  prepareStep: async ({ messages }: { messages: any[] }) => {
-    if (messages.length > 20) {
-      return {
-        messages: [messages[0], ...messages.slice(-10)],
-      };
-    }
-    return {};
-  },
-});
+  // PHASE 3: Execution (tools discovered)
+  // All discovered tools + core tools available
+  const activeTools = [...new Set([...CORE_TOOLS, ...discoveredTools])] as ToolName[];
+  return {
+    activeTools,
+    toolChoice: "auto",
+    messages: updatedMessages,
+  };
+},
 ```
 
-### Key Configuration Values
+### Core Tools
 
-| Parameter         | Value         | Rationale                                                 |
-| ----------------- | ------------- | --------------------------------------------------------- |
-| `maxSteps`        | 15            | Higher than typical (10) for complex multi-step CMS tasks |
-| `maxOutputTokens` | 4096          | Allows detailed reasoning and explanations                |
-| `model`           | gpt-4o-mini   | Good balance of capability, speed, and cost               |
-| `stopWhen`        | OR conditions | Step limit OR FINAL_ANSWER detection                      |
+```typescript
+const CORE_TOOLS = ['searchTools', 'finalAnswer', 'acknowledgeRequest'];
+```
+
+| Tool               | Purpose                                  | Phase      |
+| ------------------ | ---------------------------------------- | ---------- |
+| `acknowledgeRequest`| Conversational preflight response       | Step 0     |
+| `searchTools`       | Discover relevant tools via hybrid search| Step 1+    |
+| `finalAnswer`       | Signal task completion                   | Any step   |
 
 ---
 
-## Changes from Pre-Migration
-
-### Before (Custom Orchestrator)
+## Module-Level State
 
 ```typescript
-// OLD: server/agent/orchestrator.ts - DELETED
-class CustomOrchestrator {
-  async execute(messages, context) {
-    // Custom while loop
-    while (steps < maxSteps) {
-      const result = await this.llmCall(messages);
-      if (result.toolCalls) {
-        for (const call of result.toolCalls) {
-          const output = await this.executeTool(call);
-          messages.push(toolResultMessage(output));
-        }
-      }
-      // Custom checkpoint every 3 steps
-      if (steps % 3 === 0) {
-        await this.checkpoint(messages);
-      }
-    }
-  }
+// WARNING: AI SDK limitation - prepareStep doesn't receive context
+// Module-level state overwritten per-request in prepareCall
+
+/** Discovered tools from previous turns (loaded from WorkingContext) */
+let persistedDiscoveredTools: string[] = [];
+
+/** Tools that have had guidance injected this turn */
+let toolsWithGuidanceInjected: Set<string> = new Set();
+
+/** Callback for SSE emission */
+let onInstructionsInjectedCallback: ((data) => void) | null = null;
+```
+
+**Why Module-Level?**
+- `prepareStep` doesn't receive `experimental_context`
+- Each request overwrites state via `prepareCall`
+- Single-process Node.js handles requests sequentially
+- Future: AsyncLocalStorage for multi-instance safety
+
+---
+
+## Tool Discovery Flow
+
+### searchTools Integration
+
+```typescript
+// Tool search result structure
+interface SearchToolsResult {
+  tools?: string[];      // Discovered tool names
+  message?: string;      // Search summary
 }
 
-// Custom retry wrapper
-async function executeWithRetry(fn, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (!isRetryable(error) || attempt === maxRetries) throw error;
-      await sleep(calculateBackoff(attempt));
-    }
+// ToolSearchManager extracts tools from step results
+extractFromSteps(steps: StepResult[]): string[] {
+  const tools = new Set<string>();
+
+  for (const step of steps) {
+    const searchResults = step.toolResults?.filter(
+      tr => tr.toolName === 'searchTools'
+    );
+
+    searchResults?.forEach(sr => {
+      const output = sr.output as SearchToolsResult;
+      output?.tools?.forEach(toolName => tools.add(toolName));
+    });
   }
+
+  return Array.from(tools);
 }
 ```
 
-### After (ToolLoopAgent Singleton)
+### Tool Guidance Injection (Cache-Safe)
 
 ```typescript
-// NEW: server/agent/cms-agent.ts
-export const cmsAgent = new ToolLoopAgent({
-  model: openrouter.languageModel(AGENT_CONFIG.modelId),
-  tools: ALL_TOOLS,
-  callOptionsSchema: AgentCallOptionsSchema,
-  prepareCall: ({ options, ...settings }) => ({
-    ...settings,
-    instructions: getSystemPrompt({ workingMemory: options.workingMemory }),
-    experimental_context: buildContext(options),
-  }),
-  stopWhen: [stepCountIs(15), hasFinalAnswer],
-  prepareStep: async ({ messages }) => trimMessages(messages),
-});
+// server/prompts/messages/tool-guidance-messages.ts
+export function createToolGuidanceMessages(
+  newTools: string[],
+  existingTools: string[]
+): ModelMessage[] {
+  const injector = new ToolPromptInjector();
+  injector.addTools(newTools);
+  const toolGuidance = injector.build();
 
-// Usage in routes
-const streamResult = await cmsAgent.stream({ messages, options });
-const result = await cmsAgent.generate({ messages, options });
+  return [
+    {
+      role: "user",
+      content: `[TOOL GUIDANCE] New tools now available: ${newTools.join(", ")}
+
+Here are the usage guidelines:
+
+${toolGuidance}
+
+Please follow these guidelines when using these tools.`,
+    },
+    {
+      role: "assistant",
+      content: `I understand. I now have access to: ${newTools.join(", ")}. I'll follow the provided guidelines.`,
+    },
+  ];
+}
 ```
 
-### Migration Summary
-
-| Feature | Before | After |
-|---------|--------|-------|
-| Loop control | Custom while loop | `ToolLoopAgent` class |
-| Retry logic | Custom `executeWithRetry` | SDK handles internally |
-| Stop conditions | Custom logic | `stopWhen` array with conditions |
-| Checkpointing | Every 3 steps | End of execution only |
-| HITL | Custom `ApprovalQueue` | Confirmed flag pattern |
-| Entry points | Multiple functions | `.stream()` / `.generate()` |
-| Options typing | Untyped | `callOptionsSchema` with Zod |
-| Instructions | Static at construction | Dynamic via `prepareCall` |
+**Why Messages Instead of System Prompt?**
+- System prompt changes → LLM cache invalidated → expensive
+- Messages append to conversation → system prompt unchanged → cache hit
+- Same guidance effect, massive cost savings
 
 ---
 
 ## Stop Conditions
 
-The `stopWhen` array defines conditions (OR logic):
-
 ```typescript
 stopWhen: [
-  stepCountIs(AGENT_CONFIG.maxSteps),  // Step limit
-  hasFinalAnswer,                       // FINAL_ANSWER: detection
+  stepCountIs(AGENT_CONFIG.maxSteps),  // 15 steps max
+  hasToolCall("finalAnswer"),           // Explicit completion
 ],
 ```
 
-### Custom Stop Condition
+### The finalAnswer Tool
 
 ```typescript
-const hasFinalAnswer = ({ steps }: { steps: any[] }) => {
-  const lastStep = steps[steps.length - 1];
-  return lastStep?.text?.includes("FINAL_ANSWER:") || false;
-};
-```
-
-### Prompt-Guided Completion
-
-The agent is instructed to signal completion:
-
-```xml
-<!-- core/agent.xml -->
-<react-pattern>
-**COMPLETION:**
-When the task is fully complete, prefix your final response with FINAL_ANSWER:
-
-Do NOT use FINAL_ANSWER until ALL requested actions are completed and verified.
-</react-pattern>
+// The agent calls finalAnswer to complete the task
+export const finalAnswer = tool({
+  description: "Complete the task with a final response to the user",
+  inputSchema: z.object({
+    response: z.string().describe("The final response to show the user"),
+    summary: z.string().optional().describe("Brief summary of what was accomplished"),
+  }),
+  execute: async (input) => {
+    return {
+      success: true,
+      response: input.response,
+      summary: input.summary,
+    };
+  },
+});
 ```
 
 The loop stops when:
-1. **FINAL_ANSWER detected** - LLM explicitly signals completion
+1. **finalAnswer called** - Agent explicitly signals completion
 2. **Max steps reached** - `stepCountIs(15)` limit hit
-3. **No more tool calls** - LLM responds without calling tools (implicit)
 
 ---
 
-## Streaming Events
+## Execution Flow
 
-When using `.stream()`, process chunks via `fullStream`:
+### Stream Execution
 
 ```typescript
-// server/routes/agent.ts
-const streamResult = await cmsAgent.stream({ messages, options });
+// server/execution/orchestrator.ts
+async *executeStream(options, writeSSE) {
+  // 1. Resolve options and prepare context
+  const resolved = await contextCoordinator.resolveOptions(options);
+  const { context, workingContext } = await contextCoordinator.prepareContext(resolved);
 
+  // 2. Build agent options with discovered tools from previous turns
+  const agentOptions = {
+    sessionId: resolved.sessionId,
+    traceId: resolved.traceId,
+    modelId: resolved.modelId,
+    discoveredTools: context.discoveredTools,  // From WorkingContext
+    // ... services
+  };
+
+  // 3. Execute agent
+  const streamResult = await cmsAgent.stream({
+    messages: context.messages,
+    options: agentOptions,
+  });
+
+  // 4. Process stream
+  const result = await streamProcessor.processStream(
+    streamResult,
+    workingContext,
+    logger,
+    emitter
+  );
+
+  // 5. Save session data (with discovered tools persisted)
+  await contextCoordinator.saveSessionData(...);
+}
+```
+
+### Stream Events
+
+```typescript
 for await (const chunk of streamResult.fullStream) {
   switch (chunk.type) {
     case "text-delta":
-      writeSSE("text-delta", { delta: chunk.text });
+      emitter.emitTextDelta(chunk.text);
       break;
 
     case "tool-call":
-      writeSSE("tool-call", {
-        toolName: chunk.toolName,
-        toolCallId: chunk.toolCallId,
-        args: chunk.input,
-      });
+      emitter.emitToolCall(chunk.toolName, chunk.toolCallId, chunk.input);
       break;
 
     case "tool-result":
-      // Extract entities to working memory
+      // Extract entities for working memory
       const entities = extractor.extract(chunk.toolName, chunk.output);
-      workingContext.addMany(entities);
+      workingContext.addEntities(entities);
 
-      writeSSE("tool-result", {
-        toolCallId: chunk.toolCallId,
-        toolName: chunk.toolName,
-        result: chunk.output,
-      });
+      // Track discovered tools
+      if (chunk.toolName === 'searchTools') {
+        const tools = chunk.output.tools || [];
+        workingContext.addDiscoveredTools(tools);
+      }
+
+      emitter.emitToolResult(chunk.toolCallId, chunk.toolName, chunk.output);
       break;
 
-    case "start-step":
-      writeSSE("step-start", { stepNumber: ++currentStep });
-      break;
-
-    case "finish-step":
-      writeSSE("step-finish", {
-        stepNumber: currentStep,
-        duration: Date.now() - stepStartTime,
-        usage: chunk.usage,
-      });
+    case "step-finish":
+      emitter.emitStepFinish(chunk.stepNumber, chunk.usage);
       break;
 
     case "finish":
-      writeSSE("finish", {
-        finishReason: chunk.finishReason,
-        usage: chunk.totalUsage,
-      });
+      emitter.emitFinish(chunk.finishReason, chunk.totalUsage);
       break;
   }
 }
 ```
 
-### After Stream Completion
-
-```typescript
-// Get response messages for persistence
-const responseData = await streamResult.response;
-
-await sessionService.saveMessages(sessionId, [
-  ...previousMessages,
-  { role: "user", content: prompt },
-  ...responseData.messages,
-]);
-```
-
 ---
 
-## Message Flow
-
-### Initial Request
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Message Assembly                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. System Prompt (compiled from agent.xml)                     │
-│     ├── core/agent.xml (identity, ReAct, tool discovery)        │
-│     ├── {{{workingMemory}}} - entity context                    │
-│     └── {{{activeProtocols}}} - per-tool instructions           │              │
-│                                                                 │
-│  2. Conversation History                                        │
-│     ├── Previous user messages                                  │
-│     ├── Previous assistant responses                            │
-│     └── Previous tool calls & results                           │
-│                                                                 │
-│  3. Current User Message                                        │
-│     └── "Create an About page with a hero section"              │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                      cmsAgent.stream({...})
-```
-
-### Per-Step Flow (SDK Internal)
-
-```
-Step N (handled by SDK):
-┌─────────────────────────────────────────────────────────────────┐
-│ 1. LLM Call                                                     │
-│    ├── Send: system + history + user message                    │
-│    └── Receive: text and/or tool calls                          │
-├─────────────────────────────────────────────────────────────────┤
-│ 2. Tool Execution (if tool calls present)                       │
-│    ├── For each tool call:                                      │
-│    │   ├── Validate input against Zod schema                    │
-│    │   ├── Execute tool with experimental_context               │
-│    │   └── Collect result                                       │
-│    └── Append tool results to messages                          │
-├─────────────────────────────────────────────────────────────────┤
-│ 3. Continue Check                                               │
-│    ├── More tool calls? → Continue to Step N+1                  │
-│    ├── Max steps reached? → Stop                                │
-│    └── No more calls? → Stop and return                         │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Memory Management
-
-### SDK Handles Context Window
-
-The SDK manages message history. For very long conversations, implement trimming in the route:
+## Configuration
 
 ```typescript
-// server/routes/agent.ts
-let messages = await sessionService.loadMessages(sessionId);
-
-// Trim if too long
-if (messages.length > 20) {
-  messages = messages.slice(-10);  // Keep last 10
-}
-
-// Add new user message
-messages.push({ role: 'user', content: prompt });
-
-const result = await runAgent(messages, options);
+export const AGENT_CONFIG = {
+  maxSteps: 15,              // Higher for complex CMS tasks
+  modelId: "openai/gpt-4o-mini",
+  maxOutputTokens: 4096,
+} as const;
 ```
+
+| Parameter         | Value         | Rationale                                     |
+| ----------------- | ------------- | --------------------------------------------- |
+| `maxSteps`        | 15            | Complex CMS workflows need multiple steps     |
+| `maxOutputTokens` | 4096          | Detailed reasoning and explanations           |
+| `model`           | gpt-4o-mini   | Good balance of capability, speed, cost       |
 
 ---
 
 ## Message Persistence
 
-Messages saved at end of execution only (no mid-step checkpointing):
+Messages and discovered tools saved after execution:
 
 ```typescript
-// server/routes/agent.ts
-const result = await runAgent(messages, options);
-
-// Save complete conversation
-await sessionService.saveMessages(sessionId, [
-  ...previousMessages,
-  { role: 'user', content: prompt },
-  ...result.responseMessages,
-]);
+// Save session data with working context
+await contextCoordinator.saveSessionData(
+  sessionId,
+  previousMessages,
+  prompt,
+  responseMessages,
+  workingContext,    // Contains discoveredTools
+  logger,
+  displayTexts,
+  usage              // Provider tokens for compaction decisions
+);
 ```
 
-**Note**: Checkpoint system removed - it was dead code never actually used.
+The `WorkingContext` persists:
+- Entities (pages, sections, images)
+- Discovered tools (for next turn's `persistedDiscoveredTools`)
 
 ---
 
-## Native Retry Logic
+## Error Handling
+
+### experimental_repairToolCall
+
+```typescript
+experimental_repairToolCall: async ({ toolCall, error }) => {
+  // Don't repair unknown tools
+  if (NoSuchToolError.isInstance(error)) {
+    console.warn(`Unknown tool: ${toolCall.toolName}`);
+    return null;
+  }
+
+  // Log invalid input, let model retry naturally
+  if (InvalidToolInputError.isInstance(error)) {
+    console.warn(`Invalid input for ${toolCall.toolName}:`, error.message);
+    return null;
+  }
+
+  return null;
+},
+```
+
+### Native Retry Logic
 
 AI SDK 6 handles retries automatically:
-
-```typescript
-maxRetries: 2,  // Default
-```
-
-**Retry Behavior:**
-- **429 (Rate Limit)** → Exponential backoff, retry
+- **429 (Rate Limit)** → Exponential backoff
 - **5xx (Server Error)** → Retry with backoff
 - **4xx (Client Error)** → No retry, surface immediately
-
-No custom retry code needed!
-
----
-
-## Integration Points
-
-| Connects To                                         | How                                   |
-| --------------------------------------------------- | ------------------------------------- |
-| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | SDK executes tools from `ALL_TOOLS`   |
-| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Extract entities from tool-result     |
-| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)               | `prepareCall` injects dynamic prompt  |
-| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Confirmed flag pattern on tools       |
-| [3.6 Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md) | SDK handles retry internally          |
-| [3.7 Streaming](./LAYER_3.7_STREAMING.md)           | `.stream()` method for real-time SSE  |
 
 ---
 
 ## Key Design Decisions
 
-### Why ToolLoopAgent Class?
+### Why Three Phases?
 
-1. **Module-level singleton** - Single agent instance across all requests
-2. **Type-safe options** - `callOptionsSchema` validates runtime options
-3. **Dynamic injection** - `prepareCall` injects context at runtime
-4. **Custom stop conditions** - `stopWhen` array with composable conditions
-5. **Memory management** - `prepareStep` trims long conversations
+1. **Step 0 (Acknowledge)** - Creates natural conversation flow, user sees immediate response
+2. **Step 1 (Discovery)** - Agent only gets tools it needs, reduces context waste
+3. **Step 2+ (Execution)** - Work with minimal, relevant toolset
 
-### Why All Tools Always Available?
+### Why Static System Prompt?
 
-1. **Simplicity** - No complex tool selection logic
-2. **Flexibility** - Agent can pivot if initial approach fails
-3. **LLM Capability** - Modern LLMs handle large tool sets well
-4. **Prompt Guidance** - Instructions guide appropriate tool selection
+All LLM providers use prefix-based caching:
+- Changing system prompt = cache invalidated
+- Static prompt = 50-90% cost reduction
+- Dynamic content moved to conversation messages
 
-### Why 15 Max Steps?
+### Why Tool Guidance as Messages?
 
-- **10 steps** - Too few for complex CMS workflows
-- **15 steps** - Handles most real-world tasks
-- **20+ steps** - Diminishing returns, risk of loops
+```xml
+<!-- OLD: In system prompt (breaks cache) -->
+<tool-usage-instructions>{{{activeProtocols}}}</tool-usage-instructions>
 
-### Why No Mid-Step Checkpointing?
+<!-- NEW: As conversation messages (preserves cache) -->
+[USER] [TOOL GUIDANCE] New tools: createPage, updatePage...
+[ASSISTANT] I understand. I now have access to...
+```
 
-- CMS agent completes in seconds, not minutes
-- Messages saved at end is sufficient
-- Reduces I/O overhead
-- Original checkpoint code was never used (dead code)
+Same effect, dramatically lower cost.
 
-### Why prepareCall for Instructions?
+### Why Module-Level State?
 
-The `instructions` field in the constructor is a placeholder because:
-1. **Working memory changes per call** - Different entities in context
-2. **Date changes** - Current date injected dynamically
-3. **Module-level singleton** - Can't have per-call constructor args
+AI SDK limitation: `prepareStep` doesn't receive `experimental_context`. Module-level state with per-request overwrite is the cleanest workaround.
+
+---
+
+## Integration Points
+
+| Connects To                                         | How                               |
+| --------------------------------------------------- | --------------------------------- |
+| [3.2 Tools](./LAYER_3.2_TOOLS.md)                   | Per-tool folder structure         |
+| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Entity + discovered tool tracking |
+| [3.4 Prompts](./LAYER_3.4_PROMPTS.md)               | Static system prompt              |
+| [3.7 Streaming](./LAYER_3.7_STREAMING.md)           | SSE events during execution       |
+| Layer 4 Services                                    | Tool search service               |
 
 ---
 
 ## Debugging Tips
 
-### View Step Details
+### View Discovery Flow
 
 ```typescript
-const result = await runAgent(messages, options);
-
-console.log('=== Agent Result ===');
-console.log('Steps:', result.steps.length);
-console.log('Final text:', result.text);
-
-for (const step of result.steps) {
-  console.log('Step:', {
-    toolCalls: step.toolCalls?.map(tc => tc.toolName),
-    toolResults: step.toolResults?.map(tr => tr.toolName),
-  });
-}
-
-console.log('Usage:', result.usage);
+// Log in prepareStep shows tool discovery
+console.log(`[prepareStep] Step ${stepNumber} | Tools: ` +
+  `persisted=${persistedDiscoveredTools.length}, ` +
+  `current=${fromCurrentSteps.length}, ` +
+  `new=${newlyDiscovered.length}, ` +
+  `total=${discoveredTools.length}`
+);
 ```
 
 ### Common Issues
 
-| Issue                    | Cause                       | Solution                         |
-| ------------------------ | --------------------------- | -------------------------------- |
-| Agent loops indefinitely | Too many tool calls         | Check maxSteps is set            |
-| Agent stops too early    | LLM not calling tools       | Improve prompt with examples     |
-| Token limit exceeded     | Long conversation history   | Implement message trimming       |
-| Tools not called         | Prompt unclear              | Add explicit tool usage examples |
-| 429 errors               | Rate limited                | SDK handles with maxRetries      |
+| Issue                     | Cause                          | Solution                          |
+| ------------------------- | ------------------------------ | --------------------------------- |
+| No tools discovered       | searchTools not called         | Check Step 1 logic                |
+| Tools not available       | Not in activeTools array       | Check prepareStep returns         |
+| Guidance not showing      | Messages not updated           | Check guidanceMessages injection  |
+| Agent loops on discovery  | searchTools called repeatedly  | Check tool availability by step   |
 
 ---
 
 ## Further Reading
 
-- [3.2 Tools](./LAYER_3.2_TOOLS.md) - How tools are structured and executed
-- [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - System prompt composition
-- [3.5 HITL](./LAYER_3.5_HITL.md) - Native approval flow
-- [AI SDK 6 Agents](https://ai-sdk.dev/docs/agents/building-agents) - Official docs
+- [3.2 Tools](./LAYER_3.2_TOOLS.md) - Per-tool folder structure
+- [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Entity tracking
+- [3.4 Prompts](./LAYER_3.4_PROMPTS.md) - Static system prompt
+- [3.7 Streaming](./LAYER_3.7_STREAMING.md) - SSE events
+- [AI SDK 6 Agents](https://ai-sdk.dev/docs/agents) - Official docs

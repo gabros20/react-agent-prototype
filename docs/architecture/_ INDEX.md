@@ -1,29 +1,74 @@
 # Architecture Documentation Index
 
 > **ReAct AI Agent CMS** - Full-stack TypeScript architecture overview
-> **Updated**: 2025-12-03
+> **Updated**: 2025-12-23
 
 This index provides a high-level view of the system's major architectural layers. Each layer document is self-contained but references related layers where integration occurs.
 
 ---
 
-## AI SDK 6 Migration Summary
+## Dynamic Tool Injection Architecture Summary
 
-The codebase was migrated to **AI SDK v6 native patterns** in commit `1e1963e`. Key changes:
+The codebase implements a **cache-safe dynamic tool injection** architecture. Key innovations:
+
+| Component | Description |
+|-----------|-------------|
+| **Static System Prompt** | Never changes during execution → LLM cache preserved (50-90% cost reduction) |
+| **Three-Phase Tool Lifecycle** | Step 0: Acknowledge → Step 1: Discover → Step 2+: Execute |
+| **Hybrid Tool Search** | BM25 (lexical) + Vector (semantic) with smart blending |
+| **Per-Tool Folder Structure** | Each tool: metadata + schema + implementation in own folder |
+| **Tool Guidance as Messages** | Dynamic content injected as conversation messages, not system prompt |
+| **Provider-Anchored Compaction** | Uses provider tokens for accurate context limit management |
+
+### Key Architecture Changes
 
 | Component | Before | After |
 |-----------|--------|-------|
-| Agent Loop | Custom `generateText` + while loop | Native `ToolLoopAgent` class (singleton) |
-| Call Options | Manual context injection | Type-safe `callOptionsSchema` via Zod |
-| Instructions | Static system prompt | Dynamic via `prepareCall` hook |
-| Stop Conditions | Manual step counting | Native `stopWhen` array (OR logic) |
-| Context Trimming | Manual message slicing | Native `prepareStep` hook |
-| Retry Logic | Custom `executeWithRetry` | Native `maxRetries: 2` |
-| HITL | `confirmed` flag only | Confirmed flag + conversational pattern |
-| Checkpoints | Every 3 steps (dead code) | Removed - messages at end only |
-| Cost Tracking | None | Tokenizer + OpenRouter pricing + trace metrics |
-| Debug Logging | Basic logs | 20+ trace entry types + conversation logs |
-| Worker Events | None | Redis pub/sub → SSE real-time updates |
+| Tool Loading | All 32 tools loaded at once | On-demand via `searchTools` discovery |
+| System Prompt | Dynamic with injections | **Static** (preserves LLM cache) |
+| Tool Guidance | In system prompt | As conversation messages |
+| Tool Files | Single `all-tools.ts` | Per-tool folders (`server/tools/{name}/`) |
+| Tool Metadata | Inline in tool definition | Separate `{name}-metadata.ts` files |
+| Working Memory | `server/services/` | `server/memory/working-context/` |
+| Compaction | Manual message slicing | Provider-anchored two-stage compaction |
+| Agent Module | `server/agent/` | `server/agents/main-agent.ts` |
+| Execution | In routes | `server/execution/orchestrator.ts` |
+
+### New Folder Structure
+
+```
+server/
+├── agents/              # ToolLoopAgent singleton (NEW)
+│   ├── main-agent.ts        # Three-phase tool lifecycle
+│   └── system-prompt.ts     # Static prompt loader
+├── execution/           # Execution coordination (NEW)
+│   ├── orchestrator.ts      # Stream execution
+│   ├── context-coordinator.ts
+│   └── stream-processor.ts
+├── memory/              # Memory management (NEW)
+│   ├── working-context/     # Entity + discovered tools
+│   ├── tool-search/         # Tool search state
+│   └── compaction/          # Provider-anchored compaction
+├── tools/               # Per-tool folder structure (REFACTORED)
+│   ├── _registry/           # Unified tool registry
+│   ├── _types/              # AgentContext, metadata types
+│   ├── _loaders/            # Tool assembly
+│   └── {toolName}/          # Per-tool folders
+│       ├── {name}-metadata.ts
+│       ├── {name}-tool.ts
+│       └── index.ts
+├── services/
+│   ├── search/              # Hybrid tool search (NEW)
+│   │   ├── tool-search.service.ts
+│   │   ├── smart-search.ts
+│   │   ├── bm25-search.ts
+│   │   └── vector-search.ts
+│   └── ...
+└── prompts/
+    ├── agent/               # Static system prompt
+    ├── messages/            # Tool guidance message factories (NEW)
+    └── tools/               # Per-tool prompt files
+```
 
 ---
 
@@ -38,11 +83,15 @@ The codebase was migrated to **AI SDK v6 native patterns** in commit `1e1963e`. 
 │  Nunjucks Templates • Section Variants • Asset Pipeline         │
 ├─────────────────────────────────────────────────────────────────┤
 │                        AGENT LAYER                              │
-│  AI SDK 6 ToolLoopAgent • stopWhen • Confirmed Flag Pattern     │
+│  ToolLoopAgent • Static System Prompt • Dynamic Tool Injection  │
+│  Three-Phase Lifecycle • Hybrid Search • Cache-Safe Messages    │
 ├─────────────────────────────────────────────────────────────────┤
 │                       SERVICES LAYER                            │
-│  PageService • SessionService • ConversationLogService • Vector │
-│  Tokenizer • OpenRouter Pricing • WorkerEventsService           │
+│  PageService • SessionService • ToolSearchService • Vector      │
+│  SmartSearch • Tokenizer • OpenRouter Pricing • WorkerEvents    │
+├─────────────────────────────────────────────────────────────────┤
+│                     MEMORY LAYER (NEW)                          │
+│  WorkingContext • ToolSearchState • CompactionService           │
 ├─────────────────────────────────────────────────────────────────┤
 │                    BACKGROUND LAYER                             │
 │  BullMQ • Redis • Image Worker • Redis Pub/Sub Events           │
@@ -51,7 +100,7 @@ The codebase was migrated to **AI SDK v6 native patterns** in commit `1e1963e`. 
 │  SQLite + Drizzle ORM • LanceDB Vector Store                    │
 ├─────────────────────────────────────────────────────────────────┤
 │                      SERVER CORE                                │
-│  Express.js • Dependency Injection • Middleware • Routes        │
+│  Express.js • Service Factory • Tool Registry • Routes          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -61,9 +110,9 @@ The codebase was migrated to **AI SDK v6 native patterns** in commit `1e1963e`. 
 
 | #   | Layer                                            | File                     | Description                                         |
 | --- | ------------------------------------------------ | ------------------------ | --------------------------------------------------- |
-| 1   | [Server Core](./LAYER_1_SERVER_CORE.md)          | `LAYER_1_SERVER_CORE.md` | Express setup, DI container, routing, middleware    |
+| 1   | [Server Core](./LAYER_1_SERVER_CORE.md)          | `LAYER_1_SERVER_CORE.md` | Express setup, service factory, routing, middleware |
 | 2   | [Database & Persistence](./LAYER_2_DATABASE.md)  | `LAYER_2_DATABASE.md`    | SQLite/Drizzle schema, LanceDB vectors, migrations  |
-| 3   | [Agent System](./LAYER_3_AGENT.md)               | `LAYER_3_AGENT.md`       | ReAct loop, tool registry, working memory, HITL     |
+| 3   | [Agent System](./LAYER_3_AGENT.md)               | `LAYER_3_AGENT.md`       | Dynamic tool injection, hybrid search, cache-safe   |
 | 4   | [Services](./LAYER_4_SERVICES.md)                | `LAYER_4_SERVICES.md`    | Business logic, data access, cross-cutting concerns |
 | 5   | [Background Processing](./LAYER_5_BACKGROUND.md) | `LAYER_5_BACKGROUND.md`  | Job queues, workers, async image processing         |
 | 6   | [Client](./LAYER_6_CLIENT.md)                    | `LAYER_6_CLIENT.md`      | Next.js frontend, state management, SSE handling    |
@@ -136,10 +185,10 @@ The Agent System is the core of the AI capabilities. These sub-documents provide
 
 | #   | Topic                                                 | File                             | Description                                           |
 | --- | ----------------------------------------------------- | -------------------------------- | ----------------------------------------------------- |
-| 3.1 | [ReAct Loop](./LAYER_3.1_REACT_LOOP.md)               | `LAYER_3.1_REACT_LOOP.md`        | Orchestrator, Think→Act→Observe cycle, step limits    |
-| 3.2 | [Tools](./LAYER_3.2_TOOLS.md)                         | `LAYER_3.2_TOOLS.md`             | Tool anatomy, categories, Zod schemas, composition    |
-| 3.3 | [Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       | `LAYER_3.3_WORKING_MEMORY.md`    | Entity tracking, sliding window, reference resolution |
-| 3.4 | [Prompts](./LAYER_3.4_PROMPTS.md)                     | `LAYER_3.4_PROMPTS.md`           | System prompt structure, XML/Handlebars, injection    |
+| 3.1 | [ReAct Loop](./LAYER_3.1_REACT_LOOP.md)               | `LAYER_3.1_REACT_LOOP.md`        | Three-phase tool lifecycle, prepareStep dynamics      |
+| 3.2 | [Tools](./LAYER_3.2_TOOLS.md)                         | `LAYER_3.2_TOOLS.md`             | Per-tool folders, registry, hybrid search             |
+| 3.3 | [Working Memory](./LAYER_3.3_WORKING_MEMORY.md)       | `LAYER_3.3_WORKING_MEMORY.md`    | Entity + discovered tools, context injection          |
+| 3.4 | [Prompts](./LAYER_3.4_PROMPTS.md)                     | `LAYER_3.4_PROMPTS.md`           | Static system prompt, message-based guidance          |
 | 3.5 | [Human-in-the-Loop](./LAYER_3.5_HITL.md)              | `LAYER_3.5_HITL.md`              | Confirmed flag pattern, conversational confirmations  |
 | 3.6 | [Error Recovery](./LAYER_3.6_ERROR_RECOVERY.md)       | `LAYER_3.6_ERROR_RECOVERY.md`    | Retry logic, backoff, stuck detection, degradation    |
 | 3.7 | [Streaming](./LAYER_3.7_STREAMING.md)                 | `LAYER_3.7_STREAMING.md`         | SSE events, real-time feedback, frontend parsing      |

@@ -7,11 +7,10 @@
 Human-in-the-Loop ensures users maintain control over dangerous or irreversible operations. Our system implements a **unified confirmation flag pattern** where destructive tools return a confirmation request, the agent asks the user conversationally, and only proceeds when the user explicitly confirms.
 
 **Key Files:**
-- `server/tools/all-tools.ts` - Tool definitions with `confirmed` parameter
-- `server/tools/post-tools.ts` - Post tools (publish, archive, delete)
-- `server/tools/image-tools.ts` - Image deletion tool
-- `server/prompts/core/agent.xml` - Confirmation pattern in operational-knowledge
-- `server/tools/instructions/index.ts` - Per-tool GOTCHA patterns for confirmations
+- `server/tools/{toolName}/` - Per-tool folders with `confirmed` parameter in schema
+- `server/tools/{toolName}/{toolName}-metadata.ts` - Risk level and confirmation flag
+- `server/prompts/agent/main-agent-prompt.xml` - Static prompt with confirmation guidance
+- `server/prompts/tools/{toolName}-prompt.xml` - Per-tool guidance files
 
 ---
 
@@ -89,11 +88,11 @@ Agent: Deleted 5 pages.
 
 ### Tool Definition Pattern
 
-All destructive tools follow the same pattern:
+All destructive tools follow the same pattern with per-tool folder structure:
 
 ```typescript
-// server/tools/all-tools.ts
-export const cmsDeletePage = tool({
+// server/tools/deletePage/deletePage-tool.ts
+export const deletePage = tool({
   description: 'Delete a page permanently (CASCADE: deletes all sections). This cannot be undone. Requires confirmed: true.',
   inputSchema: z.object({
     slug: z.string().optional().describe('Page slug'),
@@ -142,8 +141,8 @@ export const cmsDeletePage = tool({
 ### Post Tools Example
 
 ```typescript
-// server/tools/post-tools.ts
-export const cmsPublishPost = tool({
+// server/tools/publishPost/publishPost-tool.ts
+export const publishPost = tool({
   description: 'Publish a draft post (makes it publicly visible). Requires confirmed: true.',
   inputSchema: z.object({
     postSlug: z.string().describe('Post slug to publish'),
@@ -179,35 +178,44 @@ export const cmsPublishPost = tool({
 
 ## Prompt Instructions
 
-The confirmation pattern is defined in `agent.xml` and reinforced in per-tool instructions:
+The confirmation pattern is defined in the static system prompt and per-tool prompt files:
 
 ```xml
-<!-- server/prompts/core/agent.xml -->
-<operational-knowledge>
-**Confirmations:** When tool returns `requiresConfirmation: true`:
-1. Ask user to confirm via final_answer
-2. On confirmation, call tool with `confirmed: true`
-</operational-knowledge>
+<!-- server/prompts/agent/main-agent-prompt.xml -->
+<core-behaviors>
+  - Confirm destructive actions before executing
+  - When tool returns requiresConfirmation: true, ask user conversationally
+  - Only call with confirmed: true after explicit user confirmation
+</core-behaviors>
 ```
 
-Per-tool instructions reinforce this pattern:
+Per-tool prompt files provide additional guidance:
+
+```xml
+<!-- server/prompts/tools/deletePage-prompt.xml -->
+<tool-prompt name="deletePage">
+  <workflow>
+    BEFORE: Get page to verify; check navigation for references
+    AFTER: Ask user to confirm deletion conversationally
+    ON_CONFIRM: Call with confirmed: true
+  </workflow>
+  <gotcha>
+    CASCADE deletes all sections. Requires confirmed: true.
+  </gotcha>
+</tool-prompt>
+```
+
+Tool metadata marks risk level:
 
 ```typescript
-// server/tools/instructions/index.ts
-cms_deletePage: `BEFORE: cms_getPage to verify; cms_getNavigation to check if in menu
-AFTER: Confirm deletion
-NEXT: cms_removeNavigationItem if was in navigation
-GOTCHA: CASCADE deletes all sections. Requires confirmed:true.`,
-
-cms_publishPost: `BEFORE: Post must exist as draft (verify with cms_getPost)
-AFTER: Confirm publication, offer preview at /posts/blog/{slug}
-NEXT: cms_getPost (show final state)
-GOTCHA: Requires confirmation flow - first call returns requiresConfirmation.`,
-
-cms_deleteImage: `BEFORE: Check image usage (may be in sections)
-AFTER: Confirm deletion
-NEXT: None
-GOTCHA: Requires confirmed:true. Check for usages first.`,
+// server/tools/deletePage/deletePage-metadata.ts
+const metadata: ToolMetadata = {
+  name: 'deletePage',
+  description: 'Delete a page permanently',
+  riskLevel: 'destructive',  // UI indicator
+  requiresConfirmation: true,
+  // ...
+};
 ```
 
 ---

@@ -7,9 +7,11 @@
 Context injection provides tools with access to databases, services, logging, and request-specific information without global state or manual parameter passing. We use AI SDK v6's `experimental_context` pattern combined with a singleton ServiceContainer.
 
 **Key Files:**
-- `server/agent/orchestrator.ts` - Context creation
+- `server/agents/main-agent.ts` - Context in prepareCall
+- `server/execution/orchestrator.ts` - Context assembly
+- `server/execution/context-coordinator.ts` - Context preparation
 - `server/services/service-container.ts` - Service singleton
-- `server/utils/get-context.ts` - Request context extraction
+- `server/tools/_types/agent-context.ts` - AgentContext interface
 
 ---
 
@@ -107,7 +109,7 @@ execute: async (input, { experimental_context }) => {
 ## AgentContext Interface
 
 ```typescript
-// server/agent/types.ts
+// server/tools/_types/agent-context.ts
 interface AgentContext {
   // === DATABASE ===
   db: DrizzleDB;  // Direct database access

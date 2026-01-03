@@ -6,7 +6,7 @@
 
 The services layer encapsulates all business logic. Services are stateless classes that coordinate between the database, vector store, and other infrastructure. They're accessed via the ServiceContainer singleton.
 
-**Key Changes (AI SDK 6 Migration):**
+**Key Changes (Dynamic Tool Injection Architecture):**
 - ApprovalQueue removed (conversational `confirmed` flag pattern on tools)
 - SessionService checkpoint methods removed
 - Added tokenizer and pricing services
@@ -14,6 +14,9 @@ The services layer encapsulates all business logic. Services are stateless class
 - NEW: ConversationLogService for debug log persistence
 - NEW: WorkerEventsService for real-time job status via Redis pub/sub
 - NEW: AgentOrchestrator service (extracted from routes)
+- NEW: ToolSearchService for hybrid BM25+vector tool discovery
+- NEW: SmartSearch for confidence-based search blending
+- Working memory moved to `server/memory/` folder structure
 
 **Location:** `server/services/`
 
@@ -56,9 +59,20 @@ The services layer encapsulates all business logic. Services are stateless class
 │  │  └───────────────────┘  └─────────────────────────────────┘   ││
 │  └───────────────────────────────────────────────────────────────┘│
 │                                                                   │
+│  ┌───────────────────────────────────────────────────────────────┐│
+│  │                    Tool Search Services (NEW)               ││
+│  │  ┌───────────────────┐  ┌─────────────────────────────────┐   ││
+│  │  │   BM25 Search     │  │     Vector Search               │   ││
+│  │  │   (Lexical)       │  │   (Semantic)                    │   ││
+│  │  └───────────────────┘  └─────────────────────────────────┘   ││
+│  │  ┌───────────────────────────────────────────────────────┐    ││
+│  │  │  SmartSearch (Confidence-based blending + expansion)  │    ││
+│  │  └───────────────────────────────────────────────────────┘    ││
+│  └───────────────────────────────────────────────────────────────┘│
+│                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                    Working Memory                           │  │
-│  │        (Entity Extraction + Reference Resolution)           │  │
+│  │           Memory Management (server/memory/)               │  │
+│  │   WorkingContext • ToolSearchState • CompactionService      │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -80,7 +94,13 @@ The services layer encapsulates all business logic. Services are stateless class
 | `server/services/site-settings-service.ts` | Global config |
 | `server/services/renderer-service.ts` | Template rendering |
 | `server/services/navigation-service.ts` | Menu structure |
-| `server/services/working-memory/` | Entity tracking |
+| `server/memory/working-context/` | Entity tracking (moved) |
+| `server/memory/tool-search/` | Tool search state management (NEW) |
+| `server/memory/compaction/` | Provider-anchored compaction (NEW) |
+| `server/services/search/tool-search.service.ts` | Hybrid tool search (NEW) |
+| `server/services/search/smart-search.ts` | BM25+vector blending (NEW) |
+| `server/services/search/bm25-search.ts` | Lexical search (NEW) |
+| `server/services/search/vector-search.ts` | Semantic search (NEW) |
 | `lib/tokenizer.ts` | Token counting (NEW) |
 | `server/services/openrouter-pricing.ts` | Cost calculation (NEW) |
 | `server/services/conversation-log-service.ts` | Debug log persistence (NEW) |
@@ -610,47 +630,180 @@ class VectorIndexService {
 
 ---
 
-## Working Memory
+## NEW: Tool Search Service
 
-In-memory entity tracking across agent steps:
+Hybrid BM25+vector search for dynamic tool discovery:
 
 ```typescript
-// server/services/working-memory/index.ts
-class WorkingContext {
-  private entities = new Map<string, Entity>();
+// server/services/search/tool-search.service.ts
+export class ToolSearchService {
+  private bm25: BM25Search;
+  private vector: VectorSearch;
 
-  add(entity: Entity) {
-    this.entities.set(entity.id, entity);
-    // Keep only last 10 entities (sliding window)
-    if (this.entities.size > 10) {
-      const oldest = [...this.entities.entries()]
-        .sort((a, b) => a[1].stepNumber - b[1].stepNumber)[0];
-      this.entities.delete(oldest[0]);
-    }
-  }
+  constructor(
+    private readonly registry: ToolRegistry
+  ) {}
 
-  toContextString(): string {
-    if (this.entities.size === 0) return '';
+  /**
+   * Search for tools using hybrid BM25+vector approach
+   */
+  async search(query: string, limit: number = 8): Promise<SmartSearchResult> {
+    // Run both searches
+    const bm25Results = this.bm25.search(query, limit);
+    const vectorResults = await this.vector.search(query, limit);
 
-    const lines = ['[WORKING MEMORY]'];
-    for (const entity of this.entities.values()) {
-      lines.push(`- ${entity.type}: "${entity.name}" (id: ${entity.id})`);
-    }
-    return lines.join('\n');
-  }
+    // Smart blend based on confidence
+    const blended = smartBlend(bm25Results, vectorResults);
 
-  toJSON(): SerializedContext {
+    // Expand with related tools
+    const expanded = this.expandWithRelated(blended, limit);
+
     return {
-      entities: Array.from(this.entities.entries())
+      tools: expanded.map(r => r.name),
+      scores: expanded.map(r => r.score),
+      method: this.determineMethod(bm25Results, vectorResults),
     };
   }
 
-  static fromJSON(data: SerializedContext): WorkingContext {
-    const ctx = new WorkingContext();
-    for (const [id, entity] of data.entities) {
-      ctx.entities.set(id, entity);
+  /**
+   * Expand results with related tools
+   */
+  private expandWithRelated(
+    results: SearchResult[],
+    limit: number
+  ): SearchResult[] {
+    const expanded = [...results];
+    const seen = new Set(results.map(r => r.name));
+
+    for (const result of results.slice(0, 3)) {
+      const metadata = this.registry.get(result.name);
+      if (!metadata?.relatedTools) continue;
+
+      for (const related of metadata.relatedTools.slice(0, 3)) {
+        if (seen.has(related) || expanded.length >= limit) continue;
+        seen.add(related);
+        expanded.push({
+          name: related,
+          score: result.score * 0.8, // Discount related
+        });
+      }
     }
-    return ctx;
+
+    return expanded;
+  }
+}
+```
+
+### Smart Blending Strategy
+
+```typescript
+// server/services/search/smart-search.ts
+export function smartBlend(
+  bm25: SearchResult[],
+  vector: SearchResult[]
+): SearchResult[] {
+  const topBM25Score = bm25[0]?.score || 0;
+
+  // High confidence in BM25 (>0.7) → use it alone
+  if (topBM25Score > 0.7) {
+    return bm25;
+  }
+
+  // Low confidence (<0.3) → fall back to vector
+  if (topBM25Score < 0.3) {
+    return vector;
+  }
+
+  // Medium confidence → reciprocal rank fusion
+  return reciprocalRankFusion(bm25, vector);
+}
+
+function reciprocalRankFusion(
+  bm25: SearchResult[],
+  vector: SearchResult[]
+): SearchResult[] {
+  const scores = new Map<string, number>();
+  const k = 60; // Constant for RRF
+
+  // Score BM25 results
+  bm25.forEach((r, i) => {
+    scores.set(r.name, (scores.get(r.name) || 0) + 1 / (k + i + 1));
+  });
+
+  // Score vector results
+  vector.forEach((r, i) => {
+    scores.set(r.name, (scores.get(r.name) || 0) + 1 / (k + i + 1));
+  });
+
+  // Sort by combined score
+  return Array.from(scores.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, score]) => ({ name, score }));
+}
+```
+
+---
+
+## Working Memory
+
+Moved to `server/memory/working-context/` - tracks entities and discovered tools:
+
+```typescript
+// server/memory/working-context/working-context.ts
+class WorkingContext {
+  private entities: Map<string, Entity> = new Map();
+  private entitiesOrder: string[] = [];
+  private discoveredTools: string[] = [];  // NEW: Tool persistence
+
+  readonly MAX_ENTITIES = 10;
+  readonly MAX_DISCOVERED_TOOLS = 20;
+
+  addEntity(entity: Entity) {
+    // Move to front (most recent)
+    const existing = this.entitiesOrder.indexOf(entity.id);
+    if (existing !== -1) {
+      this.entitiesOrder.splice(existing, 1);
+    }
+    this.entitiesOrder.unshift(entity.id);
+    this.entities.set(entity.id, { ...entity, timestamp: new Date() });
+
+    // Trim to max
+    while (this.entitiesOrder.length > this.MAX_ENTITIES) {
+      const removed = this.entitiesOrder.pop()!;
+      this.entities.delete(removed);
+    }
+  }
+
+  addDiscoveredTools(tools: string[]) {
+    for (const tool of tools) {
+      if (!this.discoveredTools.includes(tool)) {
+        this.discoveredTools.push(tool);
+      }
+    }
+    // Trim to max
+    if (this.discoveredTools.length > this.MAX_DISCOVERED_TOOLS) {
+      this.discoveredTools = this.discoveredTools.slice(0, this.MAX_DISCOVERED_TOOLS);
+    }
+  }
+
+  getDiscoveredTools(): string[] {
+    return [...this.discoveredTools];  // For prepareCall
+  }
+
+  toContextString(): string {
+    if (this.entities.size === 0) return 'No entities tracked yet.';
+
+    const lines: string[] = [];
+    const grouped = this.groupByType();
+
+    for (const [type, entities] of grouped) {
+      lines.push(`${type}s:`);
+      for (const entity of entities) {
+        lines.push(`  - "${entity.name}" (${entity.id})`);
+      }
+    }
+
+    return lines.join('\n');
   }
 }
 ```

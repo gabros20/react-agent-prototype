@@ -4,7 +4,7 @@
 **Organization**: 12 layers (Foundation → Advanced) with 72 topics total  
 **Grounding**: Research papers, production systems, proven implementations from this codebase
 
-**Last Updated**: 2025-12-12
+**Last Updated**: 2026-01-03
 **Status**: 🚧 In Progress
 
 ---
@@ -75,7 +75,7 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 108/109 topics (99%)
+**Completion**: 112/113 topics (99%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
@@ -86,14 +86,23 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 4: Memory & State              | 5      | ✅ Complete    | 21/21 (100%) |
 | Layer 5: Retrieval & RAG             | 4      | ✅ Complete    | 20/20 (100%) |
 | Layer 6: Planning & Orchestration    | 4      | ✅ Complete    | 20/20 (100%) |
-| Layer 7: Error Recovery & Resilience | 5      | ⏳ Pending     | 0/20         |
+| Layer 7: Error Recovery & Resilience | 4      | ✅ Complete    | 4/4 (100%)   |
 | Layer 8: Tool Design Patterns        | 4      | ⏳ Pending     | 0/20         |
 | Layer 9: Human-in-the-Loop           | 3      | ⏳ Pending     | 0/15         |
 | Layer 10: Multi-Agent Systems        | 4      | ⏳ Pending     | 0/20         |
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
-**Latest Updates** (2025-12-12):
+**Latest Updates** (2026-01-03):
+
+**Layer 7: Error Recovery & Resilience** (4/4 topics - ✅ 100% COMPLETE - Restructured Jan 2026):
+
+_Consolidated from 24 granular topics into 4 high-signal documents:_
+
+-   ✅ 7.1 Error Classification & Taxonomy - **NEW!** Five-Module Taxonomy, Three-Source Model, MAST for multi-agent, 87% root cause detection
+-   ✅ 7.2 Recovery Strategy Selection - **NEW!** Retry/Fallback/Skip/Escalate decision tree, exponential backoff, Saga pattern
+-   ✅ 7.3 Resilience Patterns - **NEW!** Circuit breakers, bulkheads, timeouts, per-tool isolation, 80% cascade prevention
+-   ✅ 7.4 Tool Validation & Self-Healing - **NEW!** Silent failure detection, post-mutation verification, anomaly detection, 98% accuracy
 
 **Layer 6: Planning & Orchestration** (20/20 topics - ✅ 100% COMPLETE - Restructured Dec 2025):
 
@@ -118,7 +127,7 @@ _Tree of Thoughts (5/5 - ✅ COMPLETE)_:
 -   ✅ 6.3.1 Multi-Path - **NEW!** ToT (4%→74% Game of 24), LATS (92.7% HumanEval), Self-Consistency (+17.9% GSM8K)
 -   ✅ 6.3.2 Branching - **NEW!** Fixed K-way, adaptive, constrained branching, K=3-5 optimal
 -   ✅ 6.3.3 Pruning - **NEW!** Score-based, depth-limited, beam pruning, 60-80% node reduction
--   ✅ 6.3.4 Best-First - **NEW!** Priority queue implementation, A* variant, 50% fewer nodes explored
+-   ✅ 6.3.4 Best-First - **NEW!** Priority queue implementation, A\* variant, 50% fewer nodes explored
 -   ✅ 6.3.5 When to Use - **NEW!** Decision framework, cost-benefit (10-50× cost for 70% improvement), CoT threshold
 
 _Preflight Validation (5/5 - ✅ COMPLETE)_:
@@ -888,7 +897,7 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 -   [6.3.3 Pruning (Dead Ends)](./6-planning/6.3.3-pruning.md) ✅
     -   Score-based, depth-limited, beam pruning (60-80% reduction)
 -   [6.3.4 Best-First Search](./6-planning/6.3.4-best-first.md) ✅
-    -   Priority queue, A* variant, 50% fewer nodes explored
+    -   Priority queue, A\* variant, 50% fewer nodes explored
 -   [6.3.5 When to Use (Complex Problems)](./6-planning/6.3.5-when-to-use.md) ✅
     -   Decision framework: 10-50× cost for 70% improvement
 
@@ -911,47 +920,31 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 **Goal**: Build robust agents that handle failures gracefully
 
-#### 7.1 Error Classification
+**Status**: ✅ Complete (4/4 topics - Restructured Jan 2026)
 
--   [7.1.1 7 Error Types (Validation, Constraint, Not Found, etc.)](./kb/7-errors/7.1.1-error-types.md) ⏳
-    -   **Research**: SuperAGI (2024) - 40% reduction in dead-end failures
--   [7.1.2 Pattern Matching (SQLite Errors, HTTP Codes)](./kb/7-errors/7.1.2-pattern-matching.md) ⏳
--   [7.1.3 LLM-Based Classification (Ambiguous Errors)](./kb/7-errors/7.1.3-llm-classification.md) ⏳
--   [7.1.4 Agent-Friendly Observations](./kb/7-errors/7.1.4-observations.md) ⏳
+_Error Classification (1/1 - ✅ COMPLETE)_:
 
-#### 7.2 Recovery Strategies
+-   [7.1 Error Classification & Taxonomy](./7-errors/7.1-error-classification.md) ✅
+    -   Five-Module Taxonomy (Memory/Reflection/Planning/Action/System), Three-Source Model, MAST for multi-agent
+    -   **Research**: AgentDebug (2024) - 24% higher accuracy, 87% root cause detection
 
--   [7.2.1 Retry (Transient Errors)](./kb/7-errors/7.2.1-retry.md) ⏳
--   [7.2.2 Fallback (Not Found → Create Instead)](./kb/7-errors/7.2.2-fallback.md) ⏳
--   [7.2.3 Skip (Wait for Recovery)](./kb/7-errors/7.2.3-skip.md) ⏳
--   [7.2.4 Escalate (Unrecoverable)](./kb/7-errors/7.2.4-escalate.md) ⏳
--   [7.2.5 Strategy Selection by Error Type](./kb/7-errors/7.2.5-selection.md) ⏳
+_Recovery Strategies (1/1 - ✅ COMPLETE)_:
 
-#### 7.3 Circuit Breaker Pattern
+-   [7.2 Recovery Strategy Selection](./7-errors/7.2-recovery-strategies.md) ✅
+    -   Retry vs. Fallback vs. Skip vs. Escalate decision tree, exponential backoff with jitter, recovery budgets
+    -   **Research**: 90% failure reduction with proper retry logic, Saga pattern for compensation
 
--   [7.3.1 States: Closed, Open, Half-Open](./kb/7-errors/7.3.1-states.md) ⏳
-    -   **Research**: Michael T. Nygard - Release It!
--   [7.3.2 Failure Threshold (3 Consecutive)](./kb/7-errors/7.3.2-threshold.md) ⏳
--   [7.3.3 Timeout Duration (30s)](./kb/7-errors/7.3.3-timeout.md) ⏳
--   [7.3.4 Test Call (Half-Open)](./kb/7-errors/7.3.4-test-call.md) ⏳
--   [7.3.5 Per-Tool Circuit Breakers](./kb/7-errors/7.3.5-per-tool.md) ⏳
+_Resilience Patterns (1/1 - ✅ COMPLETE)_:
 
-#### 7.4 Retry Strategies
+-   [7.3 Resilience Patterns](./7-errors/7.3-resilience-patterns.md) ✅
+    -   Circuit breakers (Closed/Open/Half-Open), bulkheads, timeouts, per-tool isolation
+    -   **Research**: Release It! (Nygard), 80% cascade prevention with circuit breakers
 
--   [7.4.1 Exponential Backoff (1s, 2s, 4s, 8s)](./kb/7-errors/7.4.1-exponential-backoff.md) ⏳
-    -   **Codebase Example**: `server/agent/orchestrator.ts` (retry logic with jitter)
--   [7.4.2 Jitter (Avoid Thundering Herd)](./kb/7-errors/7.4.2-jitter.md) ⏳
--   [7.4.3 Max Retries (3-5)](./kb/7-errors/7.4.3-max-retries.md) ⏳
--   [7.4.4 Budget Tracking](./kb/7-errors/7.4.4-budget.md) ⏳
--   [7.4.5 When to Give Up](./kb/7-errors/7.4.5-when-give-up.md) ⏳
+_Tool Validation (1/1 - ✅ COMPLETE)_:
 
-#### 7.5 Tool Result Validation
-
--   [7.5.1 Post-Mutation Verification](./kb/7-errors/7.5.1-post-mutation.md) ⏳
--   [7.5.2 Expected State Checks](./kb/7-errors/7.5.2-state-checks.md) ⏳
--   [7.5.3 Silent Failure Detection (60% of Issues)](./kb/7-errors/7.5.3-silent-failures.md) ⏳
--   [7.5.4 Auto-Correction (Retry with Fix)](./kb/7-errors/7.5.4-auto-correction.md) ⏳
--   [7.5.5 Validation Cost (~50-100ms per Mutation)](./kb/7-errors/7.5.5-cost.md) ⏳
+-   [7.4 Tool Validation & Self-Healing](./7-errors/7.4-tool-validation.md) ✅
+    -   Post-mutation verification, silent failure detection (drift/cycles/missing), anomaly detection, self-healing loops
+    -   **Research**: "Tools Fail" (2024) - 30% accuracy improvement with distrust prompting, 98% anomaly detection
 
 ---
 

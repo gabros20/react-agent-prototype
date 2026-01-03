@@ -139,7 +139,6 @@ export class AgentController {
 │  ├──────────────────────────────────────────────────────┤ │
 │  │ • ReAct Orchestrator (AI SDK v6)                     │ │
 │  │ • Memory Manager (Hierarchical)                      │ │
-│  │ • Checkpoint Manager (State persistence)             │ │
 │  │ • Prompt Composer (Mode-based)                       │ │
 │  │ • Circuit Breaker (Error recovery)                   │ │
 │  │ • Tool Registry (Dynamic discovery)                  │ │

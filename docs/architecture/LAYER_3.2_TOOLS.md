@@ -1,209 +1,20 @@
 # Layer 3.2: Tool System
 
-> How tools give the agent capabilities to affect the world
+> Per-tool folder architecture with unified registry and hybrid search discovery
 
 ## Overview
 
-Tools are the agent's hands. They transform LLM reasoning into real actions - creating pages, uploading images, updating navigation. Our implementation uses native AI SDK v6 tools with no wrappers or factories.
+Tools are the agent's hands. They transform LLM reasoning into real actions - creating pages, uploading images, updating navigation. Our implementation uses a **per-tool folder structure** where each tool is self-contained with its metadata, schema, and implementation.
+
+**Key Innovation**: Tools are discovered on-demand via `searchTools` using hybrid BM25+vector search, not loaded all at once.
 
 **Key Files:**
 
--   `server/tools/all-tools.ts` - Tool registry
--   `server/tools/types.ts` - Type definitions
--   `server/tools/*.ts` - Individual tool implementations
-
----
-
-## The Problem
-
-LLMs produce text, not actions. Without tools:
-
--   "Create a page" → Text describing how to create a page
--   With tools:
--   "Create a page" → Actual API call → Real page in database
-
-Tools bridge the gap between language and action.
-
----
-
-## How Tool Calling Works
-
-This section explains the fundamental mechanics of how an LLM "calling a function" actually results in code execution. Understanding this is crucial for grasping the entire agent system.
-
-### The Key Insight
-
-When we say the agent "calls" `cms_createPage({title: "About"})`, the LLM doesn't execute JavaScript. Instead:
-
-1. **LLM returns structured tool calls** (not just text)
-2. **AI SDK intercepts and executes** the actual functions
-3. **Results go back to LLM** as observations
-
-### Step 1: LLM Sees Tools as JSON Schema
-
-When creating the agent, tools are registered and converted to JSON schema:
-
-```typescript
-// server/agent/orchestrator.ts
-return new ToolLoopAgent({
-	model: openrouter.languageModel(AGENT_CONFIG.modelId),
-	tools: ALL_TOOLS, // All tools available
-	// ...
-});
-```
-
-The AI SDK converts each tool definition to JSON schema for the LLM. The LLM prompt includes something like:
-
-```json
-{
-	"name": "cms_createPage",
-	"description": "Create a new page with optional sections",
-	"parameters": {
-		"type": "object",
-		"properties": {
-			"title": { "type": "string", "description": "Page title" },
-			"slug": { "type": "string", "description": "URL slug" }
-		}
-	}
-}
-```
-
-### Step 2: LLM Returns Tool Calls (Not Just Text)
-
-When the LLM decides to use a tool, it returns a **structured response** with `tool_calls`, not plain text. Modern LLMs (GPT-4, Claude, etc.) support native function calling:
-
-```json
-{
-	"role": "assistant",
-	"content": "I need to create a page first.",
-	"tool_calls": [
-		{
-			"id": "call_abc123",
-			"type": "function",
-			"function": {
-				"name": "cms_createPage",
-				"arguments": "{\"title\": \"About\"}"
-			}
-		}
-	]
-}
-```
-
-> **Critical Distinction:** This is NOT prompt engineering magic. Native function calling is a trained capability of modern LLMs - they're explicitly trained to output structured `tool_calls` in their response format.
-
-### Step 3: AI SDK Intercepts and Executes
-
-The AI SDK framework intercepts the `tool_calls` from the LLM response:
-
-```typescript
-// Inside streamText() or ToolLoopAgent.generate()
-case "tool-call":
-  // 1. Extract tool name and arguments
-  const { toolName, input, toolCallId } = chunk;
-
-  // 2. Look up the tool from ALL_TOOLS registry
-  const tool = ALL_TOOLS[toolName];
-
-  // 3. Validate input against Zod schema
-  const validated = tool.inputSchema.parse(input);
-
-  // 4. Execute the tool's execute() function
-  const result = await tool.execute(validated, { experimental_context: context });
-```
-
-At this point, **real code runs**:
-
-```typescript
-// Inside cms_createPage.execute()
-const page = await ctx.services.pageService.createPage(ctx.cmsTarget.siteId, ctx.cmsTarget.environmentId, input);
-// → Database INSERT actually happens here!
-```
-
-### Step 4: Results Return to LLM
-
-The tool result is appended to the conversation as a `tool` message:
-
-```json
-{
-	"role": "tool",
-	"tool_call_id": "call_abc123",
-	"content": "{\"success\": true, \"page\": {\"id\": \"page-123\", \"title\": \"About\"}}"
-}
-```
-
-The LLM sees this in the next iteration and can reason about it (OBSERVE phase).
-
-### Step 5: Loop Continues
-
-With the tool result in context, the LLM decides what to do next:
-
--   More tool calls needed? → Return another `tool_calls` response
--   Task complete? → Return text with `FINAL_ANSWER:`
-
-### Visual Summary
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. User: "Create About page"                                │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. LLM Thinks & Returns Structured Response                 │
-│                                                             │
-│    {                                                        │
-│      content: "I'll create a page",                         │
-│      tool_calls: [{                                         │
-│        name: "cms_createPage",                              │
-│        arguments: '{"title": "About"}'                      │
-│      }]                                                     │
-│    }                                                        │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. AI SDK Intercepts Tool Call                              │
-│    - Looks up tool in ALL_TOOLS registry                    │
-│    - Validates input via Zod schema                         │
-│    - Calls tool.execute(input, context)                     │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 4. Tool Executes Real Code                                  │
-│    await pageService.createPage(...)                        │
-│    → Database INSERT                                        │
-│    → Returns: { id: "page-123", title: "About" }            │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 5. Result Appended to Messages                              │
-│    messages.push({                                          │
-│      role: "tool",                                          │
-│      tool_call_id: "call_abc123",                           │
-│      content: '{"success": true, "page": {...}}'            │
-│    })                                                       │
-└───────────────────────┬─────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 6. Next LLM Call (Loop Continues)                           │
-│    LLM sees tool result, decides next action or stops       │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### This Pattern Is Universal
-
-Every modern agentic framework works this way:
-
-| Framework     | Approach                                          |
-| ------------- | ------------------------------------------------- |
-| AI SDK v6     | Native `tool()` function with automatic execution |
-| LangChain     | Tools → LLM → Tool execution → Loop               |
-| AutoGPT       | Same pattern with custom JSON parsing             |
-| Anthropic SDK | `tools` parameter in API calls                    |
-
-The "magic" is that modern LLMs are **trained** to output structured function calls, not just text. The framework's job is to intercept these calls and execute real code.
+-   `server/tools/{toolName}/` - Per-tool folders
+-   `server/tools/_registry/tool-registry.ts` - Unified tool registry
+-   `server/tools/_types/metadata.ts` - Metadata schema
+-   `server/tools/_loaders/tool-assembler.ts` - Tool assembly
+-   `server/services/search/tool-search.service.ts` - Hybrid search
 
 ---
 
@@ -211,207 +22,417 @@ The "magic" is that modern LLMs are **trained** to output structured function ca
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│                        Tool System                                │
+│                        Tool System                                 │
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                    ALL_TOOLS Registry                       │  │
+│  │                 Per-Tool Folder Structure                   │  │
 │  │                                                             │  │
-│  │   45 tools organized by domain:                             │  │
+│  │   server/tools/{toolName}/                                  │  │
+│  │   ├── {toolName}-metadata.ts   # Search phrases, risk       │  │
+│  │   ├── {toolName}-tool.ts       # Zod schema + execute       │  │
+│  │   └── index.ts                 # Exports + assembly         │  │
 │  │                                                             │  │
-│  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │  │
-│  │   │  Pages  │ │Sections │ │ Images  │ │  Posts  │           │  │
-│  │   │  (6)    │ │  (8)    │ │  (7)    │ │  (7)    │           │  │
-│  │   └─────────┘ └─────────┘ └─────────┘ └─────────┘           │  │
-│  │                                                             │  │
-│  │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │  │
-│  │   │ Entries │ │  Nav    │ │ Search  │ │  Web    │           │  │
-│  │   │  (2)    │ │  (5)    │ │  (2)    │ │Research │           │  │
-│  │   └─────────┘ └─────────┘ └─────────┘ │  (5)+   │           │  │
-│  │                                       └─────────┘           │  │
+│  │   36 tools organized this way                               │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
 │                              ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                    Tool Anatomy                             │  │
+│  │                    Tool Registry                            │  │
 │  │                                                             │  │
-│  │   tool({                                                    │  │
-│  │     description: "...",     ← LLM reads this                │  │
-│  │     inputSchema: z.object(), ← Zod validation               │  │
-│  │     execute: async (input, { experimental_context }) => {   │  │
-│  │       // Implementation                                     │  │
-│  │     }                                                       │  │
-│  │   })                                                        │  │
+│  │   Singleton initialized at startup                          │  │
+│  │   - Loads all metadata from per-tool folders                │  │
+│  │   - Builds search corpus (BM25 + vector)                    │  │
+│  │   - O(1) sync lookups after init                            │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 │                              │                                    │
 │                              ▼                                    │
 │  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                 TOOL_METADATA (Separate)                    │  │
+│  │                 Hybrid Search System                        │  │
 │  │                                                             │  │
-│  │   {                                                         │  │
-│  │     category: 'cms' | 'web' | 'http',                       │  │
-│  │     riskLevel: 'safe' | 'moderate' | 'high',                │  │
-│  │     requiresApproval: boolean,                              │  │
-│  │     tags: string[]                                          │  │
-│  │   }                                                         │  │
+│  │   ┌─────────────┐    ┌─────────────┐                        │  │
+│  │   │ BM25 Search │    │   Vector    │                        │  │
+│  │   │  (Lexical)  │ +  │   Search    │  → Smart Blend         │  │
+│  │   │             │    │ (Semantic)  │                        │  │
+│  │   └─────────────┘    └─────────────┘                        │  │
+│  │                                                             │  │
+│  │   + Related Tools Expansion                                 │  │
 │  └─────────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Tool Anatomy
+## Per-Tool Folder Structure
 
-Every tool follows the same structure:
+Each tool is self-contained in its own folder:
 
-```typescript
-import { tool } from "ai";
-import { z } from "zod";
-
-export const cms_createPage = tool({
-	// 1. Description - LLM uses this to decide when to call
-	description: "Create a new page with optional sections. Returns the created page with its ID.",
-
-	// 2. Input Schema - Zod validates input before execution
-	inputSchema: z.object({
-		title: z.string().describe("Page title"),
-		slug: z.string().optional().describe("URL slug (auto-generated if omitted)"),
-		sections: z.array(SectionSchema).optional().describe("Initial sections to add"),
-	}),
-
-	// 3. Execute - The actual implementation
-	execute: async (input, { experimental_context }) => {
-		const ctx = experimental_context as AgentContext;
-
-		const page = await ctx.services.pageService.createPage(ctx.cmsTarget.siteId, ctx.cmsTarget.environmentId, input);
-
-		ctx.logger.info(`Created page: ${page.title}`, { pageId: page.id });
-
-		return {
-			success: true,
-			page: {
-				id: page.id,
-				title: page.title,
-				slug: page.slug,
-				status: page.status,
-			},
-			message: `Created page "${page.title}" with slug "/${page.slug}"`,
-		};
-	},
-});
+```
+server/tools/createPage/
+├── createPage-metadata.ts    # Search phrases, related tools, risk level
+├── createPage-tool.ts        # Zod schema + execute function
+└── index.ts                  # Exports + AI SDK tool assembly
 ```
 
-### The Three Parts
+### Metadata File
 
-| Part          | Purpose                             | LLM Sees?            |
-| ------------- | ----------------------------------- | -------------------- |
-| `description` | Tells LLM when/why to use this tool | Yes                  |
-| `inputSchema` | Validates and documents parameters  | Yes (as JSON schema) |
-| `execute`     | Actual implementation               | No (only results)    |
+```typescript
+// server/tools/createPage/createPage-metadata.ts
+import type { ToolMetadata } from '../_types/metadata';
+
+const metadata: ToolMetadata = {
+  name: 'createPage',
+  description: 'Create a new page in the CMS with optional sections',
+  phrases: [
+    'create page',
+    'new page',
+    'add page',
+    'make page',
+    'create landing page',
+    'build page',
+  ],
+  relatedTools: ['getPage', 'updatePage', 'createSection'],
+  riskLevel: 'moderate',
+  requiresConfirmation: false,
+  extraction: {
+    type: 'page',
+    idPath: 'page.id',
+    namePath: 'page.title',
+  },
+};
+
+export default metadata;
+```
+
+### Tool Implementation File
+
+```typescript
+// server/tools/createPage/createPage-tool.ts
+import { z } from 'zod';
+import type { AgentContext } from '../_types/agent-context';
+
+export const createPageSchema = z.object({
+  title: z.string().describe('Page title'),
+  slug: z.string().optional().describe('URL slug (auto-generated if omitted)'),
+  template: z.string().optional().describe('Page template to use'),
+});
+
+export type CreatePageInput = z.infer<typeof createPageSchema>;
+
+export async function createPageExecute(
+  input: CreatePageInput,
+  ctx: AgentContext
+) {
+  const { siteId, environmentId } = ctx.cmsTarget;
+
+  const page = await ctx.services.page.create(siteId, environmentId, {
+    title: input.title,
+    slug: input.slug,
+    template: input.template,
+  });
+
+  ctx.logger.info(`Created page: ${page.title}`, { pageId: page.id });
+
+  return {
+    success: true,
+    page: {
+      id: page.id,
+      title: page.title,
+      slug: page.slug,
+      status: page.status,
+    },
+    message: `Created page "${page.title}" at /${page.slug}`,
+  };
+}
+```
+
+### Index File (Assembly)
+
+```typescript
+// server/tools/createPage/index.ts
+import { tool } from 'ai';
+import { createPageSchema, createPageExecute } from './createPage-tool';
+import metadata from './createPage-metadata';
+import type { AgentContext } from '../_types/agent-context';
+
+export const createPage = tool({
+  description: metadata.description,
+  inputSchema: createPageSchema,
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    return createPageExecute(input, ctx);
+  },
+});
+
+export { metadata };
+```
+
+---
+
+## Tool Metadata Schema
+
+```typescript
+// server/tools/_types/metadata.ts
+export interface ToolMetadata {
+  /** Tool name (matches folder name) */
+  name: string;
+
+  /** Description shown to LLM */
+  description: string;
+
+  /** Search phrases for BM25 matching */
+  phrases: string[];
+
+  /** Related tools for auto-expansion */
+  relatedTools: string[];
+
+  /** Risk level for UI indicators */
+  riskLevel: 'safe' | 'moderate' | 'destructive';
+
+  /** Whether confirmation is required */
+  requiresConfirmation: boolean;
+
+  /** Entity extraction configuration */
+  extraction: ExtractionSchema | null;
+}
+
+export interface ExtractionSchema {
+  type: 'page' | 'section' | 'image' | 'post' | 'entry';
+  idPath: string;           // e.g., 'page.id' or 'items[].id'
+  namePath: string;         // e.g., 'page.title'
+  customIdField?: string;   // For non-standard ID fields
+}
+```
+
+---
+
+## Tool Registry
+
+### Singleton Pattern
+
+```typescript
+// server/tools/_registry/tool-registry.ts
+export class ToolRegistry {
+  private static instance: ToolRegistry;
+  private readonly toolMap: Map<string, ToolMetadata> = new Map();
+  private _initialized = false;
+
+  static getInstance(): ToolRegistry {
+    if (!ToolRegistry.instance) {
+      ToolRegistry.instance = new ToolRegistry();
+    }
+    return ToolRegistry.instance;
+  }
+
+  /** Initialize at startup - loads all tool metadata */
+  async initialize(): Promise<void> {
+    if (this._initialized) return;
+
+    const toolFolders = this.getToolFolders();
+
+    // Load all metadata in parallel
+    const results = await Promise.all(
+      toolFolders.map(folder => this.loadMetadata(folder))
+    );
+
+    for (const metadata of results) {
+      if (metadata) {
+        this.toolMap.set(metadata.name, metadata);
+      }
+    }
+
+    // Pre-compute search corpus
+    this.searchCorpusCache = this.buildSearchCorpus();
+
+    this._initialized = true;
+  }
+
+  /** O(1) sync lookups after init */
+  get(name: string): ToolMetadata | undefined {
+    return this.toolMap.get(name);
+  }
+
+  getAll(): ToolMetadata[] {
+    return Array.from(this.toolMap.values());
+  }
+
+  getSearchCorpus(): SearchCorpusEntry[] {
+    return this.searchCorpusCache!;
+  }
+}
+```
+
+### Usage
+
+```typescript
+// At startup (once)
+await ToolRegistry.getInstance().initialize();
+
+// Anywhere after (O(1) sync)
+const metadata = ToolRegistry.getInstance().get('createPage');
+const corpus = ToolRegistry.getInstance().getSearchCorpus();
+```
 
 ---
 
 ## Tool Categories
 
-### CMS - Pages (6 tools)
+### Core Tools (Always Available)
 
-| Tool                        | Purpose                                | Risk     |
-| --------------------------- | -------------------------------------- | -------- |
-| `cmsGetPage`                | Get single page (with/without content) | Safe     |
-| `cmsCreatePage`             | Create new page                        | Safe     |
-| `cmsCreatePageWithContent`  | Create page with sections              | Safe     |
-| `cmsUpdatePage`             | Update page metadata                   | Moderate |
-| `cmsDeletePage`             | Delete page (requires confirmation)    | High     |
-| `cmsListPages`              | List all pages                         | Safe     |
+| Tool               | Purpose                              |
+| ------------------ | ------------------------------------ |
+| `searchTools`      | Discover tools via hybrid search     |
+| `finalAnswer`      | Complete response to user            |
+| `acknowledgeRequest`| Conversational preflight            |
 
-### CMS - Sections (8 tools)
+### CMS - Pages (4 tools)
 
-| Tool                       | Purpose                                | Risk     |
-| -------------------------- | -------------------------------------- | -------- |
-| `cmsListSectionTemplates`  | List available section templates       | Safe     |
-| `cmsSectionFields`         | Get section template fields/schema     | Safe     |
-| `cmsAddSectionToPage`      | Add section to page                    | Safe     |
-| `cmsUpdateSectionContent`  | Update section content (merges)        | Moderate |
-| `cmsDeletePageSection`     | Remove single section (confirmation)   | High     |
-| `cmsDeletePageSections`    | Remove multiple sections (confirmation)| High     |
-| `cmsGetPageSections`       | List sections on a page                | Safe     |
-| `cmsGetSectionContent`     | Get specific section content           | Safe     |
+| Tool         | Risk        | Purpose                    |
+| ------------ | ----------- | -------------------------- |
+| `getPage`    | Safe        | Get page by ID or slug     |
+| `createPage` | Moderate    | Create new page            |
+| `updatePage` | Moderate    | Update page metadata       |
+| `deletePage` | Destructive | Delete page (confirmation) |
 
-### CMS - Images (7 tools)
+### CMS - Sections (5 tools)
 
-| Tool                     | Purpose                          | Risk     |
-| ------------------------ | -------------------------------- | -------- |
-| `findImageTool`          | Find image by description        | Safe     |
-| `searchImagesTool`       | Semantic image search            | Safe     |
-| `listAllImagesTool`      | List all images in system        | Safe     |
-| `addImageToSectionTool`  | Attach image to section          | Moderate |
-| `updateSectionImageTool` | Update image in section          | Moderate |
-| `replaceImageTool`       | Replace image reference          | Moderate |
-| `deleteImageTool`        | Delete image (confirmation)      | High     |
+| Tool                 | Risk        | Purpose                      |
+| -------------------- | ----------- | ---------------------------- |
+| `getSection`         | Safe        | Get section content          |
+| `createSection`      | Safe        | Add section to page          |
+| `updateSection`      | Moderate    | Update section content       |
+| `deleteSection`      | Destructive | Remove section (confirmation)|
+| `getSectionTemplate` | Safe        | List available templates     |
 
-### CMS - Posts (7 tools)
+### CMS - Images (6 tools)
 
-| Tool             | Purpose                          | Risk     |
-| ---------------- | -------------------------------- | -------- |
-| `cmsCreatePost`  | Create draft post                | Safe     |
-| `cmsUpdatePost`  | Update post content              | Moderate |
-| `cmsPublishPost` | Publish post (confirmation)      | High     |
-| `cmsArchivePost` | Archive post (confirmation)      | High     |
-| `cmsDeletePost`  | Delete post (confirmation)       | High     |
-| `cmsListPosts`   | List blog posts                  | Safe     |
-| `cmsGetPost`     | Get single post                  | Safe     |
+| Tool           | Risk        | Purpose                       |
+| -------------- | ----------- | ----------------------------- |
+| `getImage`     | Safe        | Get image metadata            |
+| `createImage`  | Safe        | Upload new image              |
+| `updateImage`  | Moderate    | Update image metadata         |
+| `deleteImage`  | Destructive | Delete image (confirmation)   |
+| `importImage`  | Safe        | Import from URL               |
+| `browseImages` | Safe        | Semantic image search         |
 
-### CMS - Navigation (5 tools)
+### CMS - Posts (4 tools)
 
-| Tool                       | Purpose            | Risk     |
-| -------------------------- | ------------------ | -------- |
-| `getNavigationTool`        | Get all nav items  | Safe     |
-| `addNavigationItemTool`    | Add nav link       | Safe     |
-| `updateNavigationItemTool` | Update nav link    | Moderate |
-| `removeNavigationItemTool` | Remove nav item    | High     |
-| `toggleNavigationItemTool` | Show/hide nav item | Moderate |
+| Tool         | Risk        | Purpose                    |
+| ------------ | ----------- | -------------------------- |
+| `getPost`    | Safe        | Get post by ID or slug     |
+| `createPost` | Safe        | Create draft post          |
+| `updatePost` | Moderate    | Update post content        |
+| `deletePost` | Destructive | Delete post (confirmation) |
 
-### CMS - Entries (2 tools)
+### CMS - Navigation (4 tools)
 
-| Tool                     | Purpose                  | Risk |
-| ------------------------ | ------------------------ | ---- |
-| `cmsGetCollectionEntries`| Get entries by collection| Safe |
-| `cmsGetEntryContent`     | Get entry content        | Safe |
+| Tool            | Risk        | Purpose                      |
+| --------------- | ----------- | ---------------------------- |
+| `getNavItem`    | Safe        | Get navigation item          |
+| `createNavItem` | Safe        | Add navigation link          |
+| `updateNavItem` | Moderate    | Update navigation            |
+| `deleteNavItem` | Destructive | Remove item (confirmation)   |
 
-### Search (2 tools)
+### CMS - Entries (4 tools)
 
-| Tool            | Purpose                   | Risk |
-| --------------- | ------------------------- | ---- |
-| `searchVector`  | Semantic vector search    | Safe |
-| `cmsFindResource` | Fuzzy search for resources| Safe |
+| Tool          | Risk     | Purpose                  |
+| ------------- | -------- | ------------------------ |
+| `getEntry`    | Safe     | Get collection entry     |
+| `createEntry` | Safe     | Create entry             |
+| `updateEntry` | Moderate | Update entry             |
+| `deleteEntry` | Destructive | Delete entry (confirmation)|
 
-### Web Research (3 tools)
+### External Tools (3 tools)
 
-| Tool                 | Purpose                    | Risk |
-| -------------------- | -------------------------- | ---- |
-| `webQuickSearchTool` | Fast web search (snippets) | Safe |
-| `webDeepResearchTool`| Comprehensive research     | Safe |
-| `webFetchContentTool`| Extract content from URL   | Safe |
+| Tool           | Risk | Purpose                    |
+| -------------- | ---- | -------------------------- |
+| `searchWeb`    | Safe | Web search via Tavily      |
+| `fetchContent` | Safe | Fetch URL content          |
 
-### Stock Photos (2 tools)
+---
 
-| Tool                    | Purpose                  | Risk |
-| ----------------------- | ------------------------ | ---- |
-| `pexelsSearchPhotosTool`| Search Pexels photos     | Safe |
-| `pexelsDownloadPhotoTool`| Download and save photo | Safe |
+## Hybrid Search System
 
-### HTTP (2 tools)
+### Search Flow
 
-| Tool        | Purpose            | Risk |
-| ----------- | ------------------ | ---- |
-| `httpGet`   | Fetch from URL     | Safe |
-| `httpPost`  | Post to URL        | High |
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  searchTools("create page")                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   1. BM25 Search (Fast, Exact)                              │
+│      - Matches phrases: "create page", "new page"           │
+│      - Score: 0.85 for createPage                           │
+│                                                             │
+│   2. Vector Search (Semantic)                               │
+│      - Embeds query, finds similar tools                    │
+│      - Score: 0.72 for createPage                           │
+│                                                             │
+│   3. Confidence-Based Blending                              │
+│      - BM25 > 0.7? Use BM25 only                            │
+│      - BM25 < 0.3? Fall back to vector                      │
+│      - Else: Reciprocal rank fusion                         │
+│                                                             │
+│   4. Related Tools Expansion                                │
+│      - createPage.relatedTools: [getPage, updatePage, ...]  │
+│      - Add up to 3 related tools (discounted score)         │
+│                                                             │
+│   Result: [createPage, getPage, updatePage, createSection]  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### Planning (1 tool)
+### Search Service
 
-| Tool              | Purpose           | Risk |
-| ----------------- | ----------------- | ---- |
-| `planAnalyzeTask` | Analyze task plan | Safe |
+```typescript
+// server/services/search/tool-search.service.ts
+export class ToolSearchService {
+  private bm25: BM25Search;
+  private vector: VectorSearch;
+
+  async search(query: string, limit: number = 8): Promise<SmartSearchResult> {
+    // Run both searches
+    const bm25Results = this.bm25.search(query, limit);
+    const vectorResults = await this.vector.search(query, limit);
+
+    // Smart blend based on confidence
+    const blended = smartBlend(bm25Results, vectorResults);
+
+    // Expand with related tools
+    const expanded = this.expandWithRelated(blended, limit);
+
+    return {
+      tools: expanded.map(r => r.name),
+      scores: expanded.map(r => r.score),
+      method: this.determineMethod(bm25Results, vectorResults),
+    };
+  }
+}
+```
+
+### Smart Blending
+
+```typescript
+// server/services/search/smart-search.ts
+export function smartBlend(
+  bm25: SearchResult[],
+  vector: SearchResult[]
+): SearchResult[] {
+  const topBM25Score = bm25[0]?.score || 0;
+
+  // High confidence in BM25 → use it alone
+  if (topBM25Score > 0.7) {
+    return bm25;
+  }
+
+  // Low confidence → fall back to vector
+  if (topBM25Score < 0.3) {
+    return vector;
+  }
+
+  // Medium confidence → reciprocal rank fusion
+  return reciprocalRankFusion(bm25, vector);
+}
+```
 
 ---
 
@@ -420,45 +441,32 @@ export const cms_createPage = tool({
 Tools receive full context via `experimental_context`:
 
 ```typescript
-interface AgentContext {
-	// Database access
-	db: DrizzleDB;
+// server/tools/_types/agent-context.ts
+export interface AgentContext {
+  // Database
+  db: DrizzleDB;
 
-	// All services
-	services: {
-		pageService: PageService;
-		sectionService: SectionService;
-		entryService: EntryService;
-		imageService: ImageService;
-		postService: PostService;
-		navigationService: NavigationService;
-		siteSettingsService: SiteSettingsService;
-	};
+  // All services
+  services: Services;
 
-	// Vector search
-	vectorIndex: VectorIndexService;
+  // Vector search
+  vectorIndex: VectorIndexService;
 
-	// Logging (streams to frontend)
-	logger: {
-		info: (msg: string, meta?: object) => void;
-		warn: (msg: string, meta?: object) => void;
-		error: (msg: string, meta?: object) => void;
-	};
+  // Logging (streams to frontend)
+  logger: AgentLogger;
 
-	// SSE streaming
-	stream?: {
-		write: (event: StreamEvent) => void;
-	};
+  // SSE streaming
+  stream?: StreamWriter;
 
-	// Identifiers
-	traceId: string;
-	sessionId: string;
+  // Identifiers
+  traceId: string;
+  sessionId: string;
 
-	// Multi-tenant targeting
-	cmsTarget?: {
-		siteId: string;
-		environmentId: string;
-	};
+  // Multi-tenant targeting
+  cmsTarget: {
+    siteId: string;
+    environmentId: string;
+  };
 }
 ```
 
@@ -466,341 +474,299 @@ interface AgentContext {
 
 ```typescript
 execute: async (input, { experimental_context }) => {
-	// Type assertion (AI SDK uses unknown type)
-	const ctx = experimental_context as AgentContext;
+  const ctx = experimental_context as AgentContext;
 
-	// Access services
-	const page = await ctx.services.pageService.getPage(input.pageId);
+  // Access services
+  const page = await ctx.services.page.get(input.pageId);
 
-	// Log (streams to frontend)
-	ctx.logger.info("Fetched page", { pageId: input.pageId });
+  // Log (streams to frontend)
+  ctx.logger.info('Fetched page', { pageId: input.pageId });
 
-	// Access database directly if needed
-	const result = await ctx.db.query.pages.findMany();
-
-	return { page };
-};
+  return { page };
+},
 ```
 
 ---
 
-## Tool Metadata
+## Tool Prompts
 
-Metadata is stored separately from tool definitions:
+Per-tool guidance files for complex tools:
 
-```typescript
-// server/tools/types.ts
-export const TOOL_METADATA: Record<string, ToolMeta> = {
-	cmsCreatePage: {
-		category: "cms",
-		riskLevel: "safe",
-		tags: ["page", "create", "content"],
-	},
-
-	cmsDeletePage: {
-		category: "cms",
-		riskLevel: "high",
-		// Uses confirmed flag pattern (conversational HITL)
-		tags: ["page", "delete", "destructive"],
-	},
-
-	deleteImageTool: {
-		category: "cms",
-		riskLevel: "high",
-		// Uses confirmed flag pattern (conversational HITL)
-		tags: ["image", "delete", "destructive"],
-	},
-
-	httpPost: {
-		category: "http",
-		riskLevel: "high",
-		tags: ["http", "external", "write"],
-	},
-};
+```
+server/prompts/tools/
+├── createSection-prompt.xml
+├── createPost-prompt.xml
+├── updateSection-prompt.xml
+├── deletePost-prompt.xml
+├── importImage-prompt.xml
+├── searchTools-prompt.xml
+└── finalAnswer-prompt.xml
 ```
 
-### Risk Levels
+### Example Tool Prompt
 
-| Level      | Description                      | Handling                                |
-| ---------- | -------------------------------- | --------------------------------------- |
-| `safe`     | Read-only or creates new content | Execute immediately                     |
-| `moderate` | Updates existing content         | Execute with logging                    |
-| `high`     | Deletes or external writes       | Requires confirmed flag (conversational)|
+```xml
+<!-- server/prompts/tools/createSection-prompt.xml -->
+<tool-prompt name="createSection">
+  <clarification>
+    - "add another section" = CREATE new section
+    - "change the heading" = UPDATE existing section
+    - "move the section up" = UPDATE section order
+  </clarification>
+
+  <best-practices>
+    - Always specify section template (hero, feature, cta, etc.)
+    - Provide content matching template schema
+    - Position defaults to end of page
+  </best-practices>
+</tool-prompt>
+```
+
+### Injection via ToolPromptInjector
+
+```typescript
+// server/prompts/_builder/tool-prompt-injector.ts
+export class ToolPromptInjector {
+  private tools: string[] = [];
+
+  addTools(tools: string[]): void {
+    this.tools.push(...tools);
+  }
+
+  build(): string {
+    const prompts: string[] = [];
+
+    for (const tool of this.tools) {
+      const promptPath = path.join(PROMPTS_DIR, `${tool}-prompt.xml`);
+      if (fs.existsSync(promptPath)) {
+        prompts.push(fs.readFileSync(promptPath, 'utf-8'));
+      }
+    }
+
+    return prompts.join('\n\n');
+  }
+}
+```
 
 ---
 
 ## Confirmation Pattern
 
-All destructive operations use the **Conversational Confirmed Flag Pattern**:
-
-Used for: `cmsDeletePage`, `cmsDeletePageSection`, `cmsDeletePost`, `deleteImageTool`, etc.
+Destructive tools use the **Confirmed Flag Pattern**:
 
 ```typescript
-export const cmsDeletePage = tool({
-	description: "Delete a page permanently. Requires confirmed: true.",
-	inputSchema: z.object({
-		slug: z.string().optional(),
-		id: z.string().optional(),
-		confirmed: z.boolean().optional().describe("Must be true to actually delete"),
-	}),
-	execute: async (input, { experimental_context }) => {
-		const ctx = experimental_context as AgentContext;
-
-		// First call: confirmed flag missing or false
-		if (!input.confirmed) {
-			const page = await ctx.services.pageService.getPage(input);
-			return {
-				requiresConfirmation: true,
-				message: `Are you sure you want to delete page "${page.name}"? This cannot be undone.`,
-				page: { id: page.id, slug: page.slug, name: page.name },
-			};
-		}
-
-		// Second call: confirmed: true
-		await ctx.services.pageService.deletePage(input.id!);
-		return { success: true, message: "Page deleted successfully." };
-	},
+// server/tools/deletePage/deletePage-tool.ts
+export const deletePageSchema = z.object({
+  id: z.string().describe('Page ID to delete'),
+  confirmed: z.boolean().optional().describe('Must be true to delete'),
 });
+
+export async function deletePageExecute(
+  input: DeletePageInput,
+  ctx: AgentContext
+) {
+  // First call: request confirmation
+  if (!input.confirmed) {
+    const page = await ctx.services.page.get(input.id);
+    return {
+      requiresConfirmation: true,
+      message: `Delete page "${page.title}"? This cannot be undone.`,
+      page: { id: page.id, title: page.title },
+    };
+  }
+
+  // Second call with confirmed: true
+  await ctx.services.page.delete(input.id);
+  return {
+    success: true,
+    message: 'Page deleted successfully.',
+  };
+}
 ```
 
 **Flow:**
-
 1. User: "Delete the about page"
-2. Agent calls `cmsDeletePage({ slug: "about" })` (no confirmed flag)
-3. Tool returns `{ requiresConfirmation: true, message: "Are you sure..." }`
-4. Agent presents confirmation to user in chat
-5. User responds "yes" or "no"
-6. If yes, agent calls `cmsDeletePage({ slug: "about", confirmed: true })`
-7. Page is deleted
-
-**Key Benefits:**
-- No modal/popup needed - confirmation happens in natural conversation
-- No separate approval endpoint
-- Agent can provide context about what will be deleted
-- User can ask follow-up questions before confirming
-
-See [Layer 3.5 HITL](./LAYER_3.5_HITL.md) for full details.
+2. Agent calls `deletePage({ id: "..." })`
+3. Tool returns `{ requiresConfirmation: true }`
+4. Agent asks user: "Delete 'About Us'? This cannot be undone."
+5. User: "yes"
+6. Agent calls `deletePage({ id: "...", confirmed: true })`
+7. Page deleted
 
 ---
 
-## Granular Content Fetching
+## Entity Extraction
 
-A key pattern encoded in our tools and prompt:
-
-### The Problem
-
-Fetching full page content wastes tokens:
+Tool results are scanned for entities to add to working memory:
 
 ```typescript
-// Bad: 2000+ tokens for one field lookup
-cms_getPage({ slug: "about", includeContent: true });
-// Returns ALL sections, ALL content
+// server/memory/working-context/entity-extractor.ts
+export function extractEntities(
+  toolName: string,
+  result: unknown
+): Entity[] {
+  const metadata = ToolRegistry.getInstance().get(toolName);
+  if (!metadata?.extraction) return [];
+
+  const { type, idPath, namePath } = metadata.extraction;
+
+  // Extract using dot-path notation
+  const id = getPath(result, idPath);
+  const name = getPath(result, namePath);
+
+  if (!id || !name) return [];
+
+  return [{
+    type,
+    id: String(id),
+    name: String(name),
+    timestamp: new Date(),
+  }];
+}
 ```
 
-### The Solution: Two-Tier Strategy
+### Extraction Schema Examples
 
 ```typescript
-// Good: ~500 tokens for targeted lookup
-// Step 1: Get page structure (lightweight)
-cms_getPage({ slug: "about" });
-// Returns: { id, title, slug, sections: [{id: "s1"}, {id: "s2"}] }
+// Single entity
+extraction: {
+  type: 'page',
+  idPath: 'page.id',
+  namePath: 'page.title',
+}
 
-// Step 2: Get specific section content
-cms_getSectionContent({ pageSectionId: "s1" });
-// Returns: { heading: "About Us", content: "..." }
-```
-
-### When to Use Each
-
-| Scenario                   | Approach             | Tokens |
-| -------------------------- | -------------------- | ------ |
-| "What's the hero heading?" | Granular (2-3 tools) | ~500   |
-| "Show me all page content" | Full fetch (1 tool)  | ~2000  |
-| "Update one field"         | Granular             | ~500   |
-| "Export entire page"       | Full fetch           | ~2000  |
-
-This is enforced via prompt instructions, not code.
-
----
-
-## Tool Result Structure
-
-Consistent result format aids entity extraction:
-
-```typescript
-// Single resource
-return {
-  success: true,
-  page: { id, title, slug, status },
-  message: "Created page 'About Us'"
-};
-
-// List of resources
-return {
-  success: true,
-  pages: [{ id, title, slug }, ...],
-  total: 15,
-  message: "Found 15 pages"
-};
-
-// Search results
-return {
-  success: true,
-  matches: [
-    { id, title, score: 0.85 },
-    ...
-  ],
-  message: "Found 3 matching pages"
-};
-
-// Error
-return {
-  success: false,
-  error: "Page not found",
-  errorCode: "NOT_FOUND"
-};
-```
-
-### Entity Extraction
-
-Working memory extracts entities from these structures:
-
--   `page` → adds to page entities
--   `pages[]` → adds first 3 to page entities
--   `matches[]` → adds matches as entities
--   `image`, `post`, `section` → respective entity types
-
-See [Layer 3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md).
-
----
-
-## Tool Composition
-
-Higher-level tools can compose lower-level operations:
-
-```typescript
-export const cms_createPageWithContent = tool({
-	description: "Create a page with sections in one call",
-	inputSchema: z.object({
-		title: z.string(),
-		slug: z.string().optional(),
-		sections: z.array(SectionInputSchema),
-	}),
-	execute: async (input, { experimental_context }) => {
-		const ctx = experimental_context as AgentContext;
-
-		// 1. Create the page
-		const page = await ctx.services.pageService.createPage(ctx.cmsTarget.siteId, ctx.cmsTarget.environmentId, {
-			title: input.title,
-			slug: input.slug,
-		});
-
-		// 2. Add each section
-		const addedSections = [];
-		for (const section of input.sections || []) {
-			const added = await ctx.services.sectionService.addToPage(page.id, section.definitionId, section.content);
-			addedSections.push(added);
-		}
-
-		return {
-			success: true,
-			page: { ...page, sections: addedSections },
-			message: `Created page "${page.title}" with ${addedSections.length} sections`,
-		};
-	},
-});
+// Array of entities
+extraction: {
+  type: 'page',
+  idPath: 'pages[].id',
+  namePath: 'pages[].title',
+}
 ```
 
 ---
 
-## Zod Schema Patterns
+## Adding a New Tool
 
-### Basic Types
+### 1. Create Tool Folder
 
-```typescript
-z.object({
-	title: z.string(),
-	slug: z.string().optional(),
-	status: z.enum(["draft", "published"]).default("draft"),
-	order: z.number().int().positive().optional(),
-});
+```bash
+mkdir server/tools/myNewTool
 ```
 
-### With Descriptions (Important!)
+### 2. Create Metadata File
 
 ```typescript
-z.object({
-	query: z.string().describe("Search query - natural language description of what to find"),
-	limit: z.number().default(5).describe("Maximum results to return (1-20)"),
-});
+// server/tools/myNewTool/myNewTool-metadata.ts
+import type { ToolMetadata } from '../_types/metadata';
+
+const metadata: ToolMetadata = {
+  name: 'myNewTool',
+  description: 'Description for LLM',
+  phrases: ['search phrase 1', 'search phrase 2'],
+  relatedTools: ['relatedTool1', 'relatedTool2'],
+  riskLevel: 'safe',
+  requiresConfirmation: false,
+  extraction: null,  // or extraction schema
+};
+
+export default metadata;
 ```
 
-### Complex Nested Structures
+### 3. Create Tool Implementation
 
 ```typescript
-const SectionContentSchema = z.object({
-	heading: z.string().optional(),
-	subheading: z.string().optional(),
-	content: z.string().optional(),
-	image: z
-		.object({
-			url: z.string(),
-			alt: z.string(),
-		})
-		.optional(),
-	cta: z
-		.object({
-			text: z.string(),
-			url: z.string(),
-		})
-		.optional(),
+// server/tools/myNewTool/myNewTool-tool.ts
+import { z } from 'zod';
+import type { AgentContext } from '../_types/agent-context';
+
+export const myNewToolSchema = z.object({
+  param1: z.string().describe('Parameter description'),
 });
+
+export type MyNewToolInput = z.infer<typeof myNewToolSchema>;
+
+export async function myNewToolExecute(
+  input: MyNewToolInput,
+  ctx: AgentContext
+) {
+  // Implementation
+  return { success: true };
+}
+```
+
+### 4. Create Index File
+
+```typescript
+// server/tools/myNewTool/index.ts
+import { tool } from 'ai';
+import { myNewToolSchema, myNewToolExecute } from './myNewTool-tool';
+import metadata from './myNewTool-metadata';
+import type { AgentContext } from '../_types/agent-context';
+
+export const myNewTool = tool({
+  description: metadata.description,
+  inputSchema: myNewToolSchema,
+  execute: async (input, { experimental_context }) => {
+    const ctx = experimental_context as AgentContext;
+    return myNewToolExecute(input, ctx);
+  },
+});
+
+export { metadata };
+```
+
+### 5. Add to ALL_TOOLS
+
+```typescript
+// server/tools/_index.ts
+import { myNewTool } from './myNewTool';
+
+export const ALL_TOOLS = {
+  // ... existing tools
+  myNewTool,
+};
+```
+
+### 6. (Optional) Add Tool Prompt
+
+```xml
+<!-- server/prompts/tools/myNewTool-prompt.xml -->
+<tool-prompt name="myNewTool">
+  <usage>When to use this tool...</usage>
+</tool-prompt>
 ```
 
 ---
 
 ## Design Decisions
 
-### Why No Tool Factories/Registries?
+### Why Per-Tool Folders?
 
-```typescript
-// We DON'T do this:
-const pageTools = createToolGroup('page', pageService);
+1. **Self-contained** - Each tool has everything it needs
+2. **Discoverable** - Registry auto-discovers tools
+3. **Maintainable** - Changes isolated to one folder
+4. **Searchable** - Metadata enables hybrid search
 
-// We DO this:
-export const cms_getPage = tool({ ... });
-export const cms_createPage = tool({ ... });
-```
+### Why Unified Registry?
 
-**Reasons:**
+1. **Single source of truth** - No duplicate metadata
+2. **Fast lookups** - O(1) after initialization
+3. **Search corpus** - Pre-computed for BM25/vector
 
-1. **Explicit is better** - Each tool is clearly defined
-2. **No magic** - Easy to understand and debug
-3. **AI SDK native** - No custom abstractions
-4. **Type safety** - Full TypeScript inference
+### Why Hybrid Search?
 
-### Why No Middleware/Wrappers?
+1. **BM25** - Fast, exact phrase matching
+2. **Vector** - Semantic understanding
+3. **Combined** - Best of both worlds
 
-```typescript
-// We DON'T do this:
-const wrappedTool = withLogging(withRetry(withValidation(baseTool)));
+### Why Related Tools Expansion?
 
-// We DO this:
-// Logging, retry, validation handled at orchestrator level
-```
+When user searches "create page", they likely need:
+- `createPage` (exact match)
+- `getPage` (to check if exists)
+- `createSection` (to add content)
 
-**Reasons:**
-
-1. **Single responsibility** - Tools do one thing
-2. **Orchestrator handles cross-cutting** - Retry, logging centralized
-3. **Simpler testing** - Tools are pure functions
-
-### Why 45 Tools?
-
-More tools = more capabilities. LLMs handle large tool sets well with good descriptions.
-
-**Alternative considered:** Fewer, more general tools
-**Problem:** Harder for LLM to use correctly, more ambiguous
+Related tools provide complete capability sets.
 
 ---
 
@@ -808,67 +774,17 @@ More tools = more capabilities. LLMs handle large tool sets well with good descr
 
 | Connects To                                         | How                              |
 | --------------------------------------------------- | -------------------------------- |
-| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)         | Orchestrator executes tool calls |
-| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Results → entity extraction      |
-| [3.5 HITL](./LAYER_3.5_HITL.md)                     | High-risk tools require approval |
-| [3.8 Context](./LAYER_3.8_CONTEXT_INJECTION.md)     | Tools receive AgentContext       |
+| [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md)         | prepareStep activates tools      |
+| [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) | Entity extraction from results   |
+| [3.5 HITL](./LAYER_3.5_HITL.md)                     | Confirmed flag pattern           |
+| [3.8 Context](./LAYER_3.8_CONTEXT_INJECTION.md)     | AgentContext injection           |
 | Layer 4 Services                                    | Tools call service methods       |
-
----
-
-## Adding a New Tool
-
-1. **Define the tool:**
-
-```typescript
-// server/tools/my-tools.ts
-export const cms_myNewTool = tool({
-  description: 'Clear description of what this does',
-  inputSchema: z.object({
-    param1: z.string().describe('What this param is for'),
-  }),
-  execute: async (input, { experimental_context }) => {
-    const ctx = experimental_context as AgentContext;
-    // Implementation
-    return { success: true, result: ... };
-  }
-});
-```
-
-2. **Add to registry:**
-
-```typescript
-// server/tools/all-tools.ts
-import { cms_myNewTool } from "./my-tools";
-
-export const ALL_TOOLS = {
-	// ... existing tools
-	cms_myNewTool,
-};
-```
-
-3. **Add metadata:**
-
-```typescript
-// server/tools/types.ts
-export const TOOL_METADATA = {
-	// ... existing metadata
-	cms_myNewTool: {
-		category: "cms",
-		riskLevel: "safe",
-		requiresApproval: false,
-		tags: ["my", "new", "tool"],
-	},
-};
-```
-
-4. **Update prompt if needed** - Add examples or guidance in `react.xml`
 
 ---
 
 ## Further Reading
 
--   [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - How tools are executed
--   [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Entity extraction from results
--   [3.5 HITL](./LAYER_3.5_HITL.md) - Approval patterns
--   [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) - AgentContext details
+- [3.1 ReAct Loop](./LAYER_3.1_REACT_LOOP.md) - Three-phase tool lifecycle
+- [3.3 Working Memory](./LAYER_3.3_WORKING_MEMORY.md) - Entity extraction
+- [3.5 HITL](./LAYER_3.5_HITL.md) - Confirmation patterns
+- [3.8 Context Injection](./LAYER_3.8_CONTEXT_INJECTION.md) - AgentContext details

@@ -85,16 +85,19 @@ Agent: Created contact page!
 ### Configuration
 
 ```typescript
-// server/agent/cms-agent.ts
-return generateText({
-  model: openrouter(AGENT_CONFIG.modelId),
-  system: systemPrompt,
-  messages,
+// server/agents/main-agent.ts
+export const cmsAgent = new ToolLoopAgent({
+  model: openrouter.languageModel(AGENT_CONFIG.modelId),
+  instructions: getStaticSystemPrompt(),  // Static for cache
   tools: ALL_TOOLS,
-  maxSteps: 15,
   maxRetries: 2,  // Native retry with exponential backoff
-  maxTokens: 4096,
-  experimental_context: agentContext,
+
+  stopWhen: [
+    stepCountIs(AGENT_CONFIG.maxSteps),  // 15 steps max
+    hasToolCall("finalAnswer"),
+  ],
+
+  // ...prepareCall, prepareStep for dynamic tool injection
 });
 ```
 
@@ -187,7 +190,7 @@ The agent handles tool-level errors based on prompt instructions. This is unchan
 ### Error Classification in Prompt
 
 ```xml
-<!-- server/prompts/react.xml -->
+<!-- server/prompts/agent/main-agent-prompt.xml -->
 <error_handling>
   **ERROR TYPES AND RESPONSES**
 

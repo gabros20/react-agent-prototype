@@ -66,13 +66,21 @@ Team (organization)
 └── Site (website)
     └── Environment (dev/staging/prod)
         ├── Page (individual page)
-        │   └── PageSection (junction to SectionEntry)
-        ├── SectionDefinition (template type)
-        ├── SectionEntry (instance of definition)
-        ├── Post (blog content)
+        │   └── PageSection (junction)
+        │       └── PageSectionContent (localized content)
+        ├── SectionTemplate (section type) [GLOBAL]
+        ├── CollectionTemplate (blog, products) [GLOBAL]
+        │   └── CollectionEntry (blog post)
+        │       └── EntryContent (localized)
         ├── Image (uploaded media)
+        │   ├── ImageMetadata (AI-generated)
         │   └── ImageVariant (responsive sizes)
-        └── Navigation (menu structure)
+        └── SiteSettings (key-value config) [GLOBAL]
+
+Session (chat session)
+├── Message (conversation message)
+│   └── MessagePart (text/tool-call/tool-result)
+└── ConversationLog (trace history)
 ```
 
 ### Key Tables
@@ -83,29 +91,50 @@ Team (organization)
 // server/db/schema.ts
 export const pages = sqliteTable("pages", {
 	id: text("id").primaryKey(),
-	siteId: text("site_id").notNull(),
-	environmentId: text("environment_id").notNull(),
-	title: text("title").notNull(),
-	slug: text("slug").notNull(),
-	status: text("status").default("draft"),
-	metadata: text("metadata", { mode: "json" }),
-	createdAt: integer("created_at", { mode: "timestamp" }),
-	updatedAt: integer("updated_at", { mode: "timestamp" }),
+	siteId: text("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+	environmentId: text("environment_id").notNull().references(() => environments.id, { onDelete: "cascade" }),
+	parentId: text("parent_id"), // Self-reference for hierarchy
+	slug: text("slug").notNull().unique(),
+	name: text("name").notNull(),
+	isProtected: integer("is_protected", { mode: "boolean" }).default(false),
+	indexing: integer("indexing", { mode: "boolean" }).notNull().default(true),
+	meta: text("meta", { mode: "json" }),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const sectionDefinitions = sqliteTable("section_definitions", {
+export const sectionTemplates = sqliteTable("section_templates", {
 	id: text("id").primaryKey(),
-	name: text("name").notNull(), // 'hero', 'features', etc.
-	schema: text("schema", { mode: "json" }), // Zod schema
-	defaultContent: text("default_content", { mode: "json" }),
+	key: text("key").notNull().unique(), // 'hero', 'features', etc.
+	name: text("name").notNull(),
+	description: text("description"),
+	status: text("status", { enum: ["published", "unpublished"] }).notNull().default("published"),
+	fields: text("fields", { mode: "json" }).notNull(), // Field definitions
+	templateFile: text("template_file").notNull(), // Nunjucks template
+	defaultVariant: text("default_variant").notNull().default("default"),
+	cssBundle: text("css_bundle"),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const sectionEntries = sqliteTable("section_entries", {
+export const pageSections = sqliteTable("page_sections", {
 	id: text("id").primaryKey(),
-	definitionId: text("definition_id").notNull(),
-	content: text("content", { mode: "json" }), // Actual data
-	pageId: text("page_id"), // Which page it's on
-	order: integer("order"),
+	pageId: text("page_id").notNull().references(() => pages.id, { onDelete: "cascade" }),
+	sectionTemplateId: text("section_template_id").notNull().references(() => sectionTemplates.id, { onDelete: "restrict" }),
+	sortOrder: integer("sort_order").notNull(),
+	status: text("status", { enum: ["published", "unpublished", "draft"] }).notNull().default("published"),
+	hidden: integer("hidden", { mode: "boolean" }).default(false),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const pageSectionContents = sqliteTable("page_section_contents", {
+	id: text("id").primaryKey(),
+	pageSectionId: text("page_section_id").notNull().references(() => pageSections.id, { onDelete: "cascade" }),
+	localeCode: text("locale_code").notNull().references(() => locales.code, { onDelete: "cascade" }),
+	content: text("content", { mode: "json" }).notNull(), // Actual content data
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 ```
 
@@ -136,22 +165,61 @@ export const imageVariants = sqliteTable("image_variants", {
 });
 ```
 
-**Sessions:**
+**Sessions (with working context and compaction tracking):**
 
 ```typescript
 export const sessions = sqliteTable("sessions", {
 	id: text("id").primaryKey(),
-	title: text("title"),
-	createdAt: integer("created_at", { mode: "timestamp" }),
-	updatedAt: integer("updated_at", { mode: "timestamp" }),
+	title: text("title").notNull(),
+	modelId: text("model_id").default("openai/gpt-4o-mini"),
+	modelContextLength: integer("model_context_length"), // From OpenRouter
+	workingContext: text("working_context", { mode: "json" }), // Working memory
+	// Compaction tracking
+	compactionCount: integer("compaction_count").default(0),
+	lastCompactionAt: integer("last_compaction_at"),
+	currentlyCompacting: integer("currently_compacting", { mode: "boolean" }).default(false),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
 export const messages = sqliteTable("messages", {
 	id: text("id").primaryKey(),
 	sessionId: text("session_id").notNull(),
-	role: text("role").notNull(), // user/assistant/tool
-	content: text("content", { mode: "json" }),
-	createdAt: integer("created_at", { mode: "timestamp" }),
+	role: text("role", { enum: ["system", "user", "assistant", "tool"] }).notNull(),
+	content: text("content", { mode: "json" }).notNull(), // AI SDK format
+	displayContent: text("display_content"), // Plain text for UI
+	toolName: text("tool_name"),
+	stepIdx: integer("step_idx"),
+	// Token tracking
+	tokens: integer("tokens").default(0), // Local estimate
+	providerTokens: text("provider_tokens", { mode: "json" }), // {input, output}
+	isSummary: integer("is_summary", { mode: "boolean" }).default(false),
+	isCompactionTrigger: integer("is_compaction_trigger", { mode: "boolean" }).default(false),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const messageParts = sqliteTable("message_parts", {
+	id: text("id").primaryKey(),
+	messageId: text("message_id").notNull(),
+	sessionId: text("session_id").notNull(),
+	type: text("type", { enum: ["text", "tool-call", "tool-result", "compaction-marker", "reasoning", "step-start"] }).notNull(),
+	content: text("content", { mode: "json" }).notNull(),
+	tokens: integer("tokens").default(0),
+	compactedAt: integer("compacted_at"),
+	sortOrder: integer("sort_order").notNull(),
+	createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const conversationLogs = sqliteTable("conversation_logs", {
+	id: text("id").primaryKey(),
+	sessionId: text("session_id").notNull(),
+	conversationIndex: integer("conversation_index").notNull(),
+	userPrompt: text("user_prompt").notNull(),
+	startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
+	completedAt: integer("completed_at", { mode: "timestamp" }),
+	metrics: text("metrics", { mode: "json" }), // {totalDuration, toolCallCount, stepCount, tokens, cost, errorCount}
+	modelInfo: text("model_info", { mode: "json" }), // {modelId, pricing}
+	entries: text("entries", { mode: "json" }), // Array of trace entries
 });
 ```
 
