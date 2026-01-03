@@ -75,7 +75,7 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 
 ## Progress Tracker
 
-**Completion**: 112/113 topics (99%)
+**Completion**: 116/117 topics (99%)
 
 | Layer                                | Topics | Status         | Completion   |
 | ------------------------------------ | ------ | -------------- | ------------ |
@@ -87,13 +87,22 @@ Layer 6 (Planning) → Layer 10 (Multi-Agent) → Layer 12 (Cutting-Edge)
 | Layer 5: Retrieval & RAG             | 4      | ✅ Complete    | 20/20 (100%) |
 | Layer 6: Planning & Orchestration    | 4      | ✅ Complete    | 20/20 (100%) |
 | Layer 7: Error Recovery & Resilience | 4      | ✅ Complete    | 4/4 (100%)   |
-| Layer 8: Tool Design Patterns        | 4      | ⏳ Pending     | 0/20         |
+| Layer 8: Tool Design Patterns        | 4      | ✅ Complete    | 4/4 (100%)   |
 | Layer 9: Human-in-the-Loop           | 3      | ⏳ Pending     | 0/15         |
 | Layer 10: Multi-Agent Systems        | 4      | ⏳ Pending     | 0/20         |
 | Layer 11: Production Engineering     | 5      | ⏳ Pending     | 0/25         |
 | Layer 12: Cutting-Edge Patterns      | 4      | ⏳ Pending     | 0/20         |
 
 **Latest Updates** (2026-01-03):
+
+**Layer 8: Tool Design Patterns** (4/4 topics - ✅ 100% COMPLETE - Restructured Jan 2026):
+
+_Consolidated from 19 granular topics into 4 high-signal documents:_
+
+-   ✅ 8.1 Tool Definition & Schema - **NEW!** Zod validation, naming conventions, description patterns, 90%+ selection accuracy
+-   ✅ 8.2 Context Injection - **NEW!** experimental_context, AgentContext interface, dependency injection, testability
+-   ✅ 8.3 Tool Registry & Discovery - **NEW!** Centralized catalog, metadata, semantic discovery, 56% Recall improvement
+-   ✅ 8.4 Tool Security & Safety - **NEW!** Risk classification, approval gates, egress control, OWASP Top 10
 
 **Layer 7: Error Recovery & Resilience** (4/4 topics - ✅ 100% COMPLETE - Restructured Jan 2026):
 
@@ -952,39 +961,31 @@ _Tool Validation (1/1 - ✅ COMPLETE)_:
 
 **Goal**: Design safe, reliable tools with validation and metadata
 
-#### 8.1 Tool Registry & Metadata
+**Status**: ✅ Complete (4/4 topics - Restructured Jan 2026)
 
--   [8.1.1 Centralized Tool Catalog](./kb/8-tools/8.1.1-catalog.md) ⏳
-    -   **Codebase Example**: `server/tools/all-tools.ts` (ALL_TOOLS, TOOL_METADATA)
--   [8.1.2 Metadata: Category, Risk Level, Approval Flag, Tags](./kb/8-tools/8.1.2-metadata.md) ⏳
--   [8.1.3 Dynamic Discovery (Query by Metadata)](./kb/8-tools/8.1.3-discovery.md) ⏳
--   [8.1.4 Type-Safe Registry (TypeScript)](./kb/8-tools/8.1.4-type-safety.md) ⏳
+_Tool Definition (1/1 - ✅ COMPLETE)_:
 
-#### 8.2 Input Validation
+-   [8.1 Tool Definition & Schema](./8-tools/8.1-tool-definition.md) ✅
+    -   Zod validation, naming conventions (service_resource_action), description patterns, output standardization
+    -   **Research**: Anthropic "Writing Tools" (2024) - 90%+ selection accuracy with clear descriptions
 
--   [8.2.1 Zod Schemas (inputSchema)](./kb/8-tools/8.2.1-zod-schemas.md) ⏳
--   [8.2.2 Runtime Validation](./kb/8-tools/8.2.2-runtime.md) ⏳
--   [8.2.3 Error Messages](./kb/8-tools/8.2.3-error-messages.md) ⏳
--   [8.2.4 Schema Evolution](./kb/8-tools/8.2.4-evolution.md) ⏳
--   [8.2.5 AI SDK v6 Integration](./kb/8-tools/8.2.5-ai-sdk.md) ⏳
+_Context Injection (1/1 - ✅ COMPLETE)_:
 
-#### 8.3 Context Injection
+-   [8.2 Context Injection](./8-tools/8.2-context-injection.md) ✅
+    -   experimental_context, AgentContext interface, dependency injection, service container, testability
+    -   **Research**: AI SDK v6 patterns, Anthropic Context Engineering (2024)
 
--   [8.3.1 experimental_context Parameter (Native AI SDK)](./kb/8-tools/8.3.1-experimental-context.md) ⏳
-    -   **Codebase Example**: All tools in `server/tools/all-tools.ts`
--   [8.3.2 AgentContext Interface](./kb/8-tools/8.3.2-agent-context.md) ⏳
--   [8.3.3 Service Access (DB, APIs, etc.)](./kb/8-tools/8.3.3-service-access.md) ⏳
--   [8.3.4 Avoid Closures (Anti-Pattern)](./kb/8-tools/8.3.4-avoid-closures.md) ⏳
--   [8.3.5 Framework-Native Approach](./kb/8-tools/8.3.5-framework-native.md) ⏳
+_Tool Registry (1/1 - ✅ COMPLETE)_:
 
-#### 8.4 HTTP Client Tools
+-   [8.3 Tool Registry & Discovery](./8-tools/8.3-tool-registry.md) ✅
+    -   Centralized catalog, metadata enrichment, semantic discovery, hierarchical selection
+    -   **Research**: LangGraph Many Tools (2024) - 56% Recall@5 improvement with vector retrieval
 
--   [8.4.1 Allowlist Pattern (Security)](./kb/8-tools/8.4.1-allowlist.md) ⏳
-    -   **Codebase Example**: `server/tools/all-tools.ts` (http_get, http_post)
--   [8.4.2 GET vs POST Separation](./kb/8-tools/8.4.2-get-post.md) ⏳
--   [8.4.3 Header Management](./kb/8-tools/8.4.3-headers.md) ⏳
--   [8.4.4 Timeout Configuration](./kb/8-tools/8.4.4-timeout.md) ⏳
--   [8.4.5 Error Handling & Result Validation](./kb/8-tools/8.4.5-error-handling.md) ⏳
+_Tool Security (1/1 - ✅ COMPLETE)_:
+
+-   [8.4 Tool Security & Safety](./8-tools/8.4-tool-security.md) ✅
+    -   Risk classification (low/medium/high/critical), approval gates, egress control, RBAC, audit logging
+    -   **Research**: OWASP Agentic AI Top 10 (2025), AWS Security Framework
 
 ---
 
