@@ -871,57 +871,48 @@ _Prompt Templates_ (4/4): **← NEWLY COMPLETED**
 
 **Goal**: Implement planning patterns for complex multi-step tasks
 
-#### 6.1 Plan-and-Execute (5/5 - ✅ COMPLETE)
+> **Consolidated**: 20 files → 4 comprehensive documents covering all planning and orchestration patterns.
 
--   [6.1.1 Separate Planning from Execution](./6-planning/6.1.1-separation.md) ✅
-    -   **Research**: ReWOO (5× token efficiency), Plan-and-Solve (Wang 2023), LLMCompiler (Kim 2024)
--   [6.1.2 Generate Alternative Plans](./6-planning/6.1.2-alternatives.md) ✅
-    -   **Research**: LangChain (2024) - 40% reduction in dead ends
--   [6.1.3 Feasibility Scoring](./6-planning/6.1.3-feasibility.md) ✅
-    -   Multi-dimension validation (tool/param/resource/permission)
--   [6.1.4 Fallback Strategies](./6-planning/6.1.4-fallbacks.md) ✅
-    -   Error-type registry, graceful degradation, human escalation
--   [6.1.5 Implementation Patterns](./6-planning/6.1.5-implementation.md) ✅
-    -   AI SDK v6 ToolLoopAgent, Planner-Worker-Solver pattern
+#### 6.1 Plan-and-Execute Architecture
 
-#### 6.2 Reflexion (Self-Critique) (5/5 - ✅ COMPLETE)
+-   [6.1 Plan-and-Execute](./6-planning/6.1-plan-and-execute.md) ✅
+    -   Separating planning from execution phases
+    -   Alternative plan generation and selection
+    -   Feasibility scoring and validation
+    -   Fallback strategies and error recovery
+    -   ReWOO (5× token efficiency), LLMCompiler (3.7× latency reduction)
+    -   **Research**: Plan-and-Solve (Wang 2023), ReWOO (Xu 2023), LLMCompiler (Kim 2024)
 
--   [6.2.1 Generate → Critique → Refine Loop](./6-planning/6.2.1-reflexion-loop.md) ✅
-    -   **Research**: Reflexion (Shinn 2023) - +22% AlfWorld, +20% HotPotQA, +11% HumanEval
--   [6.2.2 Quality Scoring](./6-planning/6.2.2-quality-scoring.md) ✅
-    -   LLM-as-judge, rubric-based (5-dimension), hybrid scoring
--   [6.2.3 Iteration Limits (2-3 Max)](./6-planning/6.2.3-iteration-limits.md) ✅
-    -   Combined stopping criteria, diminishing returns after 3 iterations
--   [6.2.4 Adaptive Reflection (Complexity Heuristic)](./6-planning/6.2.4-adaptive.md) ✅
-    -   Task complexity classification (simple/moderate/complex/critical)
--   [6.2.5 Research Findings](./6-planning/6.2.5-research.md) ✅
-    -   Self-correction limits (Huang 2024), external feedback essential
+#### 6.2 Reflexion & Self-Critique
 
-#### 6.3 Tree of Thoughts (5/5 - ✅ COMPLETE)
+-   [6.2 Reflexion & Self-Critique](./6-planning/6.2-reflexion-self-critique.md) ✅
+    -   Generate → Critique → Refine loop
+    -   Quality scoring strategies (binary, scalar, multi-dimensional)
+    -   Iteration limits (2-3 max optimal)
+    -   Adaptive reflection by complexity
+    -   Critical insight: external feedback required (pure self-correction fails)
+    -   **Research**: Reflexion (Shinn 2023) +22% AlfWorld, Self-Refine (Madaan 2023), "LLMs Cannot Self-Correct Reasoning Yet" (Huang 2024)
 
--   [6.3.1 Multi-Path Exploration](./6-planning/6.3.1-multi-path.md) ✅
-    -   **Research**: ToT (4%→74% Game of 24), LATS (92.7% HumanEval), Self-Consistency (+17.9%)
--   [6.3.2 Branching Strategies](./6-planning/6.3.2-branching.md) ✅
-    -   Fixed K-way, adaptive, constrained branching (K=3-5 optimal)
--   [6.3.3 Pruning (Dead Ends)](./6-planning/6.3.3-pruning.md) ✅
-    -   Score-based, depth-limited, beam pruning (60-80% reduction)
--   [6.3.4 Best-First Search](./6-planning/6.3.4-best-first.md) ✅
-    -   Priority queue, A\* variant, 50% fewer nodes explored
--   [6.3.5 When to Use (Complex Problems)](./6-planning/6.3.5-when-to-use.md) ✅
-    -   Decision framework: 10-50× cost for 70% improvement
+#### 6.3 Tree of Thoughts (Multi-Path Exploration)
 
-#### 6.4 Preflight Validation (5/5 - ✅ COMPLETE)
+-   [6.3 Tree of Thoughts](./6-planning/6.3-tree-of-thoughts.md) ✅
+    -   Multi-path exploration vs single-path commitment
+    -   Branching strategies (3-5 branches optimal)
+    -   Pruning techniques and dead-end detection
+    -   Search algorithms (BFS, DFS, best-first, MCTS/LATS)
+    -   Self-consistency voting
+    -   **Research**: ToT (Yao 2023) 4%→74% Game of 24, LATS (Zhou 2024) 92.7% HumanEval, Self-Consistency (Wang 2023)
 
--   [6.4.1 Check Before Execute](./6-planning/6.4.1-check-before-execute.md) ✅
-    -   **Research**: 70-80% failure prevention, Design by Contract, SagaLLM (2024)
--   [6.4.2 Resource Existence](./6-planning/6.4.2-resource-existence.md) ✅
-    -   Automatic reference extraction, fuzzy matching, cached checks
--   [6.4.3 Constraint Satisfaction](./6-planning/6.4.3-constraints.md) ✅
-    -   Uniqueness, state transitions, relationships, business invariants
--   [6.4.4 Schema Compatibility](./6-planning/6.4.4-schema.md) ✅
-    -   Zod validation, transformations, refinements, early return
--   [6.4.5 Validation Issues → Suggestions](./6-planning/6.4.5-suggestions.md) ✅
-    -   Fuzzy matching, corrective actions, 60-70% auto-recovery
+#### 6.4 Preflight Validation
+
+-   [6.4 Preflight Validation](./6-planning/6.4-preflight-validation.md) ✅
+    -   Check-before-execute patterns
+    -   Resource existence validation
+    -   Constraint satisfaction checking
+    -   Schema compatibility verification
+    -   Validation-to-suggestion conversion
+    -   Transaction patterns (SagaLLM)
+    -   **Research**: SagaLLM (2024), Design by Contract, AI SDK 6 strict mode
 
 ---
 
